@@ -1,0 +1,41 @@
+# Sensitive documents and internal plans
+*plan*.md
+*Plan*.md
+*implementation*.md
+*Implementation*.md
+*.plan
+*.docx
+*.pptx
+*.pdf
+
+# Datasets and large binary files
+*.csv
+*.tsv
+*.zip
+*.tar.gz
+*.parquet
+
+# Python virtual environments & bytecode
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# System and editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment variables & secrets
+.env
+*.pem
+*.key
+credentials.json

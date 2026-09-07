@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATHER (SkyGuard AI) — AWS Anomaly Detection Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Bar -->
+        <header class="navbar">
+            <div class="brand">
+                <div class="logo-shield">⚡</div>
+                <div class="brand-text">
+                    <h1>ATHER <span>SkyGuard AI</span></h1>
+                    <p class="subtitle">SIH 2026 · PS26073 · 5-Layer AWS Anomaly Detection & Self-Healing</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="status-dot pulse-green"></span>
+                    <span id="system-status-text">SYSTEM OPERATIONAL</span>
+                </div>
+                <div class="station-selector">
+                    <span class="badge">STATION: AWS_JENA_01 (Lat 50.93°, Lon 11.58°, 207m)</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI Metric Cards -->
+        <div class="metrics-grid">
+            <div class="card metric-card">
+                <div class="metric-label">TEMPERATURE</div>
+                <div class="metric-value-row">
+                    <span id="current-temp" class="metric-value">--.-</span>
+                    <span class="metric-unit">°C</span>
+                </div>
+                <div class="metric-sub" id="temp-corrected-sub">Raw matches corrected</div>
+            </div>
+
+            <div class="card metric-card">
+                <div class="metric-label">ATMOSPHERIC PRESSURE</div>
+                <div class="metric-value-row">
+                    <span id="current-press" class="metric-value">----.-</span>
+                    <span class="metric-unit">hPa</span>
+                </div>
+                <div class="metric-sub" id="press-sub">Barometric check: Normal</div>
+            </div>
+
+            <div class="card metric-card">
+                <div class="metric-label">RELATIVE HUMIDITY</div>
+                <div class="metric-value-row">
+                    <span id="current-rh" class="metric-value">--.-</span>
+                    <span class="metric-unit">%</span>
+                </div>
+                <div class="metric-sub" id="rh-sub">Psychrometric check: Valid</div>
+            </div>
+
+            <div class="card metric-card health-card">
+                <div class="metric-label">STATION SENSOR HEALTH</div>
+                <div class="metric-value-row">
+                    <span id="station-health" class="metric-value text-accent">100.0</span>
+                    <span class="metric-unit">%</span>
+                </div>
+                <div class="metric-sub" id="drift-projection">Drift: Minimal (Tolerance > 30d)</div>
+            </div>
+        </div>
+
+        <!-- Main Workspace: Chart & 5-Layer Evidence Panel -->
+        <div class="content-grid">
+            <!-- Left Panel: Real-Time Sensor Telemetry Chart -->
+            <div class="card chart-panel">
+                <div class="card-header">
+                    <h2>Live AWS Sensor Telemetry (Jena Stream)</h2>
+                    <div class="chart-controls">
+                        <span class="legend-chip raw-chip">● Raw Telemetry</span>
+                        <span class="legend-chip corrected-chip">● Self-Healed Imputed</span>
+                        <span class="legend-chip anomaly-chip">● Flagged Anomaly</span>
+                    </div>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Right Panel: 5-Layer Anomaly Breakdown & Live Injector -->
+            <div class="card evidence-panel">
+                <div class="card-header">
+                    <h2>5-Layer Anomaly Engine Status</h2>
+                    <span id="veto-badge" class="veto-badge neutral">VETO INACTIVE</span>
+                </div>
+
+                <div class="layer-list">
+                    <div class="layer-item" id="layer-physics">
+                        <div class="layer-header">
+                            <span class="layer-title">1. Physics Validation (MetPy)</span>
+                            <span class="layer-val" id="score-phys">0.00</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="fill-phys" style="width: 0%"></div></div>
+                        <p class="layer-desc" id="desc-phys">Dew point ≤ T_ambient, Wet-bulb ≤ 35°C, Altitude pressure</p>
+                    </div>
+
+                    <div class="layer-item" id="layer-temporal">
+                        <div class="layer-header">
+                            <span class="layer-title">2. Temporal Pattern Analysis</span>
+                            <span class="layer-val" id="score-temp">0.00</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="fill-temp" style="width: 0%"></div></div>
+                        <p class="layer-desc" id="desc-temp">Rate-of-change spike threshold & frozen-sensor detection</p>
+                    </div>
+
+                    <div class="layer-item" id="layer-multivariate">
+                        <div class="layer-header">
+                            <span class="layer-title">3. Multivariate Consistency (PyOD)</span>
+                            <span class="layer-val" id="score-mv">0.00</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="fill-mv" style="width: 0%"></div></div>
+                        <p class="layer-desc" id="desc-mv">Joint (T, P, RH) empirical atmospheric manifold (ECOD)</p>
+                    </div>
+
+                    <div class="layer-item" id="layer-spatial">
+                        <div class="layer-header">
+                            <span class="layer-title">4. Spatial / Neighbor Analysis</span>
+                            <span class="layer-val" id="score-sp">0.00</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="fill-sp" style="width: 0%"></div></div>
+                        <p class="layer-desc" id="desc-sp">Multi-station IDW consensus residual vs 3 adjacent AWS nodes</p>
+                    </div>
+
+                    <div class="layer-item" id="layer-drift">
+                        <div class="layer-header">
+                            <span class="layer-title">5. Sensor Drift & Health Tracking</span>
+                            <span class="layer-val" id="score-drift">0.00</span>
+                        </div>
+                        <div class="progress-bar"><div class="progress-fill" id="fill-drift" style="width: 0%"></div></div>
+                        <p class="layer-desc" id="desc-drift">CUSUM systematic bias accumulator & predictive maintenance</p>
+                    </div>
+                </div>
+
+                <!-- Live Fault Injection Demonstration Console -->
+                <div class="injector-section">
+                    <h3>Demonstration Fault Injection Console</h3>
+                    <p class="injector-sub">Inject synthetic sensor faults to evaluate real-time response:</p>
+                    <div class="injector-buttons">
+                        <button class="btn btn-warning" onclick="injectFault('spike')">⚡ Sudden Spike (+15°C)</button>
+                        <button class="btn btn-warning" onclick="injectFault('frozen')">❄️ Frozen Sensor</button>
+                        <button class="btn btn-warning" onclick="injectFault('drift')">📈 Calibration Drift</button>
+                        <button class="btn btn-danger" onclick="injectFault('impossible_physics')">🚫 Impossible Physics (Veto)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Panel: Alert Log & SHAP Diagnostic Feed -->
+        <div class="card alert-panel">
+            <div class="card-header">
+                <h2>Real-Time Diagnostic & XAI Explanation Feed</h2>
+                <button class="btn btn-outline" onclick="clearAlerts()">Clear Feed</button>
+            </div>
+            <div class="alert-feed" id="alert-feed">
+                <!-- Diagnostic alerts populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

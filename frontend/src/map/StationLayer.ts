@@ -28,7 +28,7 @@ export function setupStationLayers(
     src.setData(data);
   }
 
-  // 1. Cluster Circles (Aggregated weather stations when zoomed out)
+  // 1. Cluster Circles (Dark translucent center, cyan accent ring, crisp white border)
   if (!map.getLayer(CLUSTERS_LAYER_ID)) {
     map.addLayer({
       id: CLUSTERS_LAYER_ID,
@@ -39,24 +39,24 @@ export function setupStationLayers(
         'circle-color': [
           'step',
           ['get', 'point_count'],
-          '#0284c7', // small cluster (< 20)
+          'rgba(14, 28, 48, 0.90)', // small cluster (< 20)
           20,
-          '#0369a1', // medium cluster (20 - 100)
+          'rgba(12, 38, 64, 0.92)', // medium cluster (20 - 100)
           100,
-          '#075985'  // large cluster (> 100)
+          'rgba(8, 48, 80, 0.94)'   // large cluster (> 100)
         ],
         'circle-radius': [
           'step',
           ['get', 'point_count'],
-          15,
+          14,
           20,
-          19,
+          18,
           100,
-          25
+          23
         ],
-        'circle-stroke-width': 2.5,
-        'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.95
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#00e5ff',
+        'circle-opacity': 0.98
       }
     });
   }
@@ -93,15 +93,15 @@ export function setupStationLayers(
         ['==', ['get', 'hasAnomaly'], 1]
       ],
       paint: {
-        'circle-color': 'rgba(239, 68, 68, 0.20)',
-        'circle-radius': 14,
+        'circle-color': 'rgba(239, 68, 68, 0.16)',
+        'circle-radius': 13,
         'circle-stroke-width': 1.5,
         'circle-stroke-color': '#ef4444'
       }
     });
   }
 
-  // 4. Selected Station Highlighting Halo
+  // 4. Selected Station Highlighting Halo (Cyan Selection Ring)
   if (!map.getLayer(SELECTED_HALO_LAYER_ID)) {
     map.addLayer({
       id: SELECTED_HALO_LAYER_ID,
@@ -109,10 +109,10 @@ export function setupStationLayers(
       source: STATIONS_SOURCE_ID,
       filter: ['==', ['get', 'id'], ''], // updated dynamically
       paint: {
-        'circle-color': 'rgba(2, 132, 199, 0.22)',
-        'circle-radius': 16,
+        'circle-color': 'rgba(0, 229, 255, 0.22)',
+        'circle-radius': 15,
         'circle-stroke-width': 2,
-        'circle-stroke-color': '#0284c7'
+        'circle-stroke-color': '#00e5ff'
       }
     });
   }
@@ -131,7 +131,7 @@ export function setupStationLayers(
           'ANOMALY',
           '#ef4444', // Red
           'WARNING',
-          '#f59e0b', // Amber / Yellow
+          '#f59e0b', // Amber
           'NORMAL',
           '#10b981', // Green
           /* default / offline */ '#94a3b8'
@@ -139,10 +139,10 @@ export function setupStationLayers(
         'circle-radius': [
           'case',
           ['==', ['get', 'hasAnomaly'], 1],
-          8.5,
-          7.5
+          7.5,
+          6.5
         ],
-        'circle-stroke-width': 2,
+        'circle-stroke-width': 1.5,
         'circle-stroke-color': '#ffffff',
         'circle-opacity': 0.98
       }
@@ -158,7 +158,7 @@ export function setupStationLayers(
       filter: ['!', ['has', 'point_count']],
       paint: {
         'circle-color': '#ffffff',
-        'circle-radius': 4.5,
+        'circle-radius': 4,
         'circle-opacity': 1.0
       }
     });
@@ -183,7 +183,7 @@ export function setupStationLayers(
           '#10b981',
           '#64748b'
         ],
-        'circle-radius': 2.5,
+        'circle-radius': 2.2,
         'circle-opacity': 1.0
       }
     });

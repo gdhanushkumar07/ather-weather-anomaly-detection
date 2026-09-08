@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Plus, Minus, Globe, Satellite, Moon } from 'lucide-react';
+import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
 import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo } from './StationLayer';
@@ -289,21 +289,39 @@ export const AtherMap: React.FC<AtherMapProps> = ({
 
       {/* Floating Minimal Map Navigation Controls */}
       <div className="floating-map-controls">
+        <div className="map-zoom-group">
+          <button className="map-control-btn zoom-btn top" onClick={handleZoomIn} title="Zoom In">
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button className="map-control-btn zoom-btn bottom" onClick={handleZoomOut} title="Zoom Out">
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <button className="map-control-btn" onClick={handleResetWorldView} title="Reset to Full World View">
+          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+        </button>
+
         <button
           className={`map-control-btn ${basemap === 'satellite' ? 'active-sat' : ''}`}
           onClick={() => onToggleBasemap(basemap === 'dark' ? 'satellite' : 'dark')}
           title={basemap === 'dark' ? 'Switch to Satellite Imagery' : 'Switch to Dark Map'}
         >
-          {basemap === 'dark' ? <Satellite className="w-4 h-4 text-cyan-400" /> : <Moon className="w-4 h-4 text-amber-400" />}
+          {basemap === 'dark' ? <Satellite className="w-3.5 h-3.5 text-cyan-400" /> : <Moon className="w-3.5 h-3.5 text-amber-400" />}
         </button>
-        <button className="map-control-btn" onClick={handleZoomIn} title="Zoom In">
-          <Plus className="w-4 h-4" />
-        </button>
-        <button className="map-control-btn" onClick={handleZoomOut} title="Zoom Out">
-          <Minus className="w-4 h-4" />
-        </button>
-        <button className="map-control-btn" onClick={handleResetWorldView} title="Reset to Full World View">
-          <Globe className="w-4 h-4" />
+
+        <button
+          className="map-control-btn"
+          onClick={() => {
+            if (!document.fullscreenElement) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+              document.exitFullscreen().catch(() => {});
+            }
+          }}
+          title="Toggle Fullscreen"
+        >
+          <Maximize className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>

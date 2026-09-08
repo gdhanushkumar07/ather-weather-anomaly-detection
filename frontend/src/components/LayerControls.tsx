@@ -19,19 +19,6 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
 }) => {
   return (
     <aside className={`weather-controls-right ${isStationPanelOpen ? 'shifted' : ''}`}>
-      {/* Dedicated AWS Station Marker Control Button */}
-      <div
-        className={`aws-station-toggle ${activeLayers.stations ? 'active' : ''}`}
-        onClick={() => onToggleLayer('stations')}
-        title="Toggle Global AWS Station Observation Markers"
-      >
-        <span className={`aws-status-dot ${activeLayers.stations ? 'active' : ''}`} />
-        <span className="aws-status-text">
-          {activeLayers.stations ? 'AWS MARKERS ON' : 'AWS MARKERS OFF'}
-        </span>
-        <Radio className="w-3.5 h-3.5 ml-auto" />
-      </div>
-
       {/* Core Meteorological Inputs */}
       <div className="control-group-card">
         <div className="control-group-header">
@@ -72,6 +59,27 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         </div>
       </div>
 
+      {/* AWS Monitoring Section */}
+      <div className="control-group-card">
+        <div className="control-group-header">
+          <span>AWS MONITORING</span>
+        </div>
+        <div
+          className={`aws-station-toggle ${activeLayers.stations ? 'active' : ''}`}
+          onClick={() => onToggleLayer('stations')}
+          title="Toggle Global AWS Station Observation Markers"
+        >
+          <div className="aws-toggle-left">
+            <span className={`aws-status-dot ${activeLayers.stations ? 'active' : ''}`} />
+            <span className="aws-status-text">AWS MARKERS</span>
+          </div>
+          <div className="aws-toggle-right">
+            <span className="aws-state-badge">{activeLayers.stations ? 'ON' : 'OFF'}</span>
+            <Radio className="w-3.5 h-3.5" />
+          </div>
+        </div>
+      </div>
+
       {/* Basemap Selection */}
       <div className="control-group-card">
         <div className="control-group-header">
@@ -83,16 +91,16 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             onClick={() => onToggleBasemap('dark')}
             title="Switch to ATHER Dark Map"
           >
-            <Moon className="w-3.5 h-3.5" />
-            <span>Dark</span>
+            <span className={`basemap-radio-indicator ${basemap === 'dark' ? 'active' : ''}`} />
+            <span>DARK MAP</span>
           </button>
           <button
             className={`basemap-pill-btn ${basemap === 'satellite' ? 'active' : ''}`}
             onClick={() => onToggleBasemap('satellite')}
             title="Switch to Satellite Imagery"
           >
-            <Satellite className="w-3.5 h-3.5" />
-            <span>Satellite</span>
+            <span className={`basemap-radio-indicator ${basemap === 'satellite' ? 'active' : ''}`} />
+            <span>SATELLITE</span>
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { X, AlertOctagon, TrendingUp, Compass, Clock, MapPin } from 'lucide-react';
-import { Station, ObservationHistory } from '../types/weather';
-import { fetchStationObservations } from '../services/api';
+import { X, AlertOctagon, TrendingUp, Compass, Clock, MapPin, Radio, Loader2, CloudSun, AlertTriangle } from 'lucide-react';
+import { Station, ObservationHistory, OpenMeteoWeather } from '../types/weather';
+import { fetchStationObservations, fetchCurrentWeather } from '../services/api';
 
 interface StationPanelProps {
   station: Station | null;
@@ -12,14 +12,34 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
   const [history, setHistory] = useState<ObservationHistory | null>(null);
   const [cachedStation, setCachedStation] = useState<Station | null>(station);
 
+  const [currentWeather, setCurrentWeather] = useState<OpenMeteoWeather | null>(null);
+  const [isLoadingWeather, setIsLoadingWeather] = useState<boolean>(false);
+  const [weatherError, setWeatherError] = useState<string | null>(null);
+
   useEffect(() => {
     if (station) {
       setCachedStation(station);
+      setWeatherError(null);
+      setIsLoadingWeather(true);
+
+      // 1. Fetch live current weather from Open-Meteo proxy for station coordinates
+      fetchCurrentWeather(station.latitude, station.longitude)
+        .then((weather) => {
+          setCurrentWeather(weather);
+          setIsLoadingWeather(false);
+        })
+        .catch((err) => {
+          console.error('Failed to load Open-Meteo weather', err);
+          setWeatherError('Weather data temporarily unavailable.');
+          setIsLoadingWeather(false);
+        });
+
+      // 2. Fetch diurnal history trend
       fetchStationObservations(station.id)
         .then(setHistory)
         .catch((err) => console.error('Failed to load observations history', err));
     }
-  }, [station?.id]);
+  }, [station?.id, station?.latitude, station?.longitude]);
 
   const displayStation = station || cachedStation;
   if (!displayStation) return null;
@@ -27,9 +47,16 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
   const currentStation = displayStation;
   const anomaly = currentStation.anomaly;
   const isAnomaly = currentStation.status === 'ANOMALY' || !!anomaly;
-  const isWarning = currentStation.status === 'WARNING';
 
-  // SVG Sparkline calculation for temperature
+  // Values: prefer live Open-Meteo data if available, fallback to station dataset
+  const displayTemp = currentWeather ? currentWeather.temperature : currentStation.temperature;
+  const displayHumidity = currentWeather ? currentWeather.humidity : currentStation.humidity;
+  const displayPressure = currentWeather ? currentWeather.pressure : currentStation.pressure;
+  const displayWindSpeed = currentWeather ? currentWeather.windSpeed : currentStation.windSpeed;
+  const displayWindDir = currentWeather ? currentWeather.windDirection : currentStation.windDirection;
+  const displayCondition = currentWeather ? currentWeather.condition : currentStation.condition;
+
+  // SVG Sparkline calculation for temperature trend
   const temps = history?.series.map((s) => s.temperature) || [];
   const minTemp = temps.length ? Math.min(...temps) : 20;
   const maxTemp = temps.length ? Math.max(...temps) : 35;
@@ -48,7 +75,12 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       {/* Header */}
       <div className="station-panel-header">
         <div>
-          <span className="station-id-tag">{currentStation.id}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span className="station-id-tag">{currentStation.id}</span>
+            <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 500 }}>
+              {currentStation.latitude.toFixed(2)}°, {currentStation.longitude.toFixed(2)}°
+            </span>
+          </div>
           <h2 className="station-title">{currentStation.name}</h2>
           <div className="station-location" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -70,7 +102,9 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.75rem', color: '#64748b' }}>
             <Clock className="w-3.5 h-3.5" />
-            <span>Last Updated: {currentStation.timestamp || 'Just now'}</span>
+            <span>
+              {currentWeather ? `Updated: ${currentWeather.timestamp.split('T')[1] || 'Live'}` : currentStation.timestamp}
+            </span>
           </div>
         </div>
 
@@ -130,66 +164,108 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           </div>
         )}
 
+        {/* Section Header: CURRENT WEATHER */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CloudSun className="w-4 h-4 text-sky-600" />
+            <span>Current Weather</span>
+          </div>
+
+          <span style={{ fontSize: '0.72rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4, fontWeight: 500 }}>
+            Source: {currentWeather ? 'Open-Meteo' : 'Station Ingest'}
+          </span>
+        </div>
+
+        {/* Loading / Error States */}
+        {isLoadingWeather && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', background: '#f8fafc', borderRadius: 8, fontSize: '0.82rem', color: '#0284c7' }}>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Loading current weather from Open-Meteo...</span>
+          </div>
+        )}
+
+        {weatherError && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontSize: '0.8rem', color: '#b45309' }}>
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{weatherError}</span>
+          </div>
+        )}
+
         {/* Primary Observation Telemetry Grid */}
         <div className="telemetry-grid">
           <div className="telemetry-card">
             <div className="label">Temperature</div>
             <div className="value">
-              {currentStation.temperature !== null && currentStation.temperature !== undefined ? (
+              {displayTemp !== null && displayTemp !== undefined ? (
                 <>
-                  {currentStation.temperature}
+                  {displayTemp}
                   <span className="unit">°C</span>
                 </>
               ) : (
                 '--'
               )}
             </div>
+            {currentWeather?.apparentTemperature !== undefined && (
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 3 }}>
+                Feels like: {currentWeather.apparentTemperature} °C
+              </div>
+            )}
           </div>
 
           <div className="telemetry-card">
             <div className="label">Barometric Pressure</div>
             <div className="value">
-              {currentStation.pressure !== null && currentStation.pressure !== undefined ? (
+              {displayPressure !== null && displayPressure !== undefined ? (
                 <>
-                  {currentStation.pressure}
+                  {Math.round(displayPressure)}
                   <span className="unit">hPa</span>
                 </>
               ) : (
                 '--'
               )}
             </div>
+            {displayCondition && (
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 3 }}>
+                Sky: {displayCondition}
+              </div>
+            )}
           </div>
 
           <div className="telemetry-card">
             <div className="label">Relative Humidity</div>
             <div className="value">
-              {currentStation.humidity !== null && currentStation.humidity !== undefined ? (
+              {displayHumidity !== null && displayHumidity !== undefined ? (
                 <>
-                  {currentStation.humidity}
+                  {Math.round(displayHumidity)}
                   <span className="unit">%</span>
                 </>
               ) : (
                 '--'
               )}
             </div>
+            {currentWeather?.precipitation !== undefined && (
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: 3 }}>
+                Precip: {currentWeather.precipitation} mm
+              </div>
+            )}
           </div>
 
           <div className="telemetry-card">
             <div className="label">Wind Velocity</div>
             <div className="value">
-              {currentStation.windSpeed !== null && currentStation.windSpeed !== undefined ? (
+              {displayWindSpeed !== null && displayWindSpeed !== undefined ? (
                 <>
-                  {currentStation.windSpeed}
+                  {displayWindSpeed}
                   <span className="unit">km/h</span>
                 </>
               ) : (
                 '0.0'
               )}
             </div>
-            {currentStation.windDirection && (
-              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Compass className="w-3 h-3" />
-                <span>Dir: {currentStation.windDirection}</span>
+            {displayWindDir && (
+              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Compass className="w-3.5 h-3.5" />
+                <span>Direction: {displayWindDir}</span>
               </div>
             )}
           </div>
@@ -217,7 +293,6 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
                 strokeLinejoin="round"
                 points={points}
               />
-              {/* Highlight anomalous endpoint */}
               {isAnomaly && (
                 <circle
                   cx="320"

@@ -8,6 +8,25 @@ export interface AnomalyInfo {
   reason: string;
 }
 
+export interface OpenMeteoWeather {
+  latitude: number;
+  longitude: number;
+  temperature: number;
+  apparentTemperature?: number;
+  humidity: number;
+  pressure: number;
+  surfacePressure?: number;
+  windSpeed: number;
+  windGusts?: number;
+  windDirectionDeg?: number;
+  windDirection: string;
+  precipitation: number;
+  weatherCode: number;
+  condition: string;
+  timestamp: string;
+  source: string;
+}
+
 export interface Station {
   id: string;
   name: string;

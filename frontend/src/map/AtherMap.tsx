@@ -31,7 +31,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
 
-  // 1. Initialize MapLibre
+  // 1. Initialize MapLibre with High-Quality Esri Light Canvas Base & Reference (Zero API-Key Watermarks)
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -40,29 +40,41 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       style: {
         version: 8,
         sources: {
-          carto_light: {
+          esri_base: {
             type: 'raster',
             tiles: [
-              'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-              'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png',
-              'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png'
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors, © CARTO'
+            attribution: 'Tiles © Esri, DeLorme, NAVTEQ, OpenStreetMap'
+          },
+          esri_ref: {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256
           }
         },
         layers: [
           {
-            id: 'carto-light-basemap',
+            id: 'esri-light-gray-base',
             type: 'raster',
-            source: 'carto_light',
+            source: 'esri_base',
+            minzoom: 0,
+            maxzoom: 19
+          },
+          {
+            id: 'esri-light-gray-reference',
+            type: 'raster',
+            source: 'esri_ref',
             minzoom: 0,
             maxzoom: 19
           }
         ]
       },
-      center: [20, 20],
-      zoom: 2.2,
+      center: [15, 20],
+      zoom: 1.9,
       minZoom: 1.5,
       maxZoom: 18,
       pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
@@ -109,8 +121,8 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             if (!mapRef.current) return;
             const layer = new VaneColormapLayer(grid);
             colormapLayerRef.current = layer;
-            // Insert under stations if station layer exists
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : undefined;
+            // Insert beneath reference overlay & stations
+            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }
@@ -118,7 +130,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           .catch((err) => console.error('Failed to load temperature field', err));
       } else {
         if (!map.getLayer(colormapLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : undefined;
+          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
           map.addLayer(colormapLayerRef.current, beforeId);
         }
       }
@@ -141,7 +153,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             if (!mapRef.current) return;
             const layer = new VaneParticlesLayer(grid);
             particlesLayerRef.current = layer;
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : undefined;
+            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }
@@ -149,7 +161,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           .catch((err) => console.error('Failed to load wind field', err));
       } else {
         if (!map.getLayer(particlesLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : undefined;
+          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
           map.addLayer(particlesLayerRef.current, beforeId);
         }
       }
@@ -168,8 +180,8 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       const [lon, lat] = feature.geometry.coordinates;
       mapRef.current.flyTo({
         center: [lon, lat],
-        zoom: Math.max(mapRef.current.getZoom(), 8.5),
-        duration: 1200,
+        zoom: Math.max(mapRef.current.getZoom(), 8.0),
+        duration: 1100,
         essential: true
       });
     }

@@ -1,4 +1,4 @@
-import { Station, ObservationHistory, AnomaliesSummary } from '../types/weather';
+import { Station, ObservationHistory, AnomaliesSummary, OpenMeteoWeather } from '../types/weather';
 
 const API_BASE = '/api';
 
@@ -32,6 +32,12 @@ export async function fetchStationDetails(id: string): Promise<Station> {
 export async function fetchStationObservations(id: string, hours = 24): Promise<ObservationHistory> {
   const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(id)}/observations?hours=${hours}`);
   if (!res.ok) throw new Error(`Failed to fetch observations for ${id}: ${res.statusText}`);
+  return res.json();
+}
+
+export async function fetchCurrentWeather(lat: number, lon: number): Promise<OpenMeteoWeather> {
+  const res = await fetch(`${API_BASE}/weather/current?lat=${lat}&lon=${lon}`);
+  if (!res.ok) throw new Error(`Failed to fetch current weather: ${res.statusText}`);
   return res.json();
 }
 

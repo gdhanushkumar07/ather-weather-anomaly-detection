@@ -3,8 +3,10 @@ import maplibregl from 'maplibre-gl';
 export const STATIONS_SOURCE_ID = 'ather-stations-source';
 export const CLUSTERS_LAYER_ID = 'ather-clusters';
 export const CLUSTER_COUNT_LAYER_ID = 'ather-cluster-count';
-export const UNCLUSTERED_STATIONS_LAYER_ID = 'ather-unclustered-stations';
 export const ANOMALY_PULSE_LAYER_ID = 'ather-anomaly-pulse';
+export const UNCLUSTERED_RING_LAYER_ID = 'ather-unclustered-ring';
+export const UNCLUSTERED_BASE_LAYER_ID = 'ather-unclustered-base';
+export const UNCLUSTERED_CORE_LAYER_ID = 'ather-unclustered-core';
 
 export function setupStationLayers(
   map: maplibregl.Map,
@@ -17,15 +19,15 @@ export function setupStationLayers(
       type: 'geojson',
       data: data,
       cluster: true,
-      clusterMaxZoom: 12,
-      clusterRadius: 50
+      clusterMaxZoom: 11,
+      clusterRadius: 45
     });
   } else {
     const src = map.getSource(STATIONS_SOURCE_ID) as maplibregl.GeoJSONSource;
     src.setData(data);
   }
 
-  // 1. Cluster Circles
+  // 1. Cluster Circles (Aggregated weather stations when zoomed out)
   if (!map.getLayer(CLUSTERS_LAYER_ID)) {
     map.addLayer({
       id: CLUSTERS_LAYER_ID,
@@ -36,24 +38,24 @@ export function setupStationLayers(
         'circle-color': [
           'step',
           ['get', 'point_count'],
-          '#38bdf8', // small cluster (< 15)
-          15,
-          '#0284c7', // medium cluster (15 - 60)
-          60,
-          '#0369a1'  // large cluster (> 60)
+          '#0284c7', // small cluster (< 20)
+          20,
+          '#0369a1', // medium cluster (20 - 100)
+          100,
+          '#075985'  // large cluster (> 100)
         ],
         'circle-radius': [
           'step',
           ['get', 'point_count'],
           16,
-          15,
-          22,
-          60,
-          28
+          20,
+          21,
+          100,
+          27
         ],
         'circle-stroke-width': 2.5,
         'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.92
+        'circle-opacity': 0.94
       }
     });
   }
@@ -68,7 +70,9 @@ export function setupStationLayers(
       layout: {
         'text-field': '{point_count_abbreviated}',
         'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-        'text-size': 12
+        'text-size': 11.5,
+        'text-allow-overlap': true,
+        'text-ignore-placement': true
       },
       paint: {
         'text-color': '#ffffff'
@@ -76,7 +80,7 @@ export function setupStationLayers(
     });
   }
 
-  // 3. Anomaly Outer Pulse Ring (Unclustered)
+  // 3. Anomaly Pulsing Alert Ring (Unclustered)
   if (!map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
     map.addLayer({
       id: ANOMALY_PULSE_LAYER_ID,
@@ -88,7 +92,7 @@ export function setupStationLayers(
         ['==', ['get', 'hasAnomaly'], 1]
       ],
       paint: {
-        'circle-color': 'rgba(239, 68, 68, 0.25)',
+        'circle-color': 'rgba(239, 68, 68, 0.22)',
         'circle-radius': 14,
         'circle-stroke-width': 1.5,
         'circle-stroke-color': '#ef4444'
@@ -96,10 +100,57 @@ export function setupStationLayers(
     });
   }
 
-  // 4. Individual Stations (Unclustered)
-  if (!map.getLayer(UNCLUSTERED_STATIONS_LAYER_ID)) {
+  // 4. Professional Weather Station Marker - Outer Status Ring
+  if (!map.getLayer(UNCLUSTERED_RING_LAYER_ID)) {
     map.addLayer({
-      id: UNCLUSTERED_STATIONS_LAYER_ID,
+      id: UNCLUSTERED_RING_LAYER_ID,
+      type: 'circle',
+      source: STATIONS_SOURCE_ID,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': [
+          'match',
+          ['get', 'status'],
+          'ANOMALY',
+          '#ef4444', // Red
+          'WARNING',
+          '#f59e0b', // Amber / Yellow
+          'NORMAL',
+          '#10b981', // Green
+          /* default / offline */ '#94a3b8'
+        ],
+        'circle-radius': [
+          'case',
+          ['==', ['get', 'hasAnomaly'], 1],
+          8.5,
+          7.5
+        ],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.98
+      }
+    });
+  }
+
+  // 5. Professional Weather Station Marker - Inner White Mast Base
+  if (!map.getLayer(UNCLUSTERED_BASE_LAYER_ID)) {
+    map.addLayer({
+      id: UNCLUSTERED_BASE_LAYER_ID,
+      type: 'circle',
+      source: STATIONS_SOURCE_ID,
+      filter: ['!', ['has', 'point_count']],
+      paint: {
+        'circle-color': '#ffffff',
+        'circle-radius': 4.5,
+        'circle-opacity': 1.0
+      }
+    });
+  }
+
+  // 6. Professional Weather Station Marker - Center Sensor Core
+  if (!map.getLayer(UNCLUSTERED_CORE_LAYER_ID)) {
+    map.addLayer({
+      id: UNCLUSTERED_CORE_LAYER_ID,
       type: 'circle',
       source: STATIONS_SOURCE_ID,
       filter: ['!', ['has', 'point_count']],
@@ -113,17 +164,10 @@ export function setupStationLayers(
           '#f59e0b',
           'NORMAL',
           '#10b981',
-          /* default / offline */ '#94a3b8'
+          '#64748b'
         ],
-        'circle-radius': [
-          'case',
-          ['==', ['get', 'hasAnomaly'], 1],
-          7,
-          6
-        ],
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.95
+        'circle-radius': 2.5,
+        'circle-opacity': 1.0
       }
     });
   }
@@ -132,7 +176,7 @@ export function setupStationLayers(
   if (!(map as any)._atherStationListenersAttached) {
     (map as any)._atherStationListenersAttached = true;
 
-    // Click handler for clusters: smooth zoom in
+    // Click handler for clusters: smooth zoom into cluster
     map.on('click', CLUSTERS_LAYER_ID, (e) => {
       const features = map.queryRenderedFeatures(e.point, { layers: [CLUSTERS_LAYER_ID] });
       if (!features.length) return;
@@ -143,15 +187,15 @@ export function setupStationLayers(
         const coords = (features[0].geometry as GeoJSON.Point).coordinates;
         map.easeTo({
           center: [coords[0], coords[1]],
-          zoom: zoom + 0.5,
-          duration: 400
+          zoom: zoom + 0.6,
+          duration: 450
         });
       });
     });
 
     // Click handler for individual station: select station
-    map.on('click', UNCLUSTERED_STATIONS_LAYER_ID, (e) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: [UNCLUSTERED_STATIONS_LAYER_ID] });
+    map.on('click', UNCLUSTERED_RING_LAYER_ID, (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: [UNCLUSTERED_RING_LAYER_ID] });
       if (!features.length) return;
       const stnId = features[0].properties?.id;
       if (stnId) {
@@ -162,18 +206,23 @@ export function setupStationLayers(
     // Hover cursor changes
     map.on('mouseenter', CLUSTERS_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', CLUSTERS_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
-    map.on('mouseenter', UNCLUSTERED_STATIONS_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', UNCLUSTERED_STATIONS_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
+    map.on('mouseenter', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
   }
 }
 
 export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean) {
   const vis = visible ? 'visible' : 'none';
-  [CLUSTERS_LAYER_ID, CLUSTER_COUNT_LAYER_ID, UNCLUSTERED_STATIONS_LAYER_ID, ANOMALY_PULSE_LAYER_ID].forEach(
-    (layerId) => {
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', vis);
-      }
+  [
+    CLUSTERS_LAYER_ID,
+    CLUSTER_COUNT_LAYER_ID,
+    ANOMALY_PULSE_LAYER_ID,
+    UNCLUSTERED_RING_LAYER_ID,
+    UNCLUSTERED_BASE_LAYER_ID,
+    UNCLUSTERED_CORE_LAYER_ID
+  ].forEach((layerId) => {
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, 'visibility', vis);
     }
-  );
+  });
 }

@@ -11,6 +11,7 @@ from typing import Optional, Dict, Any
 
 from .stations.service import station_service
 from .weather.grid_service import grid_service
+from .weather.open_meteo import open_meteo_service
 from .ingestion.adapter import IngestionAdapter
 
 app = FastAPI(
@@ -100,6 +101,19 @@ def get_weather_grid(variable: str = Query("temperature", enum=["temperature", "
         return grid_service.generate_wind_field()
     else:
         raise HTTPException(status_code=400, detail=f"Variable '{variable}' not supported.")
+
+@app.get("/api/weather/current")
+def get_current_weather(
+    lat: float = Query(..., description="Latitude of location"),
+    lon: float = Query(..., description="Longitude of location")
+):
+    """
+    Fetches real-time localized current weather from Open-Meteo for the specified coordinate.
+    """
+    try:
+        return open_meteo_service.get_current_weather(lat, lon)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Open-Meteo weather fetch error: {str(e)}")
 
 @app.get("/api/anomalies")
 def get_anomalies():

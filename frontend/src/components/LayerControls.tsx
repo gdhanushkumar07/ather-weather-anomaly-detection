@@ -1,17 +1,21 @@
 import React from 'react';
-import { Thermometer, Wind, Gauge, Droplets, Radio } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, Moon, Satellite } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
   activeLayers: Record<WeatherLayerType, boolean>;
   onToggleLayer: (layer: WeatherLayerType) => void;
   isStationPanelOpen?: boolean;
+  basemap: 'dark' | 'satellite';
+  onToggleBasemap: (mode: 'dark' | 'satellite') => void;
 }
 
 export const LayerControls: React.FC<LayerControlsProps> = ({
   activeLayers,
   onToggleLayer,
-  isStationPanelOpen = false
+  isStationPanelOpen = false,
+  basemap,
+  onToggleBasemap
 }) => {
   return (
     <aside className={`weather-controls-right ${isStationPanelOpen ? 'shifted' : ''}`}>
@@ -68,21 +72,28 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         </div>
       </div>
 
-      {/* Contextual Weather Inputs */}
+      {/* Basemap Selection */}
       <div className="control-group-card">
         <div className="control-group-header">
-          <span>CONTEXTUAL WEATHER</span>
+          <span>BASEMAP</span>
         </div>
-
-        <div
-          className={`control-capsule ${activeLayers.wind ? 'active' : ''}`}
-          onClick={() => onToggleLayer('wind')}
-        >
-          <div className="control-capsule-left">
-            <span className={`radio-dot ${activeLayers.wind ? 'active' : ''}`} />
-            <span>Wind Streamlines</span>
-          </div>
-          <Wind className="control-icon text-sky-400" />
+        <div className="basemap-toggle-row">
+          <button
+            className={`basemap-pill-btn ${basemap === 'dark' ? 'active' : ''}`}
+            onClick={() => onToggleBasemap('dark')}
+            title="Switch to ATHER Dark Map"
+          >
+            <Moon className="w-3.5 h-3.5" />
+            <span>Dark</span>
+          </button>
+          <button
+            className={`basemap-pill-btn ${basemap === 'satellite' ? 'active' : ''}`}
+            onClick={() => onToggleBasemap('satellite')}
+            title="Switch to Satellite Imagery"
+          >
+            <Satellite className="w-3.5 h-3.5" />
+            <span>Satellite</span>
+          </button>
         </div>
       </div>
     </aside>

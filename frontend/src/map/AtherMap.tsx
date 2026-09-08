@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Plus, Minus, Globe } from 'lucide-react';
+import { Plus, Minus, Globe, Satellite, Moon } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
 import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo } from './StationLayer';
@@ -14,13 +14,17 @@ interface AtherMapProps {
   selectedStationId: string | null;
   onSelectStation: (stationId: string) => void;
   activeLayers: Record<WeatherLayerType, boolean>;
+  basemap: 'dark' | 'satellite';
+  onToggleBasemap: (mode: 'dark' | 'satellite') => void;
 }
 
 export const AtherMap: React.FC<AtherMapProps> = ({
   stationsGeoJSON,
   selectedStationId,
   onSelectStation,
-  activeLayers
+  activeLayers,
+  basemap,
+  onToggleBasemap
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -32,7 +36,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
 
-  // 1. Initialize MapLibre with Clean Esri World Light Canvas (Zero API-Key Watermarks)
+  // 1. Initialize MapLibre with both Dark Canvas and Satellite Imagery Basemaps
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -41,7 +45,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       style: {
         version: 8,
         sources: {
-          esri_base: {
+          esri_dark_base: {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
@@ -49,10 +53,25 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             tileSize: 256,
             attribution: 'Tiles © Esri, DeLorme, NAVTEQ, OpenStreetMap'
           },
-          esri_ref: {
+          esri_dark_ref: {
             type: 'raster',
             tiles: [
               'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256
+          },
+          esri_sat_base: {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+            ],
+            tileSize: 256,
+            attribution: 'Source: Esri, Maxar, Earthstar Geographics'
+          },
+          esri_sat_ref: {
+            type: 'raster',
+            tiles: [
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256
           }
@@ -61,16 +80,34 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           {
             id: 'esri-dark-gray-base',
             type: 'raster',
-            source: 'esri_base',
+            source: 'esri_dark_base',
             minzoom: 0,
-            maxzoom: 19
+            maxzoom: 19,
+            layout: { visibility: 'visible' }
           },
           {
             id: 'esri-dark-gray-reference',
             type: 'raster',
-            source: 'esri_ref',
+            source: 'esri_dark_ref',
             minzoom: 0,
-            maxzoom: 19
+            maxzoom: 19,
+            layout: { visibility: 'visible' }
+          },
+          {
+            id: 'esri-satellite-base',
+            type: 'raster',
+            source: 'esri_sat_base',
+            minzoom: 0,
+            maxzoom: 19,
+            layout: { visibility: 'none' }
+          },
+          {
+            id: 'esri-satellite-reference',
+            type: 'raster',
+            source: 'esri_sat_ref',
+            minzoom: 0,
+            maxzoom: 19,
+            layout: { visibility: 'none' }
           }
         ]
       },
@@ -179,6 +216,26 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [activeLayers.wind, isMapReady]);
 
+  // Basemap switcher: Instant toggle between Dark Map and Satellite Imagery
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    const isDark = basemap === 'dark';
+    if (map.getLayer('esri-dark-gray-base')) {
+      map.setLayoutProperty('esri-dark-gray-base', 'visibility', isDark ? 'visible' : 'none');
+    }
+    if (map.getLayer('esri-dark-gray-reference')) {
+      map.setLayoutProperty('esri-dark-gray-reference', 'visibility', isDark ? 'visible' : 'none');
+    }
+    if (map.getLayer('esri-satellite-base')) {
+      map.setLayoutProperty('esri-satellite-base', 'visibility', !isDark ? 'visible' : 'none');
+    }
+    if (map.getLayer('esri-satellite-reference')) {
+      map.setLayoutProperty('esri-satellite-reference', 'visibility', !isDark ? 'visible' : 'none');
+    }
+  }, [basemap, isMapReady]);
+
   // 7. Fly to selected station
   useEffect(() => {
     if (!selectedStationId || !mapRef.current || !stationsGeoJSON) return;
@@ -218,7 +275,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       {/* Temperature Colormap Legend */}
       {activeLayers.temperature && (
         <div className="weather-legend">
-          <div style={{ fontWeight: 600, color: '#0f172a' }}>Surface Temperature (°C)</div>
+          <div style={{ fontWeight: 600, color: '#f8fafc' }}>Surface Temperature (°C)</div>
           <div className="legend-bar temp-gradient" />
           <div className="legend-labels">
             <span>-30°</span>
@@ -232,6 +289,13 @@ export const AtherMap: React.FC<AtherMapProps> = ({
 
       {/* Floating Minimal Map Navigation Controls */}
       <div className="floating-map-controls">
+        <button
+          className={`map-control-btn ${basemap === 'satellite' ? 'active-sat' : ''}`}
+          onClick={() => onToggleBasemap(basemap === 'dark' ? 'satellite' : 'dark')}
+          title={basemap === 'dark' ? 'Switch to Satellite Imagery' : 'Switch to Dark Map'}
+        >
+          {basemap === 'dark' ? <Satellite className="w-4 h-4 text-cyan-400" /> : <Moon className="w-4 h-4 text-amber-400" />}
+        </button>
         <button className="map-control-btn" onClick={handleZoomIn} title="Zoom In">
           <Plus className="w-4 h-4" />
         </button>

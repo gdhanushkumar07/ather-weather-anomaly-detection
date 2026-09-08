@@ -11,6 +11,7 @@ export const App: React.FC = () => {
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [summary, setSummary] = useState<AnomaliesSummary | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
     stations: true,
@@ -77,6 +78,8 @@ export const App: React.FC = () => {
         activeLayers={activeLayers}
         onToggleLayer={handleToggleLayer}
         isStationPanelOpen={Boolean(selectedStation)}
+        basemap={basemap}
+        onToggleBasemap={setBasemap}
       />
 
       {/* Main Full-World 2D Interactive Map */}
@@ -85,6 +88,8 @@ export const App: React.FC = () => {
         selectedStationId={selectedStation?.id ?? null}
         onSelectStation={handleSelectStation}
         activeLayers={activeLayers}
+        basemap={basemap}
+        onToggleBasemap={setBasemap}
       />
 
       {/* Sliding Collapsible Station & Anomaly Details Panel */}

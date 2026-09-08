@@ -1,0 +1,103 @@
+@import "tailwindcss";
+
+/* Custom Leaflet Dark Theme & UI Tweaks */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #12151b !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  outline: none;
+}
+
+/* Ensure Leaflet tiles are not squashed or distorted by Tailwind img resets */
+.leaflet-tile-container img,
+.leaflet-container img.leaflet-tile,
+img.leaflet-tile {
+  max-width: none !important;
+  max-height: none !important;
+  width: 256px !important;
+  height: 256px !important;
+}
+
+.leaflet-tile-pane {
+  z-index: 2 !important;
+}
+
+.leaflet-pane {
+  z-index: 1;
+}
+
+/* Clean map attribution for ATHER interface */
+.leaflet-control-attribution {
+  background: rgba(18, 21, 27, 0.75) !important;
+  color: #8392a5 !important;
+  font-size: 10px !important;
+  border-radius: 4px !important;
+  margin: 4px !important;
+  backdrop-filter: blur(4px);
+}
+.leaflet-control-attribution a {
+  color: #38bdf8 !important;
+}
+
+/* ATHER Map Tooltip */
+.leaflet-tooltip.ather-tooltip {
+  background: rgba(15, 23, 42, 0.92) !important;
+  border: 1px solid rgba(56, 189, 248, 0.35) !important;
+  color: #f8fafc !important;
+  border-radius: 8px !important;
+  padding: 4px 8px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(8px) !important;
+}
+.leaflet-tooltip.ather-tooltip::before {
+  border-top-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+/* Custom dark glassmorphism popups */
+.leaflet-popup-content-wrapper {
+  background: rgba(22, 27, 34, 0.95) !important;
+  color: #f1f5f9 !important;
+  border-radius: 8px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 10px 14px !important;
+  line-height: 1.4 !important;
+  font-size: 13px !important;
+}
+.leaflet-popup-tip {
+  background: rgba(22, 27, 34, 0.95) !important;
+}
+.leaflet-container a.leaflet-popup-close-button {
+  color: #94a3b8 !important;
+  top: 8px !important;
+  right: 8px !important;
+}
+.leaflet-container a.leaflet-popup-close-button:hover {
+  color: #ffffff !important;
+}
+
+/* Clean slender dark scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Range input slider styling */
+input[type=range] {
+  accent-color: #38bdf8;
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ATHER",
+  "description": "ATHER — Global Weather Station Intelligence & Monitoring Dashboard using NOAA ISD global stations and real-time Open-Meteo meteorological observations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

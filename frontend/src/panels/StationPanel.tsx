@@ -93,13 +93,13 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
 
       <div className="station-panel-body">
         {/* Status Indicator & Updated Time */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="station-status-row">
           <div className={`status-badge ${currentStation.status}`}>
             <span className="status-dot" />
             <span>{currentStation.status}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '0.74rem', color: '#64748b' }}>
+          <div className="station-timestamp-meta">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span>
               {currentWeather ? `Updated: ${currentWeather.timestamp.split('T')[1] || 'Just now'}` : currentStation.timestamp}
@@ -115,17 +115,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
                 <AlertOctagon className="w-4 h-4" />
                 <span>Anomaly Detected</span>
               </div>
-              <span
-                style={{
-                  fontSize: '0.68rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '2px 6px',
-                  borderRadius: 4,
-                  background: anomaly.severity === 'HIGH' ? '#fecaca' : '#fde68a',
-                  color: anomaly.severity === 'HIGH' ? '#991b1b' : '#92400e'
-                }}
-              >
+              <span className={`anomaly-severity-pill ${anomaly.severity || 'HIGH'}`}>
                 {anomaly.severity} SEVERITY
               </span>
             </div>
@@ -164,28 +154,28 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
         )}
 
         {/* Current Weather Section Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-          <div style={{ fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#475569', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <CloudSun className="w-4 h-4 text-sky-600" />
+        <div className="weather-section-header">
+          <div className="weather-section-title">
+            <CloudSun className="w-4 h-4 text-cyan-400" />
             <span>Current Weather</span>
           </div>
 
-          <span style={{ fontSize: '0.7rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+          <span className="source-tag">
             Source: {currentWeather ? 'Open-Meteo' : 'Station Ingest'}
           </span>
         </div>
 
         {/* Loading / Error States */}
         {isLoadingWeather && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '14px', background: '#f8fafc', borderRadius: 10, fontSize: '0.8rem', color: '#0284c7' }}>
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Loading current weather from Open-Meteo...</span>
+          <div className="weather-loading-state">
+            <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+            <span>Loading live conditions from Open-Meteo...</span>
           </div>
         )}
 
         {weatherError && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: '0.78rem', color: '#b45309' }}>
-            <AlertTriangle className="w-4 h-4 shrink-0" />
+          <div className="weather-error-state">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
             <span>{weatherError}</span>
           </div>
         )}
@@ -271,18 +261,24 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           <div className="trend-section">
             <div className="trend-header">
               <div className="trend-title">
-                <TrendingUp className="w-3.5 h-3.5 text-sky-600" />
+                <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
                 <span>24-Hour Thermal Trend</span>
               </div>
-              <div style={{ fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: '#64748b', fontWeight: 600 }}>
+              <div className="trend-minmax">
                 Low: {minTemp}°C · High: {maxTemp}°C
               </div>
             </div>
 
             <svg className="sparkline-svg" viewBox="0 0 320 56">
+              <defs>
+                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#0284c7" stopOpacity="0.0" />
+                </linearGradient>
+              </defs>
               <polyline
                 fill="none"
-                stroke="#0284c7"
+                stroke="#00e5ff"
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -292,7 +288,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
                 <circle
                   cx="320"
                   cy={52 - ((temps[temps.length - 1] - minTemp) / tempRange) * 42}
-                  r="4"
+                  r="4.5"
                   fill="#ef4444"
                   stroke="#ffffff"
                   strokeWidth="2"
@@ -300,7 +296,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
               )}
             </svg>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#94a3b8', marginTop: 4 }}>
+            <div className="trend-timestamps">
               <span>24h ago</span>
               <span>12h ago</span>
               <span>Now</span>

@@ -44,7 +44,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           esri_base: {
             type: 'raster',
             tiles: [
-              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}'
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256,
             attribution: 'Tiles © Esri, DeLorme, NAVTEQ, OpenStreetMap'
@@ -52,21 +52,21 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           esri_ref: {
             type: 'raster',
             tiles: [
-              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
+              'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}'
             ],
             tileSize: 256
           }
         },
         layers: [
           {
-            id: 'esri-light-gray-base',
+            id: 'esri-dark-gray-base',
             type: 'raster',
             source: 'esri_base',
             minzoom: 0,
             maxzoom: 19
           },
           {
-            id: 'esri-light-gray-reference',
+            id: 'esri-dark-gray-reference',
             type: 'raster',
             source: 'esri_ref',
             minzoom: 0,
@@ -129,7 +129,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             const layer = new VaneColormapLayer(grid);
             colormapLayerRef.current = layer;
             // Insert beneath reference overlay & stations
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
+            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }
@@ -160,7 +160,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             if (!mapRef.current) return;
             const layer = new VaneParticlesLayer(grid);
             particlesLayerRef.current = layer;
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
+            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }

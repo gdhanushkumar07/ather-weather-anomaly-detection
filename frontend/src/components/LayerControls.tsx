@@ -1,85 +1,88 @@
 import React from 'react';
-import { Layers, Thermometer, Wind, Gauge, Droplets, MapPin, Check } from 'lucide-react';
+import { Thermometer, Wind, Gauge, Droplets, Radio } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
   activeLayers: Record<WeatherLayerType, boolean>;
   onToggleLayer: (layer: WeatherLayerType) => void;
+  isStationPanelOpen?: boolean;
 }
 
 export const LayerControls: React.FC<LayerControlsProps> = ({
   activeLayers,
-  onToggleLayer
+  onToggleLayer,
+  isStationPanelOpen = false
 }) => {
   return (
-    <aside className="layer-controls-panel">
-      <div className="panel-title">
-        <span>Weather Layers</span>
-        <Layers className="w-3.5 h-3.5 text-slate-400" />
-      </div>
-
+    <aside className={`weather-controls-right ${isStationPanelOpen ? 'shifted' : ''}`}>
+      {/* Dedicated AWS Station Marker Control Button */}
       <div
-        className={`layer-item ${activeLayers.stations ? 'active' : ''}`}
+        className={`aws-station-toggle ${activeLayers.stations ? 'active' : ''}`}
         onClick={() => onToggleLayer('stations')}
+        title="Toggle Global AWS Station Observation Markers"
       >
-        <div className="layer-item-left">
-          <MapPin className="w-4 h-4 text-sky-600" />
-          <span>Stations</span>
+        <span className={`aws-status-dot ${activeLayers.stations ? 'active' : ''}`} />
+        <span className="aws-status-text">
+          {activeLayers.stations ? 'AWS MARKERS ON' : 'AWS MARKERS OFF'}
+        </span>
+        <Radio className="w-3.5 h-3.5 ml-auto" />
+      </div>
+
+      {/* Core Meteorological Inputs */}
+      <div className="control-group-card">
+        <div className="control-group-header">
+          <span>ATHER CORE INPUTS</span>
         </div>
-        <div className="layer-checkbox">
-          {activeLayers.stations && <Check className="layer-checkbox-icon" />}
+
+        <div
+          className={`control-capsule ${activeLayers.temperature ? 'active' : ''}`}
+          onClick={() => onToggleLayer('temperature')}
+        >
+          <div className="control-capsule-left">
+            <span className={`radio-dot ${activeLayers.temperature ? 'active' : ''}`} />
+            <span>Temperature</span>
+          </div>
+          <Thermometer className="control-icon text-amber-400" />
+        </div>
+
+        <div
+          className={`control-capsule ${activeLayers.pressure ? 'active' : ''}`}
+          onClick={() => onToggleLayer('pressure')}
+        >
+          <div className="control-capsule-left">
+            <span className={`radio-dot ${activeLayers.pressure ? 'active' : ''}`} />
+            <span>Pressure</span>
+          </div>
+          <Gauge className="control-icon text-indigo-400" />
+        </div>
+
+        <div
+          className={`control-capsule ${activeLayers.humidity ? 'active' : ''}`}
+          onClick={() => onToggleLayer('humidity')}
+        >
+          <div className="control-capsule-left">
+            <span className={`radio-dot ${activeLayers.humidity ? 'active' : ''}`} />
+            <span>Relative Humidity</span>
+          </div>
+          <Droplets className="control-icon text-cyan-400" />
         </div>
       </div>
 
-      <div
-        className={`layer-item ${activeLayers.temperature ? 'active' : ''}`}
-        onClick={() => onToggleLayer('temperature')}
-      >
-        <div className="layer-item-left">
-          <Thermometer className="w-4 h-4 text-orange-500" />
-          <span>Temperature</span>
+      {/* Contextual Weather Inputs */}
+      <div className="control-group-card">
+        <div className="control-group-header">
+          <span>CONTEXTUAL WEATHER</span>
         </div>
-        <div className="layer-checkbox">
-          {activeLayers.temperature && <Check className="layer-checkbox-icon" />}
-        </div>
-      </div>
 
-      <div
-        className={`layer-item ${activeLayers.wind ? 'active' : ''}`}
-        onClick={() => onToggleLayer('wind')}
-      >
-        <div className="layer-item-left">
-          <Wind className="w-4 h-4 text-cyan-600" />
-          <span>Wind Flow</span>
-        </div>
-        <div className="layer-checkbox">
-          {activeLayers.wind && <Check className="layer-checkbox-icon" />}
-        </div>
-      </div>
-
-      <div
-        className={`layer-item ${activeLayers.pressure ? 'active' : ''}`}
-        onClick={() => onToggleLayer('pressure')}
-      >
-        <div className="layer-item-left">
-          <Gauge className="w-4 h-4 text-indigo-500" />
-          <span>Pressure</span>
-        </div>
-        <div className="layer-checkbox">
-          {activeLayers.pressure && <Check className="layer-checkbox-icon" />}
-        </div>
-      </div>
-
-      <div
-        className={`layer-item ${activeLayers.humidity ? 'active' : ''}`}
-        onClick={() => onToggleLayer('humidity')}
-      >
-        <div className="layer-item-left">
-          <Droplets className="w-4 h-4 text-blue-500" />
-          <span>Humidity</span>
-        </div>
-        <div className="layer-checkbox">
-          {activeLayers.humidity && <Check className="layer-checkbox-icon" />}
+        <div
+          className={`control-capsule ${activeLayers.wind ? 'active' : ''}`}
+          onClick={() => onToggleLayer('wind')}
+        >
+          <div className="control-capsule-left">
+            <span className={`radio-dot ${activeLayers.wind ? 'active' : ''}`} />
+            <span>Wind Streamlines</span>
+          </div>
+          <Wind className="control-icon text-sky-400" />
         </div>
       </div>
     </aside>

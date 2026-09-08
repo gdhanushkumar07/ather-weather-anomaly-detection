@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, Radio } from 'lucide-react';
+import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 
@@ -50,18 +50,22 @@ export const TopNav: React.FC<TopNavProps> = ({
   }, []);
 
   return (
-    <header className="ather-navbar">
-      {/* Brand Identity */}
-      <div className="brand-section">
+    <header className="ather-navbar-wrapper">
+      {/* Brand Capsule */}
+      <div className="nav-capsule brand-capsule">
         <div className="brand-logo">
-          <Radio className="brand-logo-icon" />
-          <span>ATHER</span>
+          <div className="brand-icon-wrapper">
+            <span className="brand-dot-pulse" />
+            <Radio className="brand-logo-icon" />
+          </div>
+          <span className="brand-name">ATHER</span>
         </div>
-        <span className="brand-badge">Station Intelligence</span>
+        <span className="brand-divider">|</span>
+        <span className="brand-tag">STATION INTELLIGENCE</span>
       </div>
 
-      {/* Center Search Input */}
-      <div className="search-container" ref={dropdownRef}>
+      {/* Center Search Capsule */}
+      <div className="search-capsule" ref={dropdownRef}>
         <Search className="search-icon w-4 h-4" />
         <input
           type="text"
@@ -85,20 +89,17 @@ export const TopNav: React.FC<TopNavProps> = ({
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600, color: '#0f172a' }}>{stn.name}</div>
-                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 1 }}>
+                  <div className="search-stn-name">{stn.name}</div>
+                  <div className="search-stn-meta">
                     {stn.id} · {stn.town}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span
-                    className={`stat-pill ${stn.status.toLowerCase()}`}
-                    style={{ fontSize: '0.68rem', padding: '2px 6px' }}
-                  >
+                  <span className={`stat-pill ${stn.status.toLowerCase()}`}>
                     {stn.status}
                   </span>
                   {stn.temperature !== null && stn.temperature !== undefined && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 600, marginTop: 2 }}>
+                    <div className="search-stn-temp">
                       {stn.temperature} °C
                     </div>
                   )}
@@ -109,54 +110,79 @@ export const TopNav: React.FC<TopNavProps> = ({
         )}
       </div>
 
-      {/* Live Status KPIs */}
-      <div className="nav-stats">
-        <div
-          className="stat-chip"
-          style={{ cursor: 'pointer' }}
+      {/* Navigation Section Pills (SkyGuard-inspired) */}
+      <div className="nav-capsule section-pills">
+        <button
+          className={`nav-section-btn ${statusFilter === null ? 'active' : ''}`}
           onClick={() => onSetStatusFilter(null)}
-          title="Click to show all stations"
+          title="Show all network stations"
         >
-          <span className="stat-pill all">
-            <Activity className="w-3.5 h-3.5 text-slate-500" />
-            <span>Stations: {summary?.totalStations ?? 1655}</span>
-          </span>
-        </div>
+          <Wifi className="w-3.5 h-3.5" />
+          <span>Network</span>
+        </button>
 
-        <div
-          className="stat-chip"
-          style={{ cursor: 'pointer' }}
-          onClick={() => onSetStatusFilter(statusFilter === 'NORMAL' ? null : 'NORMAL')}
-          title="Filter by Normal"
-        >
-          <span className="stat-pill normal">
-            <span className="stat-dot-small" />
-            <span>{summary?.normalCount ?? 1607} Normal</span>
-          </span>
-        </div>
-
-        <div
-          className="stat-chip"
-          style={{ cursor: 'pointer' }}
-          onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
-          title="Filter by Warning"
-        >
-          <span className="stat-pill warning">
-            <AlertTriangle className="w-3 h-3 text-amber-600" />
-            <span>{summary?.warningCount ?? 3} Warning</span>
-          </span>
-        </div>
-
-        <div
-          className="stat-chip"
-          style={{ cursor: 'pointer' }}
+        <button
+          className={`nav-section-btn ${statusFilter === 'ANOMALY' ? 'active alert' : ''}`}
           onClick={() => onSetStatusFilter(statusFilter === 'ANOMALY' ? null : 'ANOMALY')}
-          title="Filter by Anomaly"
+          title="Filter anomaly stations"
         >
-          <span className="stat-pill anomaly">
-            <AlertTriangle className="w-3 h-3 text-red-600" />
-            <span>{summary?.anomalyCount ?? 45} Anomaly</span>
-          </span>
+          <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+          <span>Anomalies</span>
+          {summary?.anomalyCount ? (
+            <span className="nav-badge-count anomaly">{summary.anomalyCount}</span>
+          ) : null}
+        </button>
+
+        <button
+          className={`nav-section-btn ${statusFilter === 'WARNING' ? 'active warn' : ''}`}
+          onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
+          title="Filter warning & sensor health status"
+        >
+          <Heart className="w-3.5 h-3.5 text-amber-400" />
+          <span>Sensor Health</span>
+          {summary?.warningCount ? (
+            <span className="nav-badge-count warning">{summary.warningCount}</span>
+          ) : null}
+        </button>
+      </div>
+
+      {/* Live Telemetry KPI Pills */}
+      <div className="nav-capsule live-stats-capsule">
+        <div className="live-pill">
+          <span className="live-dot-pulse" />
+          <span>LIVE</span>
+        </div>
+
+        <div className="stat-pill-item total" onClick={() => onSetStatusFilter(null)}>
+          <span className="stat-label">Stations:</span>
+          <span className="stat-val">{summary?.totalStations ?? 1655}</span>
+        </div>
+
+        <div
+          className={`stat-pill-item normal ${statusFilter === 'NORMAL' ? 'selected' : ''}`}
+          onClick={() => onSetStatusFilter(statusFilter === 'NORMAL' ? null : 'NORMAL')}
+          title="Filter Normal"
+        >
+          <span className="stat-bullet green" />
+          <span>{summary?.normalCount ?? 1607} Normal</span>
+        </div>
+
+        <div
+          className={`stat-pill-item warning ${statusFilter === 'WARNING' ? 'selected' : ''}`}
+          onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
+          title="Filter Warning"
+        >
+          <span className="stat-bullet amber" />
+          <span>{summary?.warningCount ?? 3} Warning</span>
+        </div>
+
+        <div
+          className={`stat-pill-item anomaly ${statusFilter === 'ANOMALY' ? 'selected' : ''}`}
+          onClick={() => onSetStatusFilter(statusFilter === 'ANOMALY' ? null : 'ANOMALY')}
+          title="Filter Anomaly"
+        >
+          <span className="stat-bullet red" />
+          <span>{summary?.anomalyCount ?? 45} Anomaly</span>
         </div>
       </div>
     </header>

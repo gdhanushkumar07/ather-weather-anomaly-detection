@@ -72,10 +72,11 @@ export const App: React.FC = () => {
         onSetStatusFilter={setStatusFilter}
       />
 
-      {/* Weather Layer Controls Side Panel */}
+      {/* Weather Layer Controls Right Panel */}
       <LayerControls
         activeLayers={activeLayers}
         onToggleLayer={handleToggleLayer}
+        isStationPanelOpen={Boolean(selectedStation)}
       />
 
       {/* Main Full-World 2D Interactive Map */}

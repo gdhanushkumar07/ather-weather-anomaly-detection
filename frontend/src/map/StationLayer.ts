@@ -4,6 +4,7 @@ export const STATIONS_SOURCE_ID = 'ather-stations-source';
 export const CLUSTERS_LAYER_ID = 'ather-clusters';
 export const CLUSTER_COUNT_LAYER_ID = 'ather-cluster-count';
 export const ANOMALY_PULSE_LAYER_ID = 'ather-anomaly-pulse';
+export const SELECTED_HALO_LAYER_ID = 'ather-selected-station-halo';
 export const UNCLUSTERED_RING_LAYER_ID = 'ather-unclustered-ring';
 export const UNCLUSTERED_BASE_LAYER_ID = 'ather-unclustered-base';
 export const UNCLUSTERED_CORE_LAYER_ID = 'ather-unclustered-core';
@@ -47,15 +48,15 @@ export function setupStationLayers(
         'circle-radius': [
           'step',
           ['get', 'point_count'],
-          16,
+          15,
           20,
-          21,
+          19,
           100,
-          27
+          25
         ],
         'circle-stroke-width': 2.5,
         'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.94
+        'circle-opacity': 0.95
       }
     });
   }
@@ -70,7 +71,7 @@ export function setupStationLayers(
       layout: {
         'text-field': '{point_count_abbreviated}',
         'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-        'text-size': 11.5,
+        'text-size': 11,
         'text-allow-overlap': true,
         'text-ignore-placement': true
       },
@@ -80,7 +81,7 @@ export function setupStationLayers(
     });
   }
 
-  // 3. Anomaly Pulsing Alert Ring (Unclustered)
+  // 3. Anomaly Pulsing Alert Halo (Unclustered)
   if (!map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
     map.addLayer({
       id: ANOMALY_PULSE_LAYER_ID,
@@ -92,7 +93,7 @@ export function setupStationLayers(
         ['==', ['get', 'hasAnomaly'], 1]
       ],
       paint: {
-        'circle-color': 'rgba(239, 68, 68, 0.22)',
+        'circle-color': 'rgba(239, 68, 68, 0.20)',
         'circle-radius': 14,
         'circle-stroke-width': 1.5,
         'circle-stroke-color': '#ef4444'
@@ -100,7 +101,23 @@ export function setupStationLayers(
     });
   }
 
-  // 4. Professional Weather Station Marker - Outer Status Ring
+  // 4. Selected Station Highlighting Halo
+  if (!map.getLayer(SELECTED_HALO_LAYER_ID)) {
+    map.addLayer({
+      id: SELECTED_HALO_LAYER_ID,
+      type: 'circle',
+      source: STATIONS_SOURCE_ID,
+      filter: ['==', ['get', 'id'], ''], // updated dynamically
+      paint: {
+        'circle-color': 'rgba(2, 132, 199, 0.22)',
+        'circle-radius': 16,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#0284c7'
+      }
+    });
+  }
+
+  // 5. Professional Weather Station Marker - Outer Status Ring
   if (!map.getLayer(UNCLUSTERED_RING_LAYER_ID)) {
     map.addLayer({
       id: UNCLUSTERED_RING_LAYER_ID,
@@ -132,7 +149,7 @@ export function setupStationLayers(
     });
   }
 
-  // 5. Professional Weather Station Marker - Inner White Mast Base
+  // 6. Professional Weather Station Marker - Inner White Base
   if (!map.getLayer(UNCLUSTERED_BASE_LAYER_ID)) {
     map.addLayer({
       id: UNCLUSTERED_BASE_LAYER_ID,
@@ -147,7 +164,7 @@ export function setupStationLayers(
     });
   }
 
-  // 6. Professional Weather Station Marker - Center Sensor Core
+  // 7. Professional Weather Station Marker - Center Sensor Core
   if (!map.getLayer(UNCLUSTERED_CORE_LAYER_ID)) {
     map.addLayer({
       id: UNCLUSTERED_CORE_LAYER_ID,
@@ -211,12 +228,23 @@ export function setupStationLayers(
   }
 }
 
+export function updateSelectedStationHalo(map: maplibregl.Map, selectedStationId: string | null) {
+  if (map.getLayer(SELECTED_HALO_LAYER_ID)) {
+    if (selectedStationId) {
+      map.setFilter(SELECTED_HALO_LAYER_ID, ['==', ['get', 'id'], selectedStationId]);
+    } else {
+      map.setFilter(SELECTED_HALO_LAYER_ID, ['==', ['get', 'id'], '']);
+    }
+  }
+}
+
 export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean) {
   const vis = visible ? 'visible' : 'none';
   [
     CLUSTERS_LAYER_ID,
     CLUSTER_COUNT_LAYER_ID,
     ANOMALY_PULSE_LAYER_ID,
+    SELECTED_HALO_LAYER_ID,
     UNCLUSTERED_RING_LAYER_ID,
     UNCLUSTERED_BASE_LAYER_ID,
     UNCLUSTERED_CORE_LAYER_ID

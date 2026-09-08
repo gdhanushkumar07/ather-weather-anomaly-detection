@@ -1,9 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { Plus, Minus, Globe } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility } from './StationLayer';
+import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo } from './StationLayer';
 import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
@@ -31,7 +32,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
 
-  // 1. Initialize MapLibre with High-Quality Esri Light Canvas Base & Reference (Zero API-Key Watermarks)
+  // 1. Initialize MapLibre with Clean Esri World Light Canvas (Zero API-Key Watermarks)
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
@@ -80,7 +81,6 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
     });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     map.on('load', () => {
@@ -109,7 +109,14 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     setStationLayersVisibility(map, activeLayers.stations);
   }, [activeLayers.stations, isMapReady]);
 
-  // 4. Vane Temperature WebGL Layer Toggle
+  // 4. Update Selected Station Halo
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    updateSelectedStationHalo(map, selectedStationId);
+  }, [selectedStationId, isMapReady]);
+
+  // 5. Vane Temperature WebGL Layer Toggle
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
@@ -141,7 +148,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [activeLayers.temperature, isMapReady]);
 
-  // 5. Vane Wind WebGL Particle Layer Toggle
+  // 6. Vane Wind WebGL Particle Layer Toggle
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
@@ -172,7 +179,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [activeLayers.wind, isMapReady]);
 
-  // 6. Fly to selected station
+  // 7. Fly to selected station
   useEffect(() => {
     if (!selectedStationId || !mapRef.current || !stationsGeoJSON) return;
     const feature = stationsGeoJSON.features.find((f) => f.properties?.id === selectedStationId);
@@ -186,6 +193,23 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       });
     }
   }, [selectedStationId, stationsGeoJSON]);
+
+  const handleZoomIn = () => {
+    mapRef.current?.zoomIn({ duration: 300 });
+  };
+
+  const handleZoomOut = () => {
+    mapRef.current?.zoomOut({ duration: 300 });
+  };
+
+  const handleResetWorldView = () => {
+    mapRef.current?.flyTo({
+      center: [15, 20],
+      zoom: 1.9,
+      duration: 1200,
+      essential: true
+    });
+  };
 
   return (
     <div className="map-viewport">
@@ -205,6 +229,19 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           </div>
         </div>
       )}
+
+      {/* Floating Minimal Map Navigation Controls */}
+      <div className="floating-map-controls">
+        <button className="map-control-btn" onClick={handleZoomIn} title="Zoom In">
+          <Plus className="w-4 h-4" />
+        </button>
+        <button className="map-control-btn" onClick={handleZoomOut} title="Zoom Out">
+          <Minus className="w-4 h-4" />
+        </button>
+        <button className="map-control-btn" onClick={handleResetWorldView} title="Reset to Full World View">
+          <Globe className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 };

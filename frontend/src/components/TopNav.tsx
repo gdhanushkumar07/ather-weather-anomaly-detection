@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, ShieldCheck, Radio } from 'lucide-react';
+import { Search, Activity, AlertTriangle, Radio } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 
@@ -35,11 +35,10 @@ export const TopNav: React.FC<TopNavProps> = ({
       } catch (err) {
         console.error(err);
       }
-    }, 200);
+    }, 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Click outside to close dropdown
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -52,16 +51,16 @@ export const TopNav: React.FC<TopNavProps> = ({
 
   return (
     <header className="ather-navbar">
-      {/* Brand */}
+      {/* Brand Identity */}
       <div className="brand-section">
         <div className="brand-logo">
-          <Radio className="w-5 h-5" style={{ color: '#0284c7' }} />
+          <Radio className="brand-logo-icon" />
           <span>ATHER</span>
         </div>
         <span className="brand-badge">Station Intelligence</span>
       </div>
 
-      {/* Search Bar */}
+      {/* Center Search Input */}
       <div className="search-container" ref={dropdownRef}>
         <Search className="search-icon w-4 h-4" />
         <input
@@ -87,19 +86,19 @@ export const TopNav: React.FC<TopNavProps> = ({
               >
                 <div>
                   <div style={{ fontWeight: 600, color: '#0f172a' }}>{stn.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: 1 }}>
                     {stn.id} · {stn.town}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span
                     className={`stat-pill ${stn.status.toLowerCase()}`}
-                    style={{ fontSize: '0.7rem' }}
+                    style={{ fontSize: '0.68rem', padding: '2px 6px' }}
                   >
                     {stn.status}
                   </span>
                   {stn.temperature !== null && stn.temperature !== undefined && (
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', marginTop: 2 }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.74rem', fontWeight: 600, marginTop: 2 }}>
                       {stn.temperature} °C
                     </div>
                   )}
@@ -110,27 +109,29 @@ export const TopNav: React.FC<TopNavProps> = ({
         )}
       </div>
 
-      {/* Anomaly & Status Metrics */}
+      {/* Live Status KPIs */}
       <div className="nav-stats">
         <div
           className="stat-chip"
           style={{ cursor: 'pointer' }}
           onClick={() => onSetStatusFilter(null)}
-          title="Click to reset filter"
+          title="Click to show all stations"
         >
-          <Activity className="w-4 h-4 text-slate-400" />
-          <span>Stations:</span>
-          <strong>{summary?.totalStations || '1,655'}</strong>
+          <span className="stat-pill all">
+            <Activity className="w-3.5 h-3.5 text-slate-500" />
+            <span>Stations: {summary?.totalStations ?? 1655}</span>
+          </span>
         </div>
 
         <div
           className="stat-chip"
           style={{ cursor: 'pointer' }}
           onClick={() => onSetStatusFilter(statusFilter === 'NORMAL' ? null : 'NORMAL')}
+          title="Filter by Normal"
         >
-          <ShieldCheck className="w-4 h-4" style={{ color: '#10b981' }} />
           <span className="stat-pill normal">
-            {summary?.normalCount ?? 1607} Normal
+            <span className="stat-dot-small" />
+            <span>{summary?.normalCount ?? 1607} Normal</span>
           </span>
         </div>
 
@@ -138,10 +139,11 @@ export const TopNav: React.FC<TopNavProps> = ({
           className="stat-chip"
           style={{ cursor: 'pointer' }}
           onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
+          title="Filter by Warning"
         >
-          <AlertTriangle className="w-4 h-4" style={{ color: '#f59e0b' }} />
           <span className="stat-pill warning">
-            {summary?.warningCount ?? 3} Warning
+            <AlertTriangle className="w-3 h-3 text-amber-600" />
+            <span>{summary?.warningCount ?? 3} Warning</span>
           </span>
         </div>
 
@@ -149,10 +151,11 @@ export const TopNav: React.FC<TopNavProps> = ({
           className="stat-chip"
           style={{ cursor: 'pointer' }}
           onClick={() => onSetStatusFilter(statusFilter === 'ANOMALY' ? null : 'ANOMALY')}
+          title="Filter by Anomaly"
         >
-          <AlertTriangle className="w-4 h-4" style={{ color: '#ef4444' }} />
           <span className="stat-pill anomaly">
-            {summary?.anomalyCount ?? 45} Anomaly
+            <AlertTriangle className="w-3 h-3 text-red-600" />
+            <span>{summary?.anomalyCount ?? 45} Anomaly</span>
           </span>
         </div>
       </div>

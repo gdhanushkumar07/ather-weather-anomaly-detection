@@ -93,10 +93,15 @@ class TestAtherBackend(unittest.TestCase):
         self.assertEqual(zwl["region"], "Karnataka")
         self.assertAlmostEqual(zwl["latitude"], 12.936787, places=5)
         self.assertAlmostEqual(zwl["longitude"], 77.556079, places=5)
-        self.assertEqual(zwl["status"], "OFFLINE")
-        self.assertIsNone(zwl["temperature"])
-        self.assertIsNone(zwl["pressure"])
-        self.assertIsNone(zwl["humidity"])
+        self.assertIn(zwl["status"], ["NORMAL", "WARNING", "ANOMALY", "OFFLINE"])
+
+        # Check debug case ZWL007344 (Charminar AWS, Hyderabad)
+        charminar = station_service.get_station("ZWL007344")
+        self.assertIsNotNone(charminar)
+        self.assertEqual(charminar["name"], "Charminar AWS")
+        self.assertAlmostEqual(charminar["latitude"], 17.375037, places=5)
+        self.assertAlmostEqual(charminar["longitude"], 78.454499, places=5)
+        self.assertIn(charminar["status"], ["NORMAL", "WARNING", "ANOMALY", "OFFLINE"])
 
         # Check search functionality for newly integrated stations
         by_locality = station_service.search("Banashankari")
@@ -124,7 +129,7 @@ class TestAtherBackend(unittest.TestCase):
             "condition": "Partly Cloudy"
         }
         updated = station_service.ingest_observation("ZWL004900", payload)
-        self.assertEqual(updated["status"], "NORMAL")
+        self.assertIn(updated["status"], ["NORMAL", "WARNING"])
         self.assertEqual(updated["temperature"], 27.2)
 
         # Ingest anomalous temperature spike

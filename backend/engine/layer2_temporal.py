@@ -107,7 +107,8 @@ class TemporalPatternLayer:
                     )
                     detail["press_spike"] = {
                         "current": reading.pressure_hpa, "previous": prev.pressure_hpa,
-                        "delta_hpa": round(d_press, 2), "score": round(score, 3)
+                        "delta_hpa": round(d_press, 2), "interval_s": int(dt_seconds),
+                        "score": round(score, 3)
                     }
 
             # Humidity spike

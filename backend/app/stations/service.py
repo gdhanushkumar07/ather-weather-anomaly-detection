@@ -82,6 +82,7 @@ class StationService:
         skipped_invalid = 0
         duplicate_count = 0
 
+        valid_rows = []
         with open(CSV_PATH, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -95,9 +96,6 @@ class StationService:
                 if not locality_id:
                     skipped_invalid += 1
                     continue
-
-                city_name = row.get("cityName", "").strip()
-                locality_name = row.get("localityName", "").strip()
 
                 try:
                     lat = float(row.get("latitude", 0))
@@ -116,35 +114,58 @@ class StationService:
                     duplicate_count += 1
                     continue
 
-                region = city_region_map.get(city_name, city_name)
-                station_name = f"{locality_name} AWS" if locality_name else f"WeatherUnion AWS {locality_id}"
-                town_str = f"{locality_name}, {city_name}, {region}, India" if locality_name else f"{city_name}, {region}, India"
+                valid_rows.append((row, locality_id, lat, lon))
 
-                # Phase 4 & Phase 10: Canonical ATHER station schema
-                stn_dict = {
-                    "id": locality_id,
-                    "name": station_name,
-                    "town": town_str,
-                    "latitude": lat,
-                    "longitude": lon,
-                    "country": "India",
-                    "region": region,
-                    "temperature": None,
-                    "pressure": None,
-                    "humidity": None,
-                    "windSpeed": None,
-                    "windDirection": None,
-                    "condition": "Offline",
-                    "timestamp": "No Data",
-                    "status": "OFFLINE",
-                    "anomaly": None,
-                    "device_type": "Automated weather system",
-                    "localityId": locality_id
-                }
+        # Batch-fetch live weather from Open-Meteo for all valid Indian AWS stations
+        coords = [(item[2], item[3]) for item in valid_rows]
+        weather_list = []
+        try:
+            from ..weather.open_meteo import open_meteo_service
+            weather_list = open_meteo_service.get_batch_weather(coords, chunk_size=50)
+        except Exception as e:
+            print(f"Warning: Could not batch-fetch Open-Meteo weather: {e}")
+            weather_list = [None] * len(valid_rows)
 
-                self._stations[locality_id] = stn_dict
-                new_readings.append(station_dict_to_reading(stn_dict))
-                added_count += 1
+        for i, (row, locality_id, lat, lon) in enumerate(valid_rows):
+            city_name = row.get("cityName", "").strip()
+            locality_name = row.get("localityName", "").strip()
+            region = city_region_map.get(city_name, city_name)
+            station_name = f"{locality_name} AWS" if locality_name else f"WeatherUnion AWS {locality_id}"
+            town_str = f"{locality_name}, {city_name}, {region}, India" if locality_name else f"{city_name}, {region}, India"
+
+            w = weather_list[i] if i < len(weather_list) else None
+
+            # Canonical ATHER station schema
+            stn_dict = {
+                "id": locality_id,
+                "name": station_name,
+                "town": town_str,
+                "latitude": lat,
+                "longitude": lon,
+                "country": "India",
+                "region": region,
+                "temperature": w.get("temperature") if w else None,
+                "pressure": w.get("pressure") if w else None,
+                "humidity": w.get("humidity") if w else None,
+                "windSpeed": w.get("windSpeed") if w else None,
+                "windDirection": w.get("windDirection") if w else None,
+                "condition": w.get("condition", "Offline") if w else "Offline",
+                "timestamp": w.get("timestamp", "No Data") if w else "No Data",
+                "status": "OFFLINE",
+                "anomaly": None,
+                "device_type": "Automated weather system",
+                "localityId": locality_id
+            }
+
+            # Evaluate with 5-Layer Anomaly Detection Engine
+            if w and w.get("temperature") is not None:
+                status, anomaly = detector.evaluate_station(stn_dict)
+                stn_dict["status"] = status
+                stn_dict["anomaly"] = anomaly
+
+            self._stations[locality_id] = stn_dict
+            new_readings.append(station_dict_to_reading(stn_dict))
+            added_count += 1
 
         if new_readings:
             detector.update_spatial_pool(new_readings)
@@ -225,14 +246,35 @@ class StationService:
 
     def get_station(self, station_id: str) -> Optional[Dict[str, Any]]:
         stn = self._stations.get(station_id)
-        if stn:
-            return stn
-        # Fallback check by localityId or without ATHER prefix
-        clean_id = station_id.replace("ATHER-IND-", "").replace("ATHER-", "")
-        for s in self._stations.values():
-            if s.get("localityId") == station_id or s.get("id") == clean_id or s.get("localityId") == clean_id:
-                return s
-        return None
+        if not stn:
+            # Fallback check by localityId or without ATHER prefix
+            clean_id = station_id.replace("ATHER-IND-", "").replace("ATHER-", "")
+            for s in self._stations.values():
+                if s.get("localityId") == station_id or s.get("id") == clean_id or s.get("localityId") == clean_id:
+                    stn = s
+                    break
+
+        # On-demand live weather fetch if station lacks observations
+        if stn and stn.get("temperature") is None and stn.get("latitude") and stn.get("longitude"):
+            try:
+                from ..weather.open_meteo import open_meteo_service
+                w = open_meteo_service.get_current_weather(stn["latitude"], stn["longitude"])
+                if w and w.get("temperature") is not None:
+                    stn["temperature"] = w.get("temperature")
+                    stn["humidity"] = w.get("humidity")
+                    stn["pressure"] = w.get("pressure")
+                    stn["windSpeed"] = w.get("windSpeed")
+                    stn["windDirection"] = w.get("windDirection")
+                    stn["condition"] = w.get("condition", "Reported")
+                    stn["timestamp"] = w.get("timestamp", "Recent")
+                    status, anomaly = detector.evaluate_station(stn)
+                    stn["status"] = status
+                    stn["anomaly"] = anomaly
+                    detector.update_spatial_pool([station_dict_to_reading(stn)])
+            except Exception as e:
+                print(f"On-demand weather fetch for {station_id}: {e}")
+
+        return stn
 
     def get_station_anomaly(self, station_id: str) -> Optional[Dict[str, Any]]:
         """

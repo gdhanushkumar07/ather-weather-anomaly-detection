@@ -420,8 +420,10 @@ class AnomalyDetector:
 
         if "press_spike" in temporal_detail:
             ps = temporal_detail["press_spike"]
+            interval_s = ps.get("interval_s", 0)
+            delta_hpa = ps.get("delta_hpa", 0.0)
             evidence.append(
-                f"Barometric pressure surge: {ps['delta_hpa']:+.1f} hPa in {ps['interval_s']}s"
+                f"Barometric pressure surge: {delta_hpa:+.1f} hPa in {interval_s}s"
             )
             summary_parts.append("Barometric gradient shift")
 

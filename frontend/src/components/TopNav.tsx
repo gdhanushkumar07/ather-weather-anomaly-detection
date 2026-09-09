@@ -70,7 +70,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         <input
           type="text"
           className="search-input"
-          placeholder="Search station or city (e.g. Hyderabad)..."
+          placeholder="Search station or city..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => results.length > 0 && setIsOpen(true)}

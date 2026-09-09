@@ -93,19 +93,6 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       </div>
 
       <div className="station-panel-body">
-        {/* Status Indicator & Updated Time */}
-        <div className="station-status-strip">
-          <div className={`status-badge-compact ${currentStation.status}`}>
-            <span className="status-dot-pulse" />
-            <span>STATUS: {currentStation.status === 'ANOMALY' ? 'ANOMALY DETECTED' : currentStation.status}</span>
-          </div>
-          <div className="source-update-meta">
-            <span>Source: Open-Meteo</span>
-            <span>·</span>
-            <span>{currentWeather ? (currentWeather.timestamp.split('T')[1] || 'Just now') : currentStation.timestamp}</span>
-          </div>
-        </div>
-
         {/* Anomaly Diagnostic Card */}
         {anomaly && (
           <div className="anomaly-strip-card">
@@ -171,47 +158,47 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           </div>
         )}
 
-        {/* Weather Values - Subtle Grid with Clean Whitespace */}
+        {/* Weather Values - 2x2 Grid with Clean Spacing */}
         <div className="weather-elegant-grid">
-          <div className="weather-grid-cell">
-            <div className="weather-cell-top">
-              <span className="weather-cell-val primary">
-                {displayTemp !== null && displayTemp !== undefined ? `${displayTemp}°` : '--'}
-              </span>
-              <span className="weather-cell-val secondary">
+          <div className="weather-grid-row">
+            <div className="weather-metric-col">
+              <div className="weather-metric-val">
+                {displayTemp !== null && displayTemp !== undefined ? `${displayTemp}°C` : '--'}
+              </div>
+              <div className="weather-metric-lbl">Temperature</div>
+            </div>
+            <div className="weather-metric-col">
+              <div className="weather-metric-val">
                 {displayHumidity !== null && displayHumidity !== undefined ? `${Math.round(displayHumidity)}%` : '--'}
-              </span>
-            </div>
-            <div className="weather-cell-bottom">
-              <span className="weather-cell-lbl">TEMPERATURE</span>
-              <span className="weather-cell-lbl">HUMIDITY</span>
-            </div>
-            <div className="weather-submeta-row">
-              <span>{currentWeather?.apparentTemperature !== undefined ? `Feels: ${currentWeather.apparentTemperature}°C` : 'Observed'}</span>
-              <span>{currentWeather?.precipitation !== undefined ? `Precip: ${currentWeather.precipitation}mm` : 'Moisture'}</span>
+              </div>
+              <div className="weather-metric-lbl">Humidity</div>
             </div>
           </div>
 
-          <div className="weather-grid-cell">
-            <div className="weather-cell-top">
-              <span className="weather-cell-val secondary">
-                {displayPressure !== null && displayPressure !== undefined ? Math.round(displayPressure) : '--'}
-              </span>
-              <span className="weather-cell-val secondary">
-                {displayWindSpeed !== null && displayWindSpeed !== undefined ? `${displayWindSpeed}` : '0.0'}
-              </span>
+          <div className="weather-grid-row">
+            <div className="weather-metric-col">
+              <div className="weather-metric-val">
+                {displayPressure !== null && displayPressure !== undefined ? `${Math.round(displayPressure)} hPa` : '--'}
+              </div>
+              <div className="weather-metric-lbl">Pressure</div>
             </div>
-            <div className="weather-cell-bottom">
-              <span className="weather-cell-lbl">hPa PRESSURE</span>
-              <span className="weather-cell-lbl">km/h WIND</span>
+            <div className="weather-metric-col">
+              <div className="weather-metric-val">
+                {displayWindSpeed !== null && displayWindSpeed !== undefined ? `${displayWindSpeed} km/h` : '0 km/h'}
+              </div>
+              <div className="weather-metric-lbl">Wind</div>
             </div>
-            <div className="weather-submeta-row">
-              <span>{displayCondition ? `Sky: ${displayCondition}` : 'Atmospheric'}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                <Compass className="w-3 h-3 text-slate-400" />
-                {displayWindDir ? displayWindDir : 'Calm'}
-              </span>
-            </div>
+          </div>
+        </div>
+
+        {/* Status Strip */}
+        <div className="station-status-strip">
+          <div className={`status-badge-compact ${currentStation.status}`}>
+            <span className="status-dot-pulse" />
+            <span>● {currentStation.status}</span>
+          </div>
+          <div className="source-update-meta">
+            <span>Source: Open-Meteo</span>
           </div>
         </div>
 

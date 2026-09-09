@@ -11,8 +11,13 @@ import math
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
 from ..anomaly.detector import detector
-from schema import station_dict_to_reading
+from schema import station_dict_to_reading, ObservationSource, Freshness
+
+# Open-Meteo's `current` block updates on an hourly model cadence. 90 minutes
+# gives a conservative buffer above that cadence before calling data STALE.
+_NWP_CADENCE_MINUTES = 90.0
 
 BASE_DIR = Path(__file__).resolve().parents[2] # backend directory
 DATA_PATH = BASE_DIR.parent / "data" / "stations.json"
@@ -32,8 +37,23 @@ class StationService:
                 station_list = json.load(f)
 
         # 1. Store existing stations and populate spatial pool
+        #
+        # PROVENANCE NOTE: this dataset (data/stations.json) was generated once
+        # offline by data/normalize_stations.py from a scraped community mesonet
+        # feed — the values are genuine crowdsourced in-situ readings at the time
+        # of the scrape, but the file is a static snapshot with no live refresh
+        # path, and no verifiable per-station observation time survived that
+        # process. We therefore tag it AWS_IN_SITU (a real sensor network, not a
+        # model) but freshness UNKNOWN — never LIVE — because staleness cannot
+        # be honestly determined. See Phase 1-4 of the provenance audit.
         readings = []
         for s in station_list:
+            has_value = s.get("temperature") is not None or s.get("humidity") is not None or (
+                s.get("pressure") is not None and s.get("pressure") not in (0, 0.0)
+            )
+            s["dataSource"] = ObservationSource.AWS_IN_SITU if has_value else ObservationSource.MISSING
+            s.setdefault("observationTimestamp", None)  # not verifiable for this static snapshot
+            s["freshness"] = Freshness.MISSING if not has_value else Freshness.UNKNOWN
             self._stations[s["id"]] = s
             readings.append(station_dict_to_reading(s))
 
@@ -135,7 +155,15 @@ class StationService:
 
             w = weather_list[i] if i < len(weather_list) else None
 
-            # Canonical ATHER station schema
+            # PROVENANCE NOTE: WeatherUnionInfra.csv carries only locality metadata
+            # (name/coordinates) — it has NO telemetry columns, and no real
+            # WeatherUnion live-telemetry API is integrated. Every numeric value
+            # for these stations comes from Open-Meteo, a NWP model — it must
+            # NEVER be labeled as measured AWS telemetry. Per Phase 3 of the
+            # provenance audit, these stations are REGISTERED + LOCATED but
+            # TELEMETRY UNAVAILABLE from a physical AWS sensor; the reference
+            # value is shown for context only, clearly tagged NWP_MODEL_REFERENCE.
+            has_ref_value = bool(w and w.get("temperature") is not None)
             stn_dict = {
                 "id": locality_id,
                 "name": station_name,
@@ -154,7 +182,11 @@ class StationService:
                 "status": "OFFLINE",
                 "anomaly": None,
                 "device_type": "Automated weather system",
-                "localityId": locality_id
+                "localityId": locality_id,
+                "dataSource": ObservationSource.NWP_MODEL_REFERENCE if has_ref_value else ObservationSource.MISSING,
+                "observationTimestamp": w.get("timestamp") if w else None,
+                "sourceCadenceMinutes": _NWP_CADENCE_MINUTES,
+                "awsTelemetryStatus": "TELEMETRY_UNAVAILABLE",
             }
 
             # Evaluate with 5-Layer Anomaly Detection Engine
@@ -267,6 +299,12 @@ class StationService:
                     stn["windDirection"] = w.get("windDirection")
                     stn["condition"] = w.get("condition", "Reported")
                     stn["timestamp"] = w.get("timestamp", "Recent")
+                    # This is an on-demand Open-Meteo fetch — a NWP model
+                    # reference, not measured AWS telemetry. Tag it honestly.
+                    stn["dataSource"] = ObservationSource.NWP_MODEL_REFERENCE
+                    stn["observationTimestamp"] = w.get("timestamp")
+                    stn["sourceCadenceMinutes"] = _NWP_CADENCE_MINUTES
+                    stn["awsTelemetryStatus"] = "TELEMETRY_UNAVAILABLE"
                     status, anomaly = detector.evaluate_station(stn)
                     stn["status"] = status
                     stn["anomaly"] = anomaly
@@ -314,6 +352,16 @@ class StationService:
         res["observation"]["wind_speed"] = stn.get("windSpeed")
         res["observation"]["wind_direction"] = stn.get("windDirection")
         res["observation"]["condition"] = stn.get("condition")
+
+        # Provenance passthrough (Phase 1-4, 20, 27): the canonical observation
+        # must reflect the REAL source/freshness computed at ingestion time,
+        # never an assumed "AWS Station Data" label.
+        reading_dict = station_dict_to_reading(stn).to_dict()
+        res["observation"]["source"] = reading_dict["source"]
+        res["observation"]["freshness"] = reading_dict["freshness"]
+        res["observation"]["observation_timestamp"] = reading_dict["observation_timestamp"]
+        res["observation"]["received_timestamp"] = reading_dict["received_timestamp"]
+        res["aws_telemetry_status"] = stn.get("awsTelemetryStatus", "TELEMETRY_AVAILABLE")
 
         is_offline = stn.get("status") == "OFFLINE"
 
@@ -489,6 +537,15 @@ class StationService:
                 stn[k] = payload[k]
 
         stn["timestamp"] = "Just now"
+        # Pushed telemetry from a real station driver (WeeWX/WOW-BE/native) is
+        # the one genuinely measured AWS pathway in this system. The receipt
+        # time is used as the observation time since ingest adapters do not
+        # currently surface the device's own clock.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        stn["dataSource"] = ObservationSource.AWS_IN_SITU
+        stn["observationTimestamp"] = now_iso
+        stn["sourceCadenceMinutes"] = 15.0
+        stn["awsTelemetryStatus"] = "TELEMETRY_AVAILABLE"
 
         # Re-evaluate with anomaly detector
         status, anomaly = detector.evaluate_station(stn)

@@ -133,7 +133,7 @@ class OpenMeteoService:
                 "weatherCode": weather_code,
                 "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
                 "timestamp": current.get("time"),
-                "source": "Open-Meteo"
+                "source": "NWP_MODEL_REFERENCE"
             }
 
             # Store in cache
@@ -235,7 +235,7 @@ class OpenMeteoService:
                                     "weatherCode": weather_code,
                                     "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
                                     "timestamp": current.get("time"),
-                                    "source": "AWS Live Feed (Open-Meteo In-Situ)"
+                                    "source": "NWP_MODEL_REFERENCE"
                                 }
 
                                 cache_key = f"{round(orig_lat, 3)}_{round(orig_lon, 3)}"

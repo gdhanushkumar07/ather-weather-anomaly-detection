@@ -130,6 +130,18 @@ class AnomalyDetector:
         score_l5, health_score, days_to_failure, reason_l5, detail_l5 = self.layer5.evaluate(
             reading, recent_is_anomaly=recent_is_anomaly
         )
+        # Default to True (assume physical) unless the source is AFFIRMATIVELY
+        # known to be a model reference — an UNKNOWN/untagged source (legacy
+        # callers, tests) must not be treated as non-physical by default.
+        is_physical_sensor = reading.source != "NWP_MODEL_REFERENCE"
+        if not is_physical_sensor:
+            # "Days to hardware-tolerance-breach" is meaningless for a value
+            # that was never measured by a physical sensor (Phase 27 guard).
+            days_to_failure = None
+            detail_l5["note_non_physical_source"] = (
+                "Sensor Health/Drift metrics are not applicable: this observation "
+                "is a NWP model reference, not a physical AWS sensor reading."
+            )
 
         # Assemble layer scores
         layer_scores = {
@@ -200,6 +212,7 @@ class AnomalyDetector:
             layer_details=layer_details,
             valid_channel_count=reading.valid_channel_count
         )
+        diagnosis_res = self._contextualize_diagnosis_for_source(diagnosis_res, reading.source)
 
         # ── 8. Explainability (v2: confidence-gated language) ──
         explanation = self.explainer.generate_explanation(
@@ -264,7 +277,8 @@ class AnomalyDetector:
             reason_l3=reason_l3,
             reason_l4=reason_l4,
             reason_l5=reason_l5,
-            health_score=health_score
+            health_score=health_score,
+            is_physical_sensor=is_physical_sensor,
         )
 
         # Build Canonical §16 Analysis Object
@@ -276,12 +290,17 @@ class AnomalyDetector:
                 "longitude": reading.lon,
             },
             "observation": {
-                "timestamp": reading.timestamp.isoformat(),
+                "timestamp": (reading.observation_timestamp or reading.received_timestamp).isoformat(),
                 "temperature": reading.temperature_c,
                 "pressure": reading.pressure_hpa,
                 "relative_humidity": reading.humidity_pct,
                 "wind_speed": reading.wind_speed_kmh,
-                "source": "AWS Station Data"
+                # Never hardcode "AWS Station Data" — reflect the verified
+                # provenance computed at ingestion (Phase 1-4, 20, 27).
+                "source": reading.source,
+                "freshness": reading.freshness,
+                "observation_timestamp": reading.observation_timestamp.isoformat() if reading.observation_timestamp else None,
+                "received_timestamp": reading.received_timestamp.isoformat() if reading.received_timestamp else None,
             },
             "overall": {
                 "status": status,
@@ -360,6 +379,55 @@ class AnomalyDetector:
     # ─────────────────────────────────────────────────────────────────
     # Private Helpers for §14, §15, §16, §21
     # ─────────────────────────────────────────────────────────────────
+
+    # Fault categories that assert a physical sensor hardware fault. These are
+    # meaningless (and dishonest) when the observation did not come from a
+    # physical AWS sensor in the first place.
+    _HARDWARE_ONLY_FAULTS = {
+        FaultType.FROZEN_SENSOR,
+        FaultType.SENSOR_SPIKE,
+        FaultType.CALIBRATION_DRIFT,
+        FaultType.SINGLE_CHANNEL_FAULT,
+    }
+
+    def _contextualize_diagnosis_for_source(
+        self, diagnosis_res: DiagnosisResult, source: str
+    ) -> DiagnosisResult:
+        """
+        Phase 14/27 guard: ATHER must never claim a physical sensor hardware
+        fault (FROZEN_SENSOR, SENSOR_SPIKE, CALIBRATION_DRIFT, etc.) against a
+        reading that did not come from a physical AWS sensor. When the source
+        is a NWP model reference (or otherwise not AWS_IN_SITU), any
+        hardware-fault diagnosis is remapped to MODEL_REFERENCE_INCONSISTENCY
+        with corrected evidence and operator guidance.
+        """
+        # Only remap when the source is AFFIRMATIVELY known to be non-physical
+        # (e.g. NWP_MODEL_REFERENCE). An UNKNOWN source (legacy callers,
+        # directly-constructed AWSReading in tests) is NOT assumed to be a
+        # model reference — that would suppress legitimate hardware-fault
+        # diagnoses whenever provenance simply wasn't tagged.
+        if source != "NWP_MODEL_REFERENCE" or diagnosis_res.fault_type not in self._HARDWARE_ONLY_FAULTS:
+            return diagnosis_res
+
+        note = (
+            "This station has no connected AWS in-situ sensor feed — the analyzed "
+            "value is a NWP model reference (Open-Meteo), not a physical hardware "
+            "measurement. The pattern below describes model-output behavior, not "
+            "sensor health."
+        )
+        return DiagnosisResult(
+            fault_type=FaultType.MODEL_REFERENCE_INCONSISTENCY,
+            confidence=diagnosis_res.confidence,
+            primary_signal=note,
+            evidence=[note] + diagnosis_res.evidence,
+            alternatives=diagnosis_res.alternatives + [
+                "Model grid-cell artifact or forecast update discontinuity"
+            ],
+            operator_action=(
+                "No physical sensor to inspect. If AWS in-situ telemetry becomes "
+                "available for this station, re-run diagnostics against the real feed."
+            ),
+        )
 
     def _generate_weather_analysis(
         self,
@@ -595,7 +663,8 @@ class AnomalyDetector:
         reason_l3: Optional[str],
         reason_l4: Optional[str],
         reason_l5: Optional[str],
-        health_score: float
+        health_score: float,
+        is_physical_sensor: bool = True,
     ) -> Dict[str, Any]:
         """
         Formats the 5 layer diagnostic cards according to §21:
@@ -684,23 +753,30 @@ class AnomalyDetector:
             l4_reason = f"Consistent with {n_cnt} regional stations"
 
         # 5. Sensor Health / Drift
-        s_cnt = d5.get("samples_tracked", 0)
-        if s_cnt < 5:
-            l5_status = "INSUFFICIENT_DATA"
+        # This layer diagnoses PHYSICAL sensor hardware reliability. It is not
+        # applicable to a NWP model reference — there is no hardware to assess.
+        if not is_physical_sensor:
+            l5_status = "NOT_APPLICABLE"
             l5_conf = "INSUFFICIENT_DATA"
-            l5_reason = f"Drift monitoring initializing ({s_cnt} samples tracked)"
-        elif layer_scores["drift"] >= 0.70:
-            l5_status = "ANOMALY"
-            l5_conf = "HIGH" if s_cnt >= 20 else "MEDIUM"
-            l5_reason = reason_l5 or "Progressive sensor calibration drift detected"
-        elif layer_scores["drift"] >= 0.40:
-            l5_status = "WARNING"
-            l5_conf = "MEDIUM"
-            l5_reason = reason_l5 or "Minor cumulative calibration bias accumulating"
+            l5_reason = "Not applicable: this station has no connected AWS in-situ sensor; value is a NWP model reference."
         else:
-            l5_status = "PASS"
-            l5_conf = "HIGH"
-            l5_reason = f"Sensor health index nominal ({health_score:.0f}%)"
+            s_cnt = d5.get("samples_tracked", 0)
+            if s_cnt < 5:
+                l5_status = "INSUFFICIENT_DATA"
+                l5_conf = "INSUFFICIENT_DATA"
+                l5_reason = f"Drift monitoring initializing ({s_cnt} samples tracked)"
+            elif layer_scores["drift"] >= 0.70:
+                l5_status = "ANOMALY"
+                l5_conf = "HIGH" if s_cnt >= 20 else "MEDIUM"
+                l5_reason = reason_l5 or "Progressive sensor calibration drift detected"
+            elif layer_scores["drift"] >= 0.40:
+                l5_status = "WARNING"
+                l5_conf = "MEDIUM"
+                l5_reason = reason_l5 or "Minor cumulative calibration bias accumulating"
+            else:
+                l5_status = "PASS"
+                l5_conf = "HIGH"
+                l5_reason = f"Sensor health index nominal ({health_score:.0f}%)"
 
         return {
             "physics": {

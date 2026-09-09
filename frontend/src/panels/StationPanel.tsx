@@ -101,6 +101,34 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
   const canonicalWeather = canonical?.weather_analysis;
   const canonicalInsights = canonical?.insights || [];
 
+  // Verified data provenance (Phase 1-4, 20, 27): never assume AWS in-situ.
+  // 'AWS_IN_SITU' | 'NWP_MODEL_REFERENCE' | 'MISSING' | 'UNKNOWN'
+  const obsSource: string = canonicalObs?.source || 'UNKNOWN';
+  const obsFreshness: string = canonicalObs?.freshness || 'UNKNOWN';
+  const isAwsInSitu = obsSource === 'AWS_IN_SITU';
+  const isNwpReference = obsSource === 'NWP_MODEL_REFERENCE';
+  const awsTelemetryStatus: string = canonical?.aws_telemetry_status || (isAwsInSitu ? 'TELEMETRY_AVAILABLE' : 'TELEMETRY_UNAVAILABLE');
+
+  const provenanceLabel = isAwsInSitu
+    ? 'AWS IN-SITU TELEMETRY'
+    : isNwpReference
+      ? 'NWP MODEL REFERENCE — NOT MEASURED'
+      : obsSource === 'MISSING'
+        ? 'NO TELEMETRY AVAILABLE'
+        : 'PROVENANCE UNVERIFIED';
+  const provenanceDotClass = isAwsInSitu ? '' : isNwpReference ? 'nwp' : 'unknown';
+
+  const observationSourcePillLabel = isAwsInSitu
+    ? 'AWS Station Data'
+    : isNwpReference
+      ? 'NWP Model Reference'
+      : obsSource === 'MISSING'
+        ? 'No Data'
+        : 'Unverified Source';
+  const observationSourcePillClass = isAwsInSitu ? 'in-situ' : isNwpReference ? 'nwp-reference' : 'unavailable';
+
+  const freshnessPillClass = obsFreshness === 'LIVE' ? 'live' : obsFreshness === 'STALE' ? 'stale' : obsFreshness === 'MISSING' ? 'missing' : 'unknown';
+
   // Ground truth observed in-situ AWS station values
   const obsTemp = canonicalObs?.temperature !== undefined ? canonicalObs.temperature : currentStation.temperature;
   const obsPress = canonicalObs?.pressure !== undefined ? canonicalObs.pressure : currentStation.pressure;
@@ -184,9 +212,9 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       <div className="station-panel-header">
         <div className="header-meta">
           <div className="station-badge-row">
-            <span className="station-panel-tag">
-              <span className="source-live-indicator" />
-              AWS IN-SITU TELEMETRY
+            <span className="station-panel-tag" title={isNwpReference ? 'This value is a NWP model reference, not a measured AWS sensor reading.' : undefined}>
+              <span className={`source-live-indicator ${provenanceDotClass}`} />
+              {provenanceLabel}
             </span>
             <span className="station-coords">
               {currentStation.latitude.toFixed(3)}°, {currentStation.longitude.toFixed(3)}°
@@ -207,10 +235,14 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           <div className="station-timestamp-row">
             <Clock className="w-3 h-3 text-slate-400" />
             <span>
-              Observed:{' '}
-              {canonicalObs?.timestamp
-                ? new Date(canonicalObs.timestamp).toUTCString()
-                : currentStation.timestamp || 'Recent'}
+              {canonicalObs?.observation_timestamp
+                ? <>Observed: {new Date(canonicalObs.observation_timestamp).toUTCString()}</>
+                : canonicalObs?.received_timestamp
+                  ? <>Last checked: {new Date(canonicalObs.received_timestamp).toUTCString()} <span className="label-sub-alert">(observation time unverified)</span></>
+                  : <>Observed: {currentStation.timestamp || 'Recent'}</>}
+            </span>
+            <span className={`freshness-pill ${freshnessPillClass}`} title="Freshness is derived from the real observation timestamp, never from request time.">
+              {obsFreshness}
             </span>
           </div>
         </div>
@@ -254,10 +286,13 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           <div className="card-header-flex">
             <div className="card-title-group">
               <Database className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="card-section-title">CURRENT IN-SITU OBSERVATIONS</span>
+              <span className="card-section-title">{isAwsInSitu ? 'CURRENT IN-SITU OBSERVATIONS' : 'CURRENT OBSERVATIONS'}</span>
             </div>
-            <span className="source-tag-pill in-situ" title="Ground truth physical sensor reading">
-              AWS Station Data
+            <span
+              className={`source-tag-pill ${observationSourcePillClass}`}
+              title={isAwsInSitu ? 'Ground truth physical sensor reading' : isNwpReference ? 'Numerical weather model output — not a measured sensor reading' : 'Provenance could not be verified'}
+            >
+              {observationSourcePillLabel}
             </span>
           </div>
 
@@ -310,6 +345,22 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           </div>
 
           {/* Model Forecast Comparison Drawer (Delineates Open-Meteo NWP from Station Data) */}
+          {isNwpReference ? (
+            // The primary reading above IS the Open-Meteo NWP output for this
+            // station (no AWS sensor is connected) — fetching Open-Meteo again
+            // here would just compare the same source to itself, which is
+            // meaningless and would falsely look like independent validation.
+            <div className="model-comparison-container">
+              <div className="nwp-self-source-disclosure">
+                <CloudSun className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  No AWS in-situ sensor feed is connected for this station. The reading above
+                  is itself the Open-Meteo NWP model reference — it is not an independent
+                  comparison and should not be read as validated sensor telemetry.
+                </span>
+              </div>
+            </div>
+          ) : (
           <div className="model-comparison-container">
             <button
               className="btn-toggle-comparison"
@@ -365,6 +416,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* 4. "Why?" / Analytical Summary (§19.4) */}

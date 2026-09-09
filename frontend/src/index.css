@@ -1344,6 +1344,17 @@ body {
   margin-right: 5px;
 }
 
+/* Provenance dot variants — a NWP/unknown source must never look like the
+   green "live AWS sensor" indicator (Phase 20). */
+.source-live-indicator.nwp {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.8);
+}
+.source-live-indicator.unknown {
+  background: #64748b;
+  box-shadow: none;
+}
+
 .station-name-bold {
   font-weight: 600;
   color: #f1f5f9;
@@ -1533,6 +1544,46 @@ body {
   background: rgba(0, 229, 255, 0.12);
   color: var(--brand-cyan);
   border: 1px solid rgba(0, 229, 255, 0.25);
+}
+
+/* NWP model reference must read as visually distinct from a measured AWS
+   sensor pill — never equivalent (Phase 20, 27). */
+.source-tag-pill.nwp-reference {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.source-tag-pill.unavailable {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.freshness-pill {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  margin-left: 4px;
+}
+.freshness-pill.live { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+.freshness-pill.stale { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+.freshness-pill.missing { background: rgba(239, 68, 68, 0.18); color: #f87171; }
+.freshness-pill.unknown { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+.nwp-self-source-disclosure {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: #cbd5e1;
 }
 
 .missing-value-pill {
@@ -1761,6 +1812,7 @@ body {
 .layer-status-pill.VETO { background: rgba(239, 68, 68, 0.25); color: #fca5a5; }
 .layer-status-pill.INSUFFICIENT_DATA,
 .layer-status-pill.LIMITED { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+.layer-status-pill.NOT_APPLICABLE { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 
 .layer-score-pill {
   font-family: var(--font-mono);

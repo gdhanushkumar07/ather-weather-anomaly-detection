@@ -15,13 +15,19 @@ class TestAtherBackend(unittest.TestCase):
         stns = station_service.get_all_stations()
         self.assertGreater(len(stns), 100)
         
-        # Check flagship station
+        # Check flagship reference station (computed as NORMAL by engine, not hardcoded mock anomaly)
         stn_001 = station_service.get_station("ATHER-001")
         self.assertIsNotNone(stn_001)
-        self.assertEqual(stn_001["status"], "ANOMALY")
+        self.assertEqual(stn_001["status"], "NORMAL")
         self.assertEqual(stn_001["temperature"], 32.4)
-        self.assertEqual(stn_001["anomaly"]["parameter"], "Temperature")
-        self.assertEqual(stn_001["anomaly"]["severity"], "HIGH")
+        self.assertIsNone(stn_001.get("anomaly"))
+
+        # Check real engine-detected anomaly station (severe barometric divergence)
+        stn_anom = station_service.get_station("ATHER-COW-0137")
+        self.assertIsNotNone(stn_anom)
+        self.assertEqual(stn_anom["status"], "ANOMALY")
+        self.assertIsNotNone(stn_anom.get("anomaly"))
+        self.assertEqual(stn_anom["anomaly"]["severity"], "HIGH")
 
     def test_geojson_generation(self):
         geojson = station_service.get_geojson(limit=20)

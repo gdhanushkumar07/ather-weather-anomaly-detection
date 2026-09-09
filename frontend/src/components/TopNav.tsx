@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert } from 'lucide-react';
+import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 
@@ -75,6 +75,9 @@ export const TopNav: React.FC<TopNavProps> = ({
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => results.length > 0 && setIsOpen(true)}
         />
+        <div className="search-action-btn">
+          <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+        </div>
 
         {isOpen && (
           <div className="search-dropdown">

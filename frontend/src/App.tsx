@@ -15,7 +15,7 @@ export const App: React.FC = () => {
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
     stations: true,
-    temperature: true,
+    temperature: false,
     wind: false,
     pressure: false,
     humidity: false

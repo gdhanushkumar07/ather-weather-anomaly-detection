@@ -29,6 +29,12 @@ export async function fetchStationDetails(id: string): Promise<Station> {
   return res.json();
 }
 
+export async function fetchStationAnomaly(id: string) {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(id)}/anomaly`);
+  if (!res.ok) throw new Error(`Failed to fetch anomaly assessment for ${id}: ${res.statusText}`);
+  return res.json();
+}
+
 export async function fetchStationObservations(id: string, hours = 24): Promise<ObservationHistory> {
   const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(id)}/observations?hours=${hours}`);
   if (!res.ok) throw new Error(`Failed to fetch observations for ${id}: ${res.statusText}`);

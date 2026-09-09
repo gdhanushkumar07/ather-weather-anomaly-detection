@@ -6,6 +6,136 @@ export interface AnomalyInfo {
   expectedMax: number;
   severity: 'LOW' | 'WARNING' | 'HIGH';
   reason: string;
+  score?: number;
+  confidence?: number;
+  rootCause?: string;
+  layerScores?: Record<string, number>;
+  healthIndex?: number;
+  daysToFailure?: number | null;
+  explanation?: string;
+}
+
+export interface CanonicalLayerCard {
+  name: string;
+  status: 'PASS' | 'WARNING' | 'ANOMALY' | 'VETO' | 'LIMITED' | 'INSUFFICIENT_DATA' | string;
+  score: number;
+  evidence_quality?: string;
+  reason: string;
+  details?: Record<string, any>;
+}
+
+export interface CanonicalDiagnosis {
+  primary: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT_EVIDENCE' | string;
+  confidence_level?: string;
+  evidence: string[];
+  alternatives: string[];
+  affected_channels?: string[];
+  operator_action?: string;
+}
+
+export interface CanonicalWeatherAnalysis {
+  summary: string;
+  meteorological_context?: string;
+  likely_phenomenon?: string;
+  confidence?: string;
+  evidence?: string[];
+}
+
+export interface CanonicalInsight {
+  what: string;
+  why: string;
+  evidence: string;
+  action: string;
+}
+
+export interface CanonicalDataQuality {
+  status: 'VALID' | 'DEGRADED' | 'INSUFFICIENT_DATA' | string;
+  valid_fields: string[];
+  missing_fields: string[];
+  zero_substituted_fields?: string[];
+  historical_points: number;
+  nearby_stations: number;
+  limitations: string[];
+}
+
+export interface CanonicalObservation {
+  timestamp: string;
+  temperature: number | null;
+  pressure: number | null;
+  relative_humidity: number | null;
+  dew_point?: number | null;
+  wind_speed: number | null;
+  wind_direction?: string | null;
+  condition?: string | null;
+  source: string;
+}
+
+export interface CanonicalOverall {
+  status: 'NORMAL' | 'WARNING' | 'ANOMALY';
+  score: number;
+  anomaly_score?: number;
+  confidence: number;
+  threshold?: number;
+  severity: 'NONE' | 'LOW' | 'WARNING' | 'HIGH';
+}
+
+export interface CanonicalAnalysisResult {
+  station: {
+    id: string;
+    name: string;
+    town?: string;
+    country?: string;
+    region?: string;
+    latitude: number;
+    longitude: number;
+    elevation?: number | null;
+  };
+  observation: CanonicalObservation;
+  overall: CanonicalOverall;
+  layers: Record<string, CanonicalLayerCard>;
+  diagnosis: CanonicalDiagnosis;
+  weather_analysis: CanonicalWeatherAnalysis;
+  insights: CanonicalInsight[];
+  data_quality: CanonicalDataQuality;
+}
+
+export interface StationAnomalyAssessment {
+  station_id: string;
+  timestamp?: string;
+  status: 'NORMAL' | 'WARNING' | 'ANOMALY';
+  is_anomaly: boolean;
+  anomaly_score: number;
+  confidence: number;
+  veto_fired?: boolean;
+  root_cause: string;
+  affected_channels: string[];
+  layers: Record<string, any>;
+  reasons: string[];
+  explanation: string;
+  sensor_health_index: number;
+  estimated_days_to_failure: number | null;
+  raw_values?: Record<string, number | null>;
+  corrected_values?: Record<string, number | null>;
+  operator_action?: string;
+
+  // Canonical Section 16 elements
+  station?: {
+    id: string;
+    name: string;
+    town?: string;
+    country?: string;
+    region?: string;
+    latitude: number;
+    longitude: number;
+    elevation?: number | null;
+  };
+  observation?: CanonicalObservation;
+  overall?: CanonicalOverall;
+  diagnosis?: CanonicalDiagnosis;
+  weather_analysis?: CanonicalWeatherAnalysis;
+  insights?: CanonicalInsight[];
+  data_quality?: CanonicalDataQuality;
 }
 
 export interface OpenMeteoWeather {

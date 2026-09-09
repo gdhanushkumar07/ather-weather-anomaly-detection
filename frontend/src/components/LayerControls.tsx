@@ -1,5 +1,5 @@
 import React from 'react';
-import { Thermometer, Gauge, Droplets, Radio, Moon, Satellite } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, Eye, Moon, Satellite } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
@@ -19,6 +19,14 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
 }) => {
   return (
     <aside className={`weather-controls-right ${isStationPanelOpen ? 'shifted' : ''}`}>
+      {/* Top Active Status Capsule (Matches Reference Image) */}
+      <div className="active-mode-capsule">
+        <Eye className="w-3.5 h-3.5 text-cyan-400" />
+        <span className="active-mode-text">
+          Active: <strong className="text-white">{basemap === 'satellite' ? 'Satellite (Clear)' : 'Dark Map (Base)'}</strong>
+        </span>
+      </div>
+
       {/* Core Meteorological Inputs */}
       <div className="control-group-card">
         <div className="control-group-header">
@@ -33,7 +41,9 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             <span className={`radio-dot ${activeLayers.temperature ? 'active' : ''}`} />
             <span>Temperature</span>
           </div>
-          <Thermometer className="control-icon text-amber-400" />
+          <div className="circle-icon-badge temp-gradient-badge">
+            <Thermometer className="w-3 h-3 text-white" />
+          </div>
         </div>
 
         <div
@@ -44,7 +54,9 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             <span className={`radio-dot ${activeLayers.pressure ? 'active' : ''}`} />
             <span>Pressure</span>
           </div>
-          <Gauge className="control-icon text-indigo-400" />
+          <div className="circle-icon-badge pressure-gradient-badge">
+            <Gauge className="w-3 h-3 text-white" />
+          </div>
         </div>
 
         <div
@@ -55,7 +67,9 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             <span className={`radio-dot ${activeLayers.humidity ? 'active' : ''}`} />
             <span>Relative Humidity</span>
           </div>
-          <Droplets className="control-icon text-cyan-400" />
+          <div className="circle-icon-badge humidity-gradient-badge">
+            <Droplets className="w-3 h-3 text-white" />
+          </div>
         </div>
       </div>
 
@@ -74,7 +88,7 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             <span className="aws-status-text">AWS MARKERS</span>
           </div>
           <div className="aws-toggle-right">
-            <span className="aws-state-badge">{activeLayers.stations ? 'ON' : 'OFF'}</span>
+            <span className="aws-state-badge">{activeLayers.stations ? '(ON)' : '(OFF)'}</span>
             <Radio className="w-3.5 h-3.5" />
           </div>
         </div>

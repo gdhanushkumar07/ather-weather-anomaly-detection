@@ -14,10 +14,31 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from ..anomaly.detector import detector
 from schema import station_dict_to_reading, ObservationSource, Freshness
+from config import CONFIG
 
 # Open-Meteo's `current` block updates on an hourly model cadence. 90 minutes
 # gives a conservative buffer above that cadence before calling data STALE.
 _NWP_CADENCE_MINUTES = 90.0
+
+
+def _plausible(value: Optional[float], lo: float, hi: float) -> Optional[float]:
+    """Returns `value` unchanged if it is a real number within [lo, hi],
+    otherwise None. Used to keep physically-impossible/corrupt raw sensor
+    readings (observed in real station data — e.g. -5573C, or a 20.5 hPa
+    pressure sensor fault) out of any map layer or display that presents a
+    value as a genuine observation. This never fabricates a substitute
+    value — an implausible reading becomes "missing", not "corrected"."""
+    if value is None:
+        return None
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    if v != v:  # NaN
+        return None
+    if lo <= v <= hi:
+        return v
+    return None
 
 BASE_DIR = Path(__file__).resolve().parents[2] # backend directory
 DATA_PATH = BASE_DIR.parent / "data" / "stations.json"
@@ -254,15 +275,20 @@ class StationService:
                     "town": s["town"],
                     "country": s["country"],
                     "region": s["region"],
-                    "temperature": s.get("temperature"),
-                    # Pressure < 1 hPa is a known null-sentinel, not a real
-                    # measurement (see schema.py DataQuality policy) — never
-                    # let a 0.0 sentinel render as a real low-pressure value
-                    # on the map's parameter layers.
-                    "pressure": s.get("pressure") if (s.get("pressure") is not None and s.get("pressure") >= 1.0) else None,
+                    # Physically-impossible or corrupt raw sensor values (found in
+                    # real community-network data — e.g. a station reporting
+                    # -5573C, or 20.5/1359.5 hPa) must never be plotted as if they
+                    # were valid observations. Reuse the SAME hard physical bounds
+                    # already used by the L1 Physics veto (config.py CONFIG.physics)
+                    # so the map layer and the anomaly engine agree on what counts
+                    # as a physically plausible reading.
+                    "temperature": _plausible(s.get("temperature"), CONFIG.physics.temp_min_c, CONFIG.physics.temp_max_c),
+                    # Pressure < 1 hPa is additionally a known null-sentinel, not a
+                    # real measurement (see schema.py DataQuality policy).
+                    "pressure": _plausible(s.get("pressure"), max(CONFIG.physics.pressure_min_hpa, 1.0), CONFIG.physics.pressure_max_hpa),
                     # Humidity is physically bounded [0, 100]; an out-of-range
                     # value must be excluded from the map, not displayed as data.
-                    "humidity": s.get("humidity") if (s.get("humidity") is not None and 0.0 <= s.get("humidity") <= 100.0) else None,
+                    "humidity": _plausible(s.get("humidity"), 0.0, 100.0),
                     "windSpeed": s.get("windSpeed"),
                     "windDirection": s.get("windDirection"),
                     "condition": s.get("condition", "Reported"),

@@ -1,20 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { FlaskConical, X, RotateCcw, Play, Radio, Beaker, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { FlaskConical, X, RotateCcw, Play, Radio, Beaker, AlertTriangle, CheckCircle2, Sliders, Clock, Activity } from 'lucide-react';
 import { fetchSimulationScenarios, runSimulation, fetchStationAnomaly } from '../services/api';
+import { PREDEFINED_SCENARIOS, PredefinedScenario } from '../data/predefinedScenarios';
 
 interface TestLabModalProps {
   isOpen: boolean;
   onClose: () => void;
   stations: { id: string; name: string }[];
-}
-
-interface ScenarioMeta {
-  id: string;
-  name: string;
-  description: string;
-  step_count: number;
-  expected_bucket: string;
-  expected_root_cause_hint: string;
 }
 
 const LAYER_ORDER = [
@@ -27,27 +19,36 @@ const LAYER_ORDER = [
 
 export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, stations }) => {
   const [mode, setMode] = useState<'LIVE' | 'SIMULATION'>('SIMULATION');
-  const [scenarios, setScenarios] = useState<ScenarioMeta[]>([]);
-  const [scenarioId, setScenarioId] = useState<string>('');
+  const [scenarios, setScenarios] = useState<PredefinedScenario[]>(PREDEFINED_SCENARIOS);
+  const [scenarioId, setScenarioId] = useState<string>(PREDEFINED_SCENARIOS[0].id);
   const [baseStationId, setBaseStationId] = useState<string>('');
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<any | null>(null);
   const [liveResult, setLiveResult] = useState<any | null>(null);
 
+  // Load scenarios from backend if available, merging with static definitions to guarantee instant display
   useEffect(() => {
     if (!isOpen) return;
     fetchSimulationScenarios()
       .then((res) => {
-        setScenarios(res.scenarios);
-        if (res.scenarios.length && !scenarioId) setScenarioId(res.scenarios[0].id);
+        if (res.scenarios && res.scenarios.length > 0) {
+          const merged = PREDEFINED_SCENARIOS.map((local) => {
+            const remote = res.scenarios.find((s: any) => s.id === local.id);
+            return remote ? { ...local, ...remote } : local;
+          });
+          setScenarios(merged);
+        }
       })
-      .catch((e) => setError(e.message));
+      .catch(() => {
+        // Fallback to local definitions with zero 404/Not Found crash
+        setScenarios(PREDEFINED_SCENARIOS);
+      });
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const selectedScenario = scenarios.find((s) => s.id === scenarioId);
+  const selectedScenario = scenarios.find((s) => s.id === scenarioId) || PREDEFINED_SCENARIOS[0];
 
   const handleRun = async () => {
     setError(null);
@@ -152,7 +153,7 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
             {mode === 'SIMULATION' && (
               <>
                 <div className="test-lab-field-row">
-                  <label className="test-lab-field-label">Scenario</label>
+                  <label className="test-lab-field-label">Test Case</label>
                   <select className="test-lab-select" value={scenarioId} onChange={(e) => setScenarioId(e.target.value)}>
                     {scenarios.map((s) => (
                       <option key={s.id} value={s.id}>{s.name}</option>
@@ -164,17 +165,90 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
                     {selectedScenario.description}
                     <div className="test-lab-scenario-meta">
                       {selectedScenario.step_count} observation{selectedScenario.step_count > 1 ? 's' : ''} ·
-                      Hypothesis: {selectedScenario.expected_root_cause_hint}
+                      Expected Diagnosis: <strong>{selectedScenario.expected_bucket.replace(/_/g, ' ')}</strong>
+                      {selectedScenario.expected_root_cause_hint && ` (${selectedScenario.expected_root_cause_hint})`}
                     </div>
                   </div>
                 )}
               </>
             )}
 
-            <div className="test-lab-run-row">
+            {/* B2 / B10: FAULT PARAMETERS DISPLAY (Normal vs Injected) */}
+            {mode === 'SIMULATION' && selectedScenario && (
+              <div className="fault-params-container" style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.05em', color: '#94a3b8' }}>
+                    FAULT PARAMETERS
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                  <div style={{ background: 'rgba(15, 23, 42, 0.65)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ fontSize: '0.66rem', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>TEMPERATURE</div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>
+                      Normal: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{fmtVal(selectedScenario.baseline.temperature)} °C</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1', marginTop: '2px' }}>
+                      Injected: <span style={{ color: selectedScenario.injected.temperature !== selectedScenario.baseline.temperature ? '#f59e0b' : '#94a3b8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                        {selectedScenario.injected.temperature !== null ? `${fmtVal(selectedScenario.injected.temperature)} °C` : 'null'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(15, 23, 42, 0.65)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ fontSize: '0.66rem', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>PRESSURE</div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>
+                      Normal: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{fmtVal(selectedScenario.baseline.pressure)} hPa</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1', marginTop: '2px' }}>
+                      Injected: <span style={{ color: selectedScenario.injected.pressure !== selectedScenario.baseline.pressure ? '#f59e0b' : '#94a3b8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                        {selectedScenario.injected.pressure !== null ? `${fmtVal(selectedScenario.injected.pressure)} hPa` : 'null'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ background: 'rgba(15, 23, 42, 0.65)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ fontSize: '0.66rem', color: '#94a3b8', marginBottom: '4px', fontWeight: 600 }}>HUMIDITY</div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>
+                      Normal: <span style={{ color: '#10b981', fontFamily: 'var(--font-mono)' }}>{fmtVal(selectedScenario.baseline.humidity)} %</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#cbd5e1', marginTop: '2px' }}>
+                      Injected: <span style={{ color: selectedScenario.injected.humidity !== selectedScenario.baseline.humidity ? '#f59e0b' : '#94a3b8', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                        {selectedScenario.injected.humidity !== null ? `${fmtVal(selectedScenario.injected.humidity)} %` : 'null'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Time Series Preview */}
+                {selectedScenario.time_series_preview && selectedScenario.time_series_preview.length > 1 && (
+                  <div style={{ marginTop: '10px', background: 'rgba(15, 23, 42, 0.45)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.66rem', color: '#94a3b8', marginBottom: '6px', fontWeight: 600 }}>
+                      <Clock className="w-3 h-3 text-cyan-400" />
+                      SYNTHETIC TIME SERIES ({selectedScenario.step_count} observations)
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '4px' }}>
+                      {selectedScenario.time_series_preview.map((pt) => (
+                        <div key={pt.step} style={{ background: 'rgba(30, 41, 59, 0.6)', padding: '4px 7px', borderRadius: '4px', fontSize: '0.65rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ color: '#64748b' }}>Step {pt.step}</div>
+                          <div style={{ color: '#f8fafc', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                            {pt.temperature !== null ? `${pt.temperature}°C` : '--'}
+                          </div>
+                          <div style={{ color: '#94a3b8', fontSize: '0.6rem' }}>
+                            {pt.pressure !== null ? `${pt.pressure}hPa` : '--'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="test-lab-run-row" style={{ marginTop: '16px' }}>
               <button className="btn-run-simulation" onClick={handleRun} disabled={isRunning || (mode === 'SIMULATION' && !scenarioId)}>
                 <Play className="w-3.5 h-3.5" />
-                {isRunning ? 'RUNNING...' : mode === 'SIMULATION' ? 'RUN SIMULATION' : 'LOAD LIVE DIAGNOSTICS'}
+                {isRunning ? 'RUNNING REAL ATHER ENGINE...' : mode === 'SIMULATION' ? 'RUN SIMULATION' : 'LOAD LIVE DIAGNOSTICS'}
               </button>
               <button className="btn-reset-simulation" onClick={handleReset}>
                 <RotateCcw className="w-3.5 h-3.5" /> RESET
@@ -273,10 +347,15 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
                 </div>
               )}
 
-              {/* Test Result (simulation only) */}
+              {/* Expected vs Actual Test Result (simulation only) */}
               {mode === 'SIMULATION' && result?.test_result && (
                 <div className={`section-card test-result-card ${result.test_result.passed ? 'passed' : 'different'}`}>
-                  <div className="card-header-flex"><span className="card-section-title">TEST RESULT</span></div>
+                  <div className="card-header-flex">
+                    <span className="card-section-title">EXPECTED VS ACTUAL</span>
+                    <span style={{ fontSize: '0.65rem', color: '#94a3b8' }}>
+                      Layers agreeing: {result.test_result.layers_agreeing}/{result.test_result.layers_total}
+                    </span>
+                  </div>
                   <div className="test-lab-test-result-row">
                     {result.test_result.passed ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -284,12 +363,11 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
                       <AlertTriangle className="w-5 h-5 text-amber-400" />
                     )}
                     <div>
-                      <div className="test-result-headline">
-                        {result.test_result.passed ? 'TEST PASSED' : 'DIFFERENT FROM EXPECTED'}
+                      <div className="test-result-headline" style={{ color: result.test_result.passed ? '#10b981' : '#f59e0b' }}>
+                        {result.test_result.passed ? '✓ TEST PASSED' : 'NOT CONFIRMED / DIFFERENT FROM EXPECTED'}
                       </div>
                       <div className="test-result-detail">
-                        Expected: {result.test_result.expected_bucket.replace(/_/g, ' ')} · Actual: {result.test_result.actual_bucket.replace(/_/g, ' ')}
-                        {' · '}Layers agreeing: {result.test_result.layers_agreeing}/{result.test_result.layers_total}
+                        Expected: <strong style={{ color: '#38bdf8' }}>{result.test_result.expected_bucket.replace(/_/g, ' ')}</strong> · Actual: <strong style={{ color: '#facc15' }}>{result.test_result.actual_bucket.replace(/_/g, ' ')}</strong>
                       </div>
                       <div className="test-result-note">{result.test_result.note}</div>
                     </div>

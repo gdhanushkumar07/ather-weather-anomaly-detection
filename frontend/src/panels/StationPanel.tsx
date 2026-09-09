@@ -36,14 +36,19 @@ import {
 } from '../services/api';
 import { EscalationPreviewModal } from '../components/EscalationPreviewModal';
 import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
-import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren } from 'lucide-react';
+import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft } from 'lucide-react';
 
 interface StationPanelProps {
   station: Station | null;
   onClose: () => void;
+  /** 'drawer' (default) = existing fixed sliding overlay, unchanged.
+   *  'page' = dedicated full-workspace rendering for the Station
+   *  Intelligence workspace (ATHER UI architecture restructure) — same
+   *  component, same data, only the outer chrome differs. */
+  variant?: 'drawer' | 'page';
 }
 
-export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) => {
+export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, variant = 'drawer' }) => {
   const [history, setHistory] = useState<ObservationHistory | null>(null);
   const [historyHours, setHistoryHours] = useState<number>(24);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
@@ -287,7 +292,15 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
   })();
 
   return (
-    <div className={`station-panel-wrapper ${station ? 'expanded' : 'collapsed'}`}>
+    <div className={variant === 'page' ? 'station-intelligence-page' : `station-panel-wrapper ${station ? 'expanded' : 'collapsed'}`}>
+      {variant === 'page' && (
+        <div className="station-page-backbar">
+          <button className="back-to-map-btn" onClick={onClose}>
+            <ArrowLeft className="w-3.5 h-3.5" /> Back to Map
+          </button>
+          <span className="station-page-backbar-label">STATION INTELLIGENCE</span>
+        </div>
+      )}
       {/* 1. Header (§19.1) */}
       <div className="station-panel-header">
         <div className="header-meta">

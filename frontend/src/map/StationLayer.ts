@@ -350,7 +350,6 @@ export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean
   [
     CLUSTERS_LAYER_ID,
     CLUSTER_COUNT_LAYER_ID,
-    ANOMALY_PULSE_LAYER_ID,
     SELECTED_HALO_LAYER_ID,
     UNCLUSTERED_RING_LAYER_ID,
     UNCLUSTERED_BASE_LAYER_ID,
@@ -361,4 +360,20 @@ export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean
       map.setLayoutProperty(layerId, 'visibility', vis);
     }
   });
+  // Anomaly pulse halo has its own independent visibility toggle (Map
+  // Options → Anomaly Overlay) — only force it off here when markers are
+  // hidden entirely; turning markers back on restores it via that toggle's
+  // own state in the caller (see AtherMap.tsx effect ordering).
+  if (!visible && map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
+    map.setLayoutProperty(ANOMALY_PULSE_LAYER_ID, 'visibility', 'none');
+  }
+}
+
+/** Independent visibility control for the pulsing anomaly-alert halo layer
+ * (Map Options → Anomaly Overlay), decoupled from the main AWS markers
+ * on/off toggle. */
+export function setAnomalyOverlayVisibility(map: maplibregl.Map, visible: boolean) {
+  if (map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
+    map.setLayoutProperty(ANOMALY_PULSE_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
+  }
 }

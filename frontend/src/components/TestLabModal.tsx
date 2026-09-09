@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FlaskConical, X, RotateCcw, Play, Radio, Beaker, AlertTriangle, CheckCircle2, Sliders, Clock, Activity } from 'lucide-react';
+import { FlaskConical, X, RotateCcw, Play, Radio, Beaker, AlertTriangle, CheckCircle2, Sliders, Clock, Activity, ArrowLeft } from 'lucide-react';
 import { fetchSimulationScenarios, runSimulation, fetchStationAnomaly } from '../services/api';
 import { PREDEFINED_SCENARIOS, PredefinedScenario } from '../data/predefinedScenarios';
 
@@ -7,6 +7,10 @@ interface TestLabModalProps {
   isOpen: boolean;
   onClose: () => void;
   stations: { id: string; name: string }[];
+  /** 'modal' (default) = existing overlay/scrim/slide-over, unchanged.
+   *  'page' = dedicated TEST LAB workspace (UI architecture restructure):
+   *  fills the main content area, no scrim, "Back to Map" instead of "Close". */
+  variant?: 'modal' | 'page';
 }
 
 const LAYER_ORDER = [
@@ -17,7 +21,7 @@ const LAYER_ORDER = [
   { key: 'sensor_health', label: 'L5 Sensor Health' },
 ];
 
-export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, stations }) => {
+export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, stations, variant = 'modal' }) => {
   const [mode, setMode] = useState<'LIVE' | 'SIMULATION'>('SIMULATION');
   const [scenarios, setScenarios] = useState<PredefinedScenario[]>(PREDEFINED_SCENARIOS);
   const [scenarioId, setScenarioId] = useState<string>(PREDEFINED_SCENARIOS[0].id);
@@ -91,10 +95,12 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
   } : null);
   const recommendedAction = mode === 'SIMULATION' ? result?.recommended_action : liveResult?.operator_action;
 
+  const isPage = variant === 'page';
+
   return (
-    <div className="test-lab-overlay" role="dialog" aria-modal="true">
-      <div className="test-lab-scrim" onClick={onClose} />
-      <div className="test-lab-workspace">
+    <div className={isPage ? 'test-lab-page' : 'test-lab-overlay'} role={isPage ? undefined : 'dialog'} aria-modal={isPage ? undefined : true}>
+      {!isPage && <div className="test-lab-scrim" onClick={onClose} />}
+      <div className={isPage ? 'test-lab-workspace test-lab-workspace-page' : 'test-lab-workspace'}>
         {/* Header */}
         <div className="test-lab-header">
           <div className="test-lab-title-group">
@@ -110,8 +116,8 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
             <span className={`simulation-mode-badge ${mode === 'SIMULATION' ? 'active' : 'live'}`}>
               {mode === 'SIMULATION' ? 'SIMULATION MODE — no production data affected' : 'LIVE DATA — read only'}
             </span>
-            <button className="btn-close-panel" onClick={onClose} title="Close Test Lab">
-              <X className="w-4 h-4" />
+            <button className="btn-close-panel" onClick={onClose} title={isPage ? 'Back to Map' : 'Close Test Lab'}>
+              {isPage ? <ArrowLeft className="w-4 h-4" /> : <X className="w-4 h-4" />}
             </button>
           </div>
         </div>
@@ -381,7 +387,7 @@ export const TestLabModal: React.FC<TestLabModalProps> = ({ isOpen, onClose, sta
 
         <div className="test-lab-footer">
           <button className="btn-reset-simulation" onClick={handleReset}>RESET</button>
-          <button className="btn-close-test-lab" onClick={onClose}>CLOSE TEST LAB</button>
+          <button className="btn-close-test-lab" onClick={onClose}>{isPage ? 'BACK TO MAP' : 'CLOSE TEST LAB'}</button>
         </div>
       </div>
     </div>

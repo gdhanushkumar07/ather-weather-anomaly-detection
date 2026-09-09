@@ -1,26 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight, FlaskConical } from 'lucide-react';
+import { Search, Activity, Map as MapIcon, ShieldAlert, HeartPulse, FlaskConical, Radio, ArrowUpRight } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
+import { Workspace } from '../types/workspace';
 
 interface TopNavProps {
   summary: AnomaliesSummary | null;
   onSelectStation: (stationId: string) => void;
-  statusFilter: string | null;
-  onSetStatusFilter: (status: string | null) => void;
-  onOpenTestLab?: () => void;
-  onToggleOverview?: () => void;
-  isOverviewOpen?: boolean;
+  activeWorkspace: Workspace;
+  onNavigate: (workspace: Workspace) => void;
 }
+
+const WORKSPACE_TABS: { id: Workspace; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'overview', label: 'Overview', icon: Activity },
+  { id: 'map', label: 'Map', icon: MapIcon },
+  { id: 'anomalies', label: 'Anomalies', icon: ShieldAlert },
+  { id: 'health', label: 'Sensor Health', icon: HeartPulse },
+  { id: 'testlab', label: 'Test Lab', icon: FlaskConical },
+];
 
 export const TopNav: React.FC<TopNavProps> = ({
   summary,
   onSelectStation,
-  statusFilter,
-  onSetStatusFilter,
-  onOpenTestLab,
-  onToggleOverview,
-  isOverviewOpen = false
+  activeWorkspace,
+  onNavigate
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -119,99 +122,54 @@ export const TopNav: React.FC<TopNavProps> = ({
         )}
       </div>
 
-      {/* Navigation Section Pills */}
-      <div className="nav-capsule section-pills">
-        {onToggleOverview && (
+      {/* Primary Workspace Navigation — the app's information architecture,
+          not a set of map filters. Exactly one workspace is active at a time. */}
+      <nav className="nav-capsule section-pills workspace-tabs" aria-label="ATHER workspaces">
+        {WORKSPACE_TABS.map(({ id, label, icon: Icon }) => (
           <button
-            className={`nav-section-btn overview-toggle-btn ${isOverviewOpen ? 'active' : ''}`}
-            onClick={onToggleOverview}
-            title="Toggle Network & Weather Overview panel"
+            key={id}
+            className={`nav-section-btn workspace-tab-btn ${activeWorkspace === id ? 'active' : ''}`}
+            onClick={() => onNavigate(id)}
+            aria-current={activeWorkspace === id ? 'page' : undefined}
+            title={label}
           >
-            <Activity className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Overview</span>
+            <Icon className="w-3.5 h-3.5" />
+            <span>{label}</span>
+            {id === 'anomalies' && summary?.anomalyCount ? (
+              <span className="nav-badge-count anomaly">{summary.anomalyCount}</span>
+            ) : null}
+            {id === 'health' && summary?.warningCount ? (
+              <span className="nav-badge-count warning">{summary.warningCount}</span>
+            ) : null}
           </button>
-        )}
+        ))}
+      </nav>
 
-        <button
-          className={`nav-section-btn ${statusFilter === null && !isOverviewOpen ? 'active' : ''}`}
-          onClick={() => onSetStatusFilter(null)}
-          title="Show all network stations"
-        >
-          <Wifi className="w-3.5 h-3.5" />
-          <span>Network</span>
-        </button>
-
-        <button
-          className={`nav-section-btn ${statusFilter === 'ANOMALY' ? 'active alert' : ''}`}
-          onClick={() => onSetStatusFilter(statusFilter === 'ANOMALY' ? null : 'ANOMALY')}
-          title="Filter anomaly stations"
-        >
-          <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-          <span>Anomalies</span>
-          {summary?.anomalyCount !== undefined && summary.anomalyCount > 0 ? (
-            <span className="nav-badge-count anomaly">{summary.anomalyCount}</span>
-          ) : null}
-        </button>
-
-        <button
-          className={`nav-section-btn ${statusFilter === 'WARNING' ? 'active warn' : ''}`}
-          onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
-          title="Filter warning & sensor health status"
-        >
-          <Heart className="w-3.5 h-3.5 text-amber-400" />
-          <span>Sensor Health</span>
-          {summary?.warningCount !== undefined && summary.warningCount > 0 ? (
-            <span className="nav-badge-count warning">{summary.warningCount}</span>
-          ) : null}
-        </button>
-
-        {onOpenTestLab && (
-          <button
-            className="nav-section-btn test-lab-launch-btn"
-            onClick={onOpenTestLab}
-            title="Open ATHER Diagnostic Test Lab — validate the engine with simulated fault scenarios"
-          >
-            <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
-            <span>Test Lab</span>
-          </button>
-        )}
-      </div>
-
-      {/* Live Telemetry KPI Pills — Data-driven, no magic fallback numbers */}
+      {/* Live Telemetry KPI Strip — read-only network snapshot, always visible
+          regardless of workspace. Clicking a count navigates to the workspace
+          where that state is actually managed. */}
       <div className="nav-capsule live-stats-capsule">
         <div className="live-pill">
           <span className="live-dot-pulse" />
           <span>LIVE</span>
         </div>
 
-        <div className="stat-pill-item total" onClick={() => onSetStatusFilter(null)} title="Filter All Stations">
+        <div className="stat-pill-item total" onClick={() => onNavigate('map')} title="Open Map">
           <span className="stat-label">Stations:</span>
           <span className="stat-val">{summary?.totalStations ?? '--'}</span>
         </div>
 
-        <div
-          className={`stat-pill-item normal ${statusFilter === 'NORMAL' ? 'selected' : ''}`}
-          onClick={() => onSetStatusFilter(statusFilter === 'NORMAL' ? null : 'NORMAL')}
-          title="Filter Normal"
-        >
+        <div className="stat-pill-item normal" onClick={() => onNavigate('map')} title="Open Map">
           <span className="stat-bullet green" />
           <span>{summary?.normalCount ?? '--'} Normal</span>
         </div>
 
-        <div
-          className={`stat-pill-item warning ${statusFilter === 'WARNING' ? 'selected' : ''}`}
-          onClick={() => onSetStatusFilter(statusFilter === 'WARNING' ? null : 'WARNING')}
-          title="Filter Warning"
-        >
+        <div className="stat-pill-item warning" onClick={() => onNavigate('health')} title="Open Sensor Health">
           <span className="stat-bullet amber" />
           <span>{summary?.warningCount ?? '--'} Warning</span>
         </div>
 
-        <div
-          className={`stat-pill-item anomaly ${statusFilter === 'ANOMALY' ? 'selected' : ''}`}
-          onClick={() => onSetStatusFilter(statusFilter === 'ANOMALY' ? null : 'ANOMALY')}
-          title="Filter Anomaly"
-        >
+        <div className="stat-pill-item anomaly" onClick={() => onNavigate('anomalies')} title="Open Anomalies">
           <span className="stat-bullet red" />
           <span>{summary?.anomalyCount ?? '--'} Anomaly</span>
         </div>

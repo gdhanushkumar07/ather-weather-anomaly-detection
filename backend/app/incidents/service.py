@@ -153,6 +153,17 @@ class IncidentStore:
             "note": "This is a preview only. ATHER has not contacted any external recipient.",
         }
 
+    def list_all(self, state: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Lists tracked incident records (Anomalies workspace Active/Resolved/All
+        tabs). Only stations with an OPEN or previously-tracked incident appear
+        here — this never scans/fabricates incidents for stations that were
+        never actionable."""
+        records = list(self._incidents.values())
+        if state:
+            records = [r for r in records if r["state"] == state]
+        records.sort(key=lambda r: r["updated_at"], reverse=True)
+        return records
+
     def mark_escalated(self, station_id: str) -> Optional[Dict[str, Any]]:
         incident = self.get_or_create(station_id)
         if not incident:

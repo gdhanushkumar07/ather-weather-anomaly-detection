@@ -16,6 +16,7 @@ import {
   Info
 } from 'lucide-react';
 import { AnomaliesSummary } from '../types/weather';
+import { Workspace } from '../types/workspace';
 
 interface NetworkOverviewProps {
   summary: AnomaliesSummary | null;
@@ -23,6 +24,11 @@ interface NetworkOverviewProps {
   isOpen: boolean;
   onToggle: () => void;
   onSelectStation: (stationId: string) => void;
+  /** 'drawer' (default) = existing collapsible overlay, unchanged.
+   *  'page' = dedicated full OVERVIEW workspace (UI architecture restructure):
+   *  always expanded, adds Quick Actions, no collapse pill. */
+  variant?: 'drawer' | 'page';
+  onNavigate?: (workspace: Workspace) => void;
 }
 
 export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
@@ -30,7 +36,9 @@ export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
   stationsGeoJSON,
   isOpen,
   onToggle,
-  onSelectStation
+  onSelectStation,
+  variant = 'drawer',
+  onNavigate
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'events'>('overview');
 
@@ -167,7 +175,7 @@ export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
     return summary.activeAnomalies.slice(0, 15);
   }, [summary]);
 
-  if (!isOpen) {
+  if (variant === 'drawer' && !isOpen) {
     return (
       <button
         className="network-overview-collapsed-pill"
@@ -183,8 +191,8 @@ export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
   }
 
   return (
-    <div className="network-overview-drawer" role="region" aria-label="ATHER Network Overview">
-      {/* Drawer Header */}
+    <div className={variant === 'page' ? 'overview-workspace-page' : 'network-overview-drawer'} role="region" aria-label="ATHER Network Overview">
+      {/* Header */}
       <div className="network-overview-header">
         <div className="overview-header-left">
           <div className="overview-icon-badge">
@@ -195,13 +203,15 @@ export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
             <div className="overview-subtitle">Real-Time AWS Telemetry & Regional State</div>
           </div>
         </div>
-        <button
-          className="btn-close-overview"
-          onClick={onToggle}
-          title="Collapse Network Overview Panel"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
+        {variant === 'drawer' && (
+          <button
+            className="btn-close-overview"
+            onClick={onToggle}
+            title="Collapse Network Overview Panel"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -470,6 +480,18 @@ export const NetworkOverview: React.FC<NetworkOverviewProps> = ({
           </div>
         )}
       </div>
+
+      {variant === 'page' && onNavigate && (
+        <div className="overview-quick-actions">
+          <span className="overview-quick-actions-label">QUICK ACTIONS</span>
+          <div className="overview-quick-actions-row">
+            <button className="quick-action-btn" onClick={() => onNavigate('map')}>OPEN MAP</button>
+            <button className="quick-action-btn" onClick={() => onNavigate('anomalies')}>VIEW ANOMALIES</button>
+            <button className="quick-action-btn" onClick={() => onNavigate('health')}>SENSOR HEALTH</button>
+            <button className="quick-action-btn purple" onClick={() => onNavigate('testlab')}>TEST LAB</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

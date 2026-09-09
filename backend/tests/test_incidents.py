@@ -82,6 +82,20 @@ class TestIncidentWorkflow(unittest.TestCase):
         # Escalating is an audit-trail action, not a state transition.
         self.assertEqual(inc["state"], "ACKNOWLEDGED")
 
+    def test_list_all_returns_created_incidents(self):
+        self.store.get_or_create(self.anomaly_station_id)
+        records = self.store.list_all()
+        self.assertTrue(any(r["station_id"] == self.anomaly_station_id for r in records))
+
+    def test_list_all_filters_by_state(self):
+        self.store.get_or_create(self.anomaly_station_id)
+        self.store.resolve(self.anomaly_station_id)
+        resolved = self.store.list_all(state="RESOLVED")
+        new_ones = self.store.list_all(state="NEW")
+        self.assertTrue(all(r["state"] == "RESOLVED" for r in resolved))
+        self.assertTrue(any(r["station_id"] == self.anomaly_station_id for r in resolved))
+        self.assertFalse(any(r["station_id"] == self.anomaly_station_id for r in new_ones))
+
     def test_unknown_station_returns_none(self):
         self.assertIsNone(self.store.get_or_create("NOT-A-REAL-STATION-ID"))
         self.assertIsNone(self.store.acknowledge("NOT-A-REAL-STATION-ID"))

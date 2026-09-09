@@ -231,6 +231,15 @@ def run_simulation(payload: Dict[str, Any]):
 # ATHER INCIDENT WORKFLOW (Phase 13-15)
 # ─────────────────────────────────────────────────────────────────
 
+@app.get("/api/incidents")
+def list_incidents(state: str = None):
+    """Lists tracked incident records for the Anomalies workspace
+    (Active/Resolved/All tabs). Only reflects incidents that have actually
+    been created (an actionable station was looked at at least once) — this
+    is not a full historical anomaly log, and the in-memory store resets on
+    backend restart."""
+    return {"incidents": incident_service.incident_store.list_all(state=state)}
+
 @app.get("/api/stations/{station_id}/incident")
 def get_incident(station_id: str):
     """Returns the current incident record for a station (auto-created from

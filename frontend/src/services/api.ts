@@ -99,6 +99,13 @@ export async function runSimulation(scenarioId: string, baseStationId?: string |
 
 // ── ATHER Incident Workflow ──────────────────────────────────────────────
 
+export async function fetchIncidents(state?: string): Promise<{ incidents: any[] }> {
+  const query = state ? `?state=${encodeURIComponent(state)}` : '';
+  const res = await fetch(`${API_BASE}/incidents${query}`);
+  if (!res.ok) throw new Error(`Failed to fetch incidents: ${res.statusText}`);
+  return res.json();
+}
+
 export async function fetchIncident(stationId: string) {
   const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incident`);
   if (!res.ok) throw new Error(`Failed to fetch incident for ${stationId}: ${res.statusText}`);

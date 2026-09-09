@@ -4,7 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField } from './StationLayer';
+import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField, setAnomalyOverlayVisibility } from './StationLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 
@@ -15,6 +15,7 @@ interface AtherMapProps {
   activeLayers: Record<WeatherLayerType, boolean>;
   basemap: 'dark' | 'satellite';
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
+  showAnomalyOverlay?: boolean;
 }
 
 export const AtherMap: React.FC<AtherMapProps> = ({
@@ -23,7 +24,8 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   onSelectStation,
   activeLayers,
   basemap,
-  onToggleBasemap
+  onToggleBasemap,
+  showAnomalyOverlay = true
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -143,6 +145,15 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     if (!map || !isMapReady) return;
     setStationLayersVisibility(map, activeLayers.stations);
   }, [activeLayers.stations, isMapReady]);
+
+  // 3a2. Anomaly overlay (Map Options): independent of the AWS markers
+  // toggle, but re-synced whenever markers are toggled since turning
+  // markers off forces the pulse halo off too (see setStationLayersVisibility).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    setAnomalyOverlayVisibility(map, activeLayers.stations && showAnomalyOverlay);
+  }, [showAnomalyOverlay, activeLayers.stations, isMapReady]);
 
   // 3b. Real-data parameter halo (Phase 3 weather-layer fix): colors each
   // station by its ACTUAL reported temperature/pressure/humidity value.

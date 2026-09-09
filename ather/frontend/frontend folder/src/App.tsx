@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { StationsPanel } from './components/StationsPanel';
 import { WeatherMap } from './components/Map/WeatherMap';
 import { TopBar } from './components/UI/TopBar';
 import { TimelineSlider } from './components/UI/TimelineSlider';
@@ -8,8 +9,10 @@ import { CompactWeatherOverlay } from './components/UI/CompactWeatherOverlay';
 import { WebcamModal } from './components/UI/WebcamModal';
 import { CommandSidebar } from './components/CommandSidebar'; 
 import { LiveAlertPanel } from './components/LiveAlterPanel'; // Keeping your exact import path
-import { BrainCircuit, Wrench, BarChart3 } from 'lucide-react'; // Added for placeholder panels
-
+import { BrainCircuit, Wrench, BarChart3, RadioTower } from 'lucide-react'; // Added for placeholder panels
+import { AiInsights } from './components/AiInsights';
+import { SelfHealingPanel } from './components/SelfHealingPanel';
+import { AnalyticsPanel } from './components/AnalyticsPanel';
 import type {
   WeatherLayerType,
   AltitudeLevel,
@@ -163,7 +166,12 @@ export function App() {
 
       {/* 4. Right Side Dynamic Panels */}
       {/* Show LiveAlertPanel for Overview, Stations, and Anomalies */}
-      {(activeView === 'overview' || activeView === 'stations' || activeView === 'anomalies') && (
+      {/* 4. Right Side Dynamic Panels */}
+      
+      {/* Overview View: Deliberately empty! Shows the full edge-to-edge map without a right panel */}
+      
+      {/* Anomalies Panel */}
+      {activeView === 'anomalies' && (
         <LiveAlertPanel 
           onSelectStation={(station) => { 
             handleSelectStation({ 
@@ -172,47 +180,53 @@ export function App() {
               state: '', 
               lat: station.lat, 
               lon: station.lon, 
-              severity: 'D3', 
+              severity: 'D3' as any, 
               severityLabel: 'Anomaly', 
-              status: 'Critical', 
-              anomalyType: 'Heatwave Spike', 
-              confidenceScore: station.anomaly.confidence_score, 
+              status: 'Critical' as any, 
+              anomalyType: 'Heatwave Spike' as any, 
+              confidenceScore: station.anomaly?.confidence_score || 0, 
               soilMoistureIndex: 0, 
-              heatAnomalyDelta: station.weather.temperature_c, 
+              heatAnomalyDelta: station.weather?.temperature_c || 0, 
               rainfallDeficitPercent: 0, 
-              aiRecommendation: station.anomaly.explanation, 
+              aiRecommendation: station.anomaly?.explanation || '', 
               lastUpdated: station.timestamp, 
             }); 
           }} 
         />
       )}
 
-      {/* Placeholder Panel for AI Insights */}
-      {activeView === 'ai-insights' && (
-        <div className="absolute right-4 top-[76px] bottom-32 z-30 w-[350px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f1720]/90 shadow-2xl backdrop-blur-xl lg:flex items-center justify-center p-6 text-center animate-in fade-in slide-in-from-right-4">
-          <BrainCircuit className="w-12 h-12 text-cyan-400 mb-4 opacity-50" />
-          <h2 className="text-white font-bold tracking-widest uppercase mb-2">AI Insights Pipeline</h2>
-          <p className="text-slate-400 text-sm">The 5-layer conformal evidence fusion pipeline will be visualized here.</p>
-        </div>
+      {/* Stations Panel */}
+      {activeView === 'stations' && (
+        <StationsPanel 
+          onSelectStation={(station) => { 
+            handleSelectStation({ 
+              id: station.station_id, 
+              stationName: station.name || station.station_id, 
+              state: '', 
+              lat: station.lat, 
+              lon: station.lon, 
+              severity: (station.anomaly?.confidence_score >= 0.8 ? 'D4' : station.anomaly?.is_anomaly ? 'D3' : 'D1') as any,
+              severityLabel: station.anomaly?.is_anomaly ? 'Anomaly' : 'Healthy', 
+              status: (station.anomaly?.confidence_score >= 0.8 ? 'Critical' : station.anomaly?.is_anomaly ? 'Warning' : 'Active') as any,
+              anomalyType: (station.anomaly?.root_cause || 'None') as any, 
+              confidenceScore: station.anomaly?.confidence_score || 0, 
+              soilMoistureIndex: 0, 
+              heatAnomalyDelta: station.weather?.temperature_c || 0, 
+              rainfallDeficitPercent: 0, 
+              aiRecommendation: station.anomaly?.explanation || 'Operating normally.', 
+              lastUpdated: station.timestamp, 
+            }); 
+          }} 
+        />
       )}
+      {/* Placeholder Panel for AI Insights */}
+      {activeView === 'ai-insights' && <AiInsights />}
 
       {/* Placeholder Panel for Self-Healing */}
-      {activeView === 'self-healing' && (
-        <div className="absolute right-4 top-[76px] bottom-32 z-30 w-[350px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f1720]/90 shadow-2xl backdrop-blur-xl lg:flex items-center justify-center p-6 text-center animate-in fade-in slide-in-from-right-4">
-          <Wrench className="w-12 h-12 text-amber-400 mb-4 opacity-50" />
-          <h2 className="text-white font-bold tracking-widest uppercase mb-2">Self-Healing Engine</h2>
-          <p className="text-slate-400 text-sm">Real-time sensor imputation and correction logs will appear here.</p>
-        </div>
-      )}
+      {activeView === 'self-healing'&& <SelfHealingPanel/>}
 
       {/* Placeholder Panel for Analytics */}
-      {activeView === 'analytics' && (
-        <div className="absolute right-4 top-[76px] bottom-32 z-30 w-[350px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f1720]/90 shadow-2xl backdrop-blur-xl lg:flex items-center justify-center p-6 text-center animate-in fade-in slide-in-from-right-4">
-          <BarChart3 className="w-12 h-12 text-emerald-400 mb-4 opacity-50" />
-          <h2 className="text-white font-bold tracking-widest uppercase mb-2">System Analytics</h2>
-          <p className="text-slate-400 text-sm">Predictive maintenance and sensor health trends will be shown here.</p>
-        </div>
-      )}
+      {activeView === 'analytics' && < AnalyticsPanel/>}
 
       {/* 5. Dismissible Compact Weather Info Panel */}
       {overlayOpen && (

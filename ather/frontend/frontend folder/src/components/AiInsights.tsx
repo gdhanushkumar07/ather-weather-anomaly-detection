@@ -9,7 +9,7 @@ import {
   TrendingDown 
 } from 'lucide-react';
 
-export function AIInsightsPanel() {
+export function AiInsights(){
   return (
     <aside className="absolute right-4 top-[76px] bottom-4 z-30 hidden w-[310px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0f1720]/90 shadow-2xl backdrop-blur-xl xl:flex animate-in fade-in slide-in-from-right-4">
       

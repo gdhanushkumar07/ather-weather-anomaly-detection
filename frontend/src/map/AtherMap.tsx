@@ -9,6 +9,11 @@ import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 
+// Below this MapLibre zoom level, the map renders in native 3D globe
+// projection (MapLibre's own globe mode -- same clustering layers, same
+// data, just a different camera projection). At/above it, flat mercator.
+const GLOBE_ZOOM_BREAKPOINT = 2.5;
+
 interface AtherMapProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
   selectedStationId: string | null;
@@ -35,6 +40,7 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const [isMapReady, setIsMapReady] = React.useState(false);
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
+  const currentProjectionRef = useRef<'globe' | 'mercator'>('globe');
 
   // 1. Initialize MapLibre with both Dark Canvas and Satellite Imagery Basemaps
   useEffect(() => {
@@ -138,6 +144,33 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     if (!map || !isMapReady || !stationsGeoJSON) return;
     setupStationLayers(map, stationsGeoJSON, (id) => onSelectStationRef.current(id));
   }, [stationsGeoJSON, isMapReady]);
+
+  // 2b. Switch between MapLibre's native 3D globe and flat mercator
+  // projection based on zoom, tied to the normal scroll/zoom gesture --
+  // no separate manual toggle. The same station clustering source/layers
+  // render correctly in either projection automatically; only the camera
+  // projection changes, so markers stay genuinely geo-attached at every
+  // zoom level. Only calls setProjection when actually crossing the
+  // breakpoint, not on every zoom tick.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    const applyProjectionForZoom = () => {
+      const desired: 'globe' | 'mercator' =
+        map.getZoom() < GLOBE_ZOOM_BREAKPOINT ? 'globe' : 'mercator';
+      if (currentProjectionRef.current !== desired) {
+        currentProjectionRef.current = desired;
+        map.setProjection({ type: desired });
+      }
+    };
+
+    applyProjectionForZoom();
+    map.on('zoom', applyProjectionForZoom);
+    return () => {
+      map.off('zoom', applyProjectionForZoom);
+    };
+  }, [isMapReady]);
 
   // 3. Station layer visibility toggle
   useEffect(() => {

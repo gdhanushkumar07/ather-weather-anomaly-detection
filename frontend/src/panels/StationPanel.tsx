@@ -35,6 +35,7 @@ import {
   fetchIncident, acknowledgeIncident, investigateIncident, resolveIncident, dismissIncident
 } from '../services/api';
 import { EscalationPreviewModal } from '../components/EscalationPreviewModal';
+import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
 import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren } from 'lucide-react';
 
 interface StationPanelProps {
@@ -44,6 +45,8 @@ interface StationPanelProps {
 
 export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) => {
   const [history, setHistory] = useState<ObservationHistory | null>(null);
+  const [historyHours, setHistoryHours] = useState<number>(24);
+  const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
   const [cachedStation, setCachedStation] = useState<Station | null>(station);
 
   const [currentWeather, setCurrentWeather] = useState<OpenMeteoWeather | null>(null);
@@ -67,12 +70,30 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
     setExpandedLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleHoursChange = (hours: number) => {
+    const targetStn = station || cachedStation;
+    if (!targetStn) return;
+    setHistoryHours(hours);
+    setIsHistoryLoading(true);
+    fetchStationObservations(targetStn.id, hours)
+      .then((h) => {
+        setHistory(h);
+        setIsHistoryLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to load observations for range', err);
+        setIsHistoryLoading(false);
+      });
+  };
+
   useEffect(() => {
     if (station) {
       setCachedStation(station);
       setWeatherError(null);
       setIsLoadingWeather(true);
       setIsLoadingAnomaly(true);
+      setHistoryHours(24);
+      setIsHistoryLoading(true);
 
       // 1. Fetch live localized model forecast from Open-Meteo for comparison
       fetchCurrentWeather(station.latitude, station.longitude)
@@ -86,10 +107,16 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           setIsLoadingWeather(false);
         });
 
-      // 2. Fetch diurnal trend observations
-      fetchStationObservations(station.id)
-        .then(setHistory)
-        .catch((err) => console.error('Failed to load observations history', err));
+      // 2. Fetch observations history for charts (24 hours default)
+      fetchStationObservations(station.id, 24)
+        .then((h) => {
+          setHistory(h);
+          setIsHistoryLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to load observations history', err);
+          setIsHistoryLoading(false);
+        });
 
       // 3. Fetch canonical 5-layer anomaly assessment
       fetchStationAnomaly(station.id)
@@ -208,20 +235,6 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
     }
   };
 
-  // Sparkline data
-  const temps = history?.series.map((s) => s.temperature) || [];
-  const minTemp = temps.length ? Math.min(...temps) : 20;
-  const maxTemp = temps.length ? Math.max(...temps) : 35;
-  const tempRange = maxTemp - minTemp || 1;
-
-  const points = temps
-    .map((t, idx) => {
-      const x = (idx / (temps.length - 1 || 1)) * 320;
-      const y = 52 - ((t - minTemp) / tempRange) * 42;
-      return `${x},${y}`;
-    })
-    .join(' ');
-
   // 5-Layer card definitions (Phase 12)
   const layerDefs = [
     { key: 'physics', num: '01', label: 'PHYSICS', full: 'Thermodynamic Boundary Validation' },
@@ -319,7 +332,37 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       </div>
 
       <div className="station-panel-body">
-        {/* 1. Live Observations (§19.2) - Explicitly Sourced AWS Telemetry */}
+        {/* 2. Station Representative Visual Asset (Phase 6, 26) */}
+        <div className="station-visual-card">
+          <div className="station-visual-header">
+            <div className="station-visual-badge">
+              <Radio className="w-3.5 h-3.5 text-cyan-400" />
+              <span>AWS STATION ASSET</span>
+            </div>
+            <span className="station-visual-disclaimer">
+              REPRESENTATIVE AWS IMAGE
+            </span>
+          </div>
+          <div className="station-visual-image-wrapper">
+            <img
+              src="/representative_aws_station.jpg"
+              alt="Representative Automatic Weather Station mast with meteorological sensors"
+              className="station-visual-img"
+            />
+            <div className="station-visual-overlay">
+              <div className="station-visual-meta">
+                <span className="station-type-tag">Station type: Automatic Weather Station</span>
+                <span className="station-id-tag">{currentStation.id}</span>
+              </div>
+            </div>
+          </div>
+          <div className="station-visual-caption">
+            <Info className="w-3 h-3 text-slate-400 shrink-0" />
+            <span>Standard meteorological mast (cup anemometer, solar radiation shield, data logger). Representative visual.</span>
+          </div>
+        </div>
+
+        {/* 3. Live Observations (§19.2) - Explicitly Sourced AWS Telemetry */}
         <div className="section-card observation-card">
           <div className="card-header-flex">
             <div className="card-title-group">
@@ -520,7 +563,116 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           )}
         </div>
 
-        {/* 3. Phase 13-16: Anomaly Intelligence & Incident Workflow (When Anomaly/Warning exists) */}
+        {/* 5. Historical Readings & Analytical Graphs (Phase 9-14) */}
+        <StationHistoricalGraphs
+          station={currentStation}
+          series={history?.series || []}
+          hours={historyHours}
+          onHoursChange={handleHoursChange}
+          isLoading={isHistoryLoading}
+          anomalyAssessment={canonical}
+        />
+
+        {/* 6. Anomaly Timeline (Phase 16 - when anomaly or warning is present) */}
+        {(isAnomaly || isWarning) && (
+          <div className="section-card anomaly-timeline-card">
+            <div className="card-header-flex">
+              <div className="card-title-group">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <span className="card-section-title">ANOMALY TIMELINE</span>
+              </div>
+              <span className={`severity-tag ${severityLevel}`}>{severityLevel}</span>
+            </div>
+            <div className="anomaly-timeline-list">
+              <div className="anomaly-timeline-item">
+                <div className="timeline-time-col">
+                  <span className="timeline-time-text">{currentStation.timestamp || 'Latest'}</span>
+                  <span className="timeline-event-sub">In-Situ</span>
+                </div>
+                <div className="timeline-content-col">
+                  <div className="timeline-event-title">
+                    {canonicalDiag?.primary || currentStation.anomaly?.parameter || 'Telemetry Outlier'}
+                  </div>
+                  <div className="timeline-event-sub">
+                    {canonical?.root_cause || currentStation.anomaly?.rootCause || 'Divergence from mesh consensus'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 7. Phase 15, 28: 5-Layer Diagnostic Evaluation (Vertical Accordion) */}
+        <div className="section-card layers-card">
+          <div className="card-header-flex">
+            <div className="card-title-group">
+              <Layers className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="card-section-title">5-LAYER DIAGNOSTIC EVALUATION</span>
+            </div>
+            <span className="layers-count-badge">5 Screening Layers</span>
+          </div>
+
+          <div className="layer-accordion-list">
+            {layerDefs.map(({ key, num, label, full }) => {
+              const layerData = getLayerData(key);
+              const isExpanded = Boolean(expandedLayers[key]);
+              const statusClass = layerData.status.toLowerCase();
+
+              return (
+                <div key={key} className={`layer-accordion-item ${statusClass}`}>
+                  <div
+                    className="layer-accordion-header"
+                    onClick={() => toggleLayerExpand(key)}
+                    title="Click to toggle layer diagnostic details"
+                  >
+                    <div className="layer-header-left">
+                      <span className="layer-num-badge">{num}</span>
+                      <span className="layer-name-title">{label}</span>
+                      <span className="layer-full-desc">{full}</span>
+                    </div>
+
+                    <div className="layer-header-right">
+                      <span className={`layer-status-pill ${statusClass}`}>
+                        ● {layerData.status}
+                      </span>
+                      <span className="layer-score-pill">
+                        {(layerData.score * 100).toFixed(0)}%
+                      </span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                    </div>
+                  </div>
+
+                  {isExpanded && (
+                    <div className="layer-accordion-body">
+                      <div className="layer-expanded-grid">
+                        <div>
+                          <span className="layer-meta-lbl">Layer Score:</span>
+                          <span className="layer-meta-val">{(layerData.score * 100).toFixed(1)}%</span>
+                        </div>
+                        <div>
+                          <span className="layer-meta-lbl">Evidence Quality:</span>
+                          <span className={`layer-quality-tag ${layerData.evidence_quality || 'MEDIUM'}`}>
+                            {layerData.evidence_quality || 'MEDIUM'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="layer-reason-text">
+                        <span className="layer-reason-lbl">Reason: </span>
+                        {layerData.reason}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 8. Phase 18-20: Anomaly Intelligence & Incident Workflow (When Anomaly/Warning exists) */}
         {(isAnomaly || isWarning) && (
           <div className="section-card anomaly-intelligence-card">
             <div className="card-header-flex">
@@ -661,73 +813,52 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           />
         )}
 
-        {/* 4. Phase 12: 5-Layer Diagnostic Evaluation (Vertical Accordion) */}
-        <div className="section-card layers-card">
+        {/* 9. ATHER Station Summary (Phase 17) */}
+        <div className="section-card station-summary-card">
           <div className="card-header-flex">
             <div className="card-title-group">
-              <Layers className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="card-section-title">5-LAYER DIAGNOSTIC EVALUATION</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="card-section-title">ATHER STATION SUMMARY</span>
             </div>
-            <span className="layers-count-badge">5 Screening Layers</span>
+            <span className={`summary-status-tag ${status}`}>
+              {status}
+            </span>
           </div>
-
-          <div className="layer-accordion-list">
-            {layerDefs.map(({ key, num, label, full }) => {
-              const layerData = getLayerData(key);
-              const isExpanded = Boolean(expandedLayers[key]);
-              const statusClass = layerData.status.toLowerCase();
-
-              return (
-                <div key={key} className={`layer-accordion-item ${statusClass}`}>
-                  <div
-                    className="layer-accordion-header"
-                    onClick={() => toggleLayerExpand(key)}
-                    title="Click to toggle layer diagnostic details"
-                  >
-                    <div className="layer-header-left">
-                      <span className="layer-num-badge">{num}</span>
-                      <span className="layer-name-title">{label}</span>
-                      <span className="layer-full-desc">{full}</span>
-                    </div>
-
-                    <div className="layer-header-right">
-                      <span className={`layer-status-pill ${statusClass}`}>
-                        ● {layerData.status}
-                      </span>
-                      <span className="layer-score-pill">
-                        {(layerData.score * 100).toFixed(0)}%
-                      </span>
-                      {isExpanded ? (
-                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                      ) : (
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                      )}
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="layer-accordion-body">
-                      <div className="layer-expanded-grid">
-                        <div>
-                          <span className="layer-meta-lbl">Layer Score:</span>
-                          <span className="layer-meta-val">{(layerData.score * 100).toFixed(1)}%</span>
-                        </div>
-                        <div>
-                          <span className="layer-meta-lbl">Evidence Quality:</span>
-                          <span className={`layer-quality-tag ${layerData.evidence_quality || 'MEDIUM'}`}>
-                            {layerData.evidence_quality || 'MEDIUM'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="layer-reason-text">
-                        <span className="layer-reason-lbl">Reason: </span>
-                        {layerData.reason}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className="station-summary-grid">
+            <div className="summary-metric">
+              <span className="summary-key">Current State</span>
+              <span className="summary-val font-mono">{status}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Data Quality</span>
+              <span className="summary-val">{canonicalQuality?.status || 'GOOD'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Telemetry</span>
+              <span className="summary-val">{isAwsInSitu ? 'LIVE (IN-SITU)' : 'ACTIVE'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Historical Coverage</span>
+              <span className="summary-val">{historyHours === 168 ? '7 Days' : '24 Hours'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Anomalies</span>
+              <span className="summary-val">{isAnomaly ? '1 Active' : '0'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Sensor Health</span>
+              <span className="summary-val">{canonical?.sensor_health_index !== undefined ? `${canonical.sensor_health_index.toFixed(0)}%` : '100%'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Spatial Consistency</span>
+              <span className="summary-val">{canonicalLayers?.layer4_spatial?.status || 'NORMAL'}</span>
+            </div>
+            <div className="summary-metric">
+              <span className="summary-key">Overall Assessment</span>
+              <span className="summary-val text-xs leading-tight">
+                {canonicalWeather?.summary || (isAnomaly ? 'Local sensor outlier detected' : 'Operating normally')}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -790,55 +921,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
         )}
 
 
-        {/* 10. 24-Hour Diurnal Trend Sparkline (§19.11) */}
-        {history && history.series.length > 0 && (
-          <div className="section-card trend-section">
-            <div className="card-header-flex">
-              <div className="card-title-group">
-                <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="card-section-title">24-HOUR THERMAL TREND</span>
-              </div>
-              <div className="trend-minmax">
-                Min {minTemp.toFixed(1)}°C · Max {maxTemp.toFixed(1)}°C
-              </div>
-            </div>
-
-            <svg className="sparkline-svg" viewBox="0 0 320 56">
-              <defs>
-                <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#0284c7" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-              <polyline
-                fill="none"
-                stroke="#00e5ff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points={points}
-              />
-              {isAnomaly && (
-                <circle
-                  cx="320"
-                  cy={52 - ((temps[temps.length - 1] - minTemp) / tempRange) * 42}
-                  r="4.5"
-                  fill={isWarning ? '#f59e0b' : '#ef4444'}
-                  stroke="#ffffff"
-                  strokeWidth="2"
-                />
-              )}
-            </svg>
-
-            <div className="trend-timestamps">
-              <span>24h ago</span>
-              <span>12h ago</span>
-              <span>Now (In-Situ)</span>
-            </div>
-          </div>
-        )}
-
-        {/* 11. Data Quality & Provenance Strip (§19.10) */}
+        {/* 10. Data Quality & Provenance Strip (§19.10) */}
         <div className="section-card data-quality-card">
           <div className="card-header-flex">
             <div className="card-title-group">

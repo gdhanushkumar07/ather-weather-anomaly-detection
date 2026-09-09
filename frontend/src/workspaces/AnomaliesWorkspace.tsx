@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldAlert, AlertTriangle, ChevronRight, Info, Loader2 } from 'lucide-react';
+import { ShieldAlert, Info, Loader2 } from 'lucide-react';
 import { AnomaliesSummary, Station } from '../types/weather';
 import { fetchIncidents } from '../services/api';
+import { AnomalyCard } from '../components/AnomalyCard';
 
 interface AnomaliesWorkspaceProps {
   summary: AnomaliesSummary | null;
@@ -41,36 +42,20 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
     const a = stn.anomaly;
     const isCritical = a?.severity === 'HIGH';
     return (
-      <div key={stn.id} className={`anomaly-card ${isCritical ? 'critical' : 'warning'}`}>
-        <div className="anomaly-card-severity-bar" />
-        <div className="anomaly-card-body">
-          <div className="anomaly-card-top">
-            <span className={`anomaly-severity-pill ${isCritical ? 'critical' : 'warning'}`}>
-              {isCritical ? 'CRITICAL' : 'WARNING'}
-            </span>
-            <span className="anomaly-card-station-id">{stn.id}</span>
-          </div>
-          <div className="anomaly-card-title">{a?.parameter || 'Telemetry'} anomaly</div>
-          <div className="anomaly-card-location">{stn.name} · {stn.town}</div>
-          <div className="anomaly-card-metrics">
-            <div>
-              <span className="metric-title">OBSERVED</span>
-              <div className="metric-val">{a?.observed ?? '--'} {a?.unit ?? ''}</div>
-            </div>
-            <div>
-              <span className="metric-title">CONFIDENCE</span>
-              <div className="metric-val">{a?.confidence !== undefined ? `${Math.round(a.confidence * 100)}%` : '--'}</div>
-            </div>
-            <div>
-              <span className="metric-title">ROOT CAUSE</span>
-              <div className="metric-val">{a?.rootCause ? a.rootCause.replace(/_/g, ' ') : '--'}</div>
-            </div>
-          </div>
-        </div>
-        <button className="anomaly-card-view-btn" onClick={() => onViewStation(stn.id)}>
-          VIEW <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <AnomalyCard
+        key={stn.id}
+        accent={isCritical ? 'critical' : 'warning'}
+        pillLabel={isCritical ? 'CRITICAL' : 'WARNING'}
+        stationId={stn.id}
+        title={`${a?.parameter || 'Telemetry'} anomaly`}
+        location={`${stn.name} · ${stn.town}`}
+        onView={() => onViewStation(stn.id)}
+        metrics={[
+          { label: 'OBSERVED', value: `${a?.observed ?? '--'} ${a?.unit ?? ''}` },
+          { label: 'CONFIDENCE', value: a?.confidence !== undefined ? `${Math.round(a.confidence * 100)}%` : '--' },
+          { label: 'ROOT CAUSE', value: a?.rootCause ? a.rootCause.replace(/_/g, ' ') : '--' },
+        ]}
+      />
     );
   };
 
@@ -78,25 +63,20 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
     const snap = inc.latest_snapshot || {};
     const isCritical = snap.severity === 'HIGH';
     return (
-      <div key={inc.incident_id} className={`anomaly-card ${isCritical ? 'critical' : 'warning'}`}>
-        <div className="anomaly-card-severity-bar" />
-        <div className="anomaly-card-body">
-          <div className="anomaly-card-top">
-            <span className={`incident-state-pill ${inc.state}`}>{inc.state}</span>
-            <span className="anomaly-card-station-id">{inc.station_id}</span>
-          </div>
-          <div className="anomaly-card-title">{snap.parameter || 'Telemetry'} anomaly</div>
-          <div className="anomaly-card-location">{snap.station_name} · {snap.town}</div>
-          <div className="anomaly-card-metrics">
-            <div><span className="metric-title">OBSERVED</span><div className="metric-val">{snap.observed ?? '--'} {snap.unit ?? ''}</div></div>
-            <div><span className="metric-title">SEVERITY</span><div className="metric-val">{snap.severity ?? '--'}</div></div>
-            <div><span className="metric-title">ROOT CAUSE</span><div className="metric-val">{snap.root_cause ? String(snap.root_cause).replace(/_/g, ' ') : '--'}</div></div>
-          </div>
-        </div>
-        <button className="anomaly-card-view-btn" onClick={() => onViewStation(inc.station_id)}>
-          VIEW <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      <AnomalyCard
+        key={inc.incident_id}
+        accent={isCritical ? 'critical' : 'warning'}
+        pillLabel={inc.state}
+        stationId={inc.station_id}
+        title={`${snap.parameter || 'Telemetry'} anomaly`}
+        location={`${snap.station_name} · ${snap.town}`}
+        onView={() => onViewStation(inc.station_id)}
+        metrics={[
+          { label: 'OBSERVED', value: `${snap.observed ?? '--'} ${snap.unit ?? ''}` },
+          { label: 'SEVERITY', value: snap.severity ?? '--' },
+          { label: 'ROOT CAUSE', value: snap.root_cause ? String(snap.root_cause).replace(/_/g, ' ') : '--' },
+        ]}
+      />
     );
   };
 
@@ -104,7 +84,7 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
     <div className="anomalies-workspace">
       <div className="workspace-page-header">
         <div className="workspace-page-title-group">
-          <ShieldAlert className="w-5 h-5 text-red-400" />
+          <div className="workspace-page-icon-badge"><ShieldAlert className="w-4 h-4 text-red-400" /></div>
           <div>
             <div className="workspace-page-title">ATHER ANOMALIES</div>
             <div className="workspace-page-subtitle">Operational anomaly management — evidence, root cause, and incident actions.</div>

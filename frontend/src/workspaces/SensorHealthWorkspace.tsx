@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { HeartPulse, Wifi, Radio, AlertTriangle, ChevronRight, Info } from 'lucide-react';
+import { HeartPulse, Wifi, Radio, AlertTriangle, Info } from 'lucide-react';
 import { AnomaliesSummary } from '../types/weather';
+import { AnomalyCard } from '../components/AnomalyCard';
 
 interface SensorHealthWorkspaceProps {
   summary: AnomaliesSummary | null;
@@ -36,7 +37,7 @@ export const SensorHealthWorkspace: React.FC<SensorHealthWorkspaceProps> = ({ su
     <div className="sensor-health-workspace">
       <div className="workspace-page-header">
         <div className="workspace-page-title-group">
-          <HeartPulse className="w-5 h-5 text-amber-400" />
+          <div className="workspace-page-icon-badge"><HeartPulse className="w-4 h-4 text-amber-400" /></div>
           <div>
             <div className="workspace-page-title">SENSOR HEALTH</div>
             <div className="workspace-page-subtitle">How healthy is the AWS network right now?</div>
@@ -91,20 +92,20 @@ export const SensorHealthWorkspace: React.FC<SensorHealthWorkspaceProps> = ({ su
             </div>
           ) : (
             degradedStations.map((stn) => (
-              <div key={stn.id} className="anomaly-card warning">
-                <div className="anomaly-card-severity-bar" />
-                <div className="anomaly-card-body">
-                  <div className="anomaly-card-top">
-                    <span className="anomaly-severity-pill warning">WARNING</span>
-                    <span className="anomaly-card-station-id">{stn.id}</span>
-                  </div>
-                  <div className="anomaly-card-title">{stn.anomaly?.parameter || 'Sensor'} degradation</div>
-                  <div className="anomaly-card-location">{stn.name} · {stn.town}</div>
-                </div>
-                <button className="anomaly-card-view-btn" onClick={() => onViewStation(stn.id)}>
-                  VIEW <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <AnomalyCard
+                key={stn.id}
+                accent="warning"
+                pillLabel="WARNING"
+                stationId={stn.id}
+                title={`${stn.anomaly?.parameter || 'Sensor'} degradation`}
+                location={`${stn.name} · ${stn.town}`}
+                onView={() => onViewStation(stn.id)}
+                metrics={[
+                  { label: 'OBSERVED', value: stn.anomaly?.observed !== undefined ? `${stn.anomaly.observed} ${stn.anomaly.unit ?? ''}` : '--' },
+                  { label: 'HEALTH', value: stn.anomaly?.healthIndex !== undefined ? `${Math.round(stn.anomaly.healthIndex)}%` : '--' },
+                  { label: 'ROOT CAUSE', value: stn.anomaly?.rootCause ? stn.anomaly.rootCause.replace(/_/g, ' ') : '--' },
+                ]}
+              />
             ))
           )}
         </div>

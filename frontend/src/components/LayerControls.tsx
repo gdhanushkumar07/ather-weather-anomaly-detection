@@ -1,5 +1,5 @@
 import React from 'react';
-import { Thermometer, Gauge, Droplets, Radio, Eye, X, ShieldAlert } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Filter } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
@@ -46,18 +46,10 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         </button>
       </div>
 
-      {/* Top Active Status Capsule (Matches Reference Image) */}
-      <div className="active-mode-capsule">
-        <Eye className="w-3.5 h-3.5 text-cyan-400" />
-        <span className="active-mode-text">
-          Active: <strong className="text-white">{basemap === 'satellite' ? 'Satellite (Clear)' : 'Dark Map (Base)'}</strong>
-        </span>
-      </div>
-
-      {/* Core Meteorological Inputs */}
+      {/* Group 1: Map Layers — the three parameter visualizations (mutually exclusive). */}
       <div className="control-group-card">
         <div className="control-group-header">
-          <span>ATHER CORE INPUTS</span>
+          <span>MAP LAYERS</span>
         </div>
 
         <div
@@ -112,28 +104,63 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         </div>
       </div>
 
-      {/* AWS Monitoring Section */}
+      {/* Group 2: Display — everything controlling what's drawn on top of the
+          basemap (markers, anomaly halo, status filter), consolidated into
+          one compact group instead of three separate cards. */}
       <div className="control-group-card">
         <div className="control-group-header">
-          <span>AWS MONITORING</span>
+          <span>DISPLAY</span>
         </div>
+
         <div
-          className={`aws-station-toggle ${activeLayers.stations ? 'active' : ''}`}
+          className={`display-row-toggle ${activeLayers.stations ? 'active' : ''}`}
           onClick={() => onToggleLayer('stations')}
           title="Toggle Global AWS Station Observation Markers"
         >
           <div className="aws-toggle-left">
-            <span className={`aws-status-dot ${activeLayers.stations ? 'active' : ''}`} />
-            <span className="aws-status-text">AWS MARKERS</span>
-          </div>
-          <div className="aws-toggle-right">
-            <span className="aws-state-badge">{activeLayers.stations ? '(ON)' : '(OFF)'}</span>
             <Radio className="w-3.5 h-3.5" />
+            <span className="aws-status-text">AWS Markers</span>
           </div>
+          <span className={`display-row-state ${activeLayers.stations ? 'on' : ''}`}>{activeLayers.stations ? 'ON' : 'OFF'}</span>
+        </div>
+
+        <div
+          className={`display-row-toggle ${showAnomalyOverlay ? 'active' : ''}`}
+          onClick={onToggleAnomalyOverlay}
+          title="Toggle the pulsing anomaly-alert halo on anomalous stations"
+        >
+          <div className="aws-toggle-left">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span className="aws-status-text">Anomaly Halo</span>
+          </div>
+          <span className={`display-row-state ${showAnomalyOverlay ? 'on' : ''}`}>{showAnomalyOverlay ? 'ON' : 'OFF'}</span>
+        </div>
+
+        <div className="display-row-divider" />
+
+        <div className="display-row-label">
+          <Filter className="w-3 h-3" /> Station status
+        </div>
+        <div className="status-filter-chip-row">
+          {(['NORMAL', 'WARNING', 'ANOMALY'] as const).map((s) => (
+            <button
+              key={s}
+              className={`status-filter-chip ${s.toLowerCase()} ${statusFilter === s ? 'active' : ''}`}
+              onClick={() => onSetStatusFilter(statusFilter === s ? null : s)}
+              title={`Show only ${s} stations`}
+            >
+              {s}
+            </button>
+          ))}
+          {statusFilter && (
+            <button className="status-filter-chip clear" onClick={() => onSetStatusFilter(null)} title="Clear filter">
+              ALL
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Basemap Selection */}
+      {/* Group 3: Basemap */}
       <div className="control-group-card">
         <div className="control-group-header">
           <span>BASEMAP</span>
@@ -156,53 +183,6 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
             <span>SATELLITE</span>
           </button>
         </div>
-      </div>
-
-      {/* Anomaly Overlay (Phase 5): independent of the AWS markers toggle —
-          controls only the pulsing anomaly-alert halo. */}
-      <div className="control-group-card">
-        <div className="control-group-header">
-          <span>ANOMALY OVERLAY</span>
-        </div>
-        <div
-          className={`aws-station-toggle ${showAnomalyOverlay ? 'active' : ''}`}
-          onClick={onToggleAnomalyOverlay}
-          title="Toggle the pulsing anomaly-alert halo on anomalous stations"
-        >
-          <div className="aws-toggle-left">
-            <span className={`aws-status-dot ${showAnomalyOverlay ? 'active' : ''}`} />
-            <span className="aws-status-text">ANOMALY HALO</span>
-          </div>
-          <div className="aws-toggle-right">
-            <span className="aws-state-badge">{showAnomalyOverlay ? '(ON)' : '(OFF)'}</span>
-            <ShieldAlert className="w-3.5 h-3.5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Station Status Filter — which stations are shown on the map at all. */}
-      <div className="control-group-card">
-        <div className="control-group-header">
-          <span>STATION STATUS FILTER</span>
-        </div>
-        <div className="basemap-toggle-row" style={{ flexWrap: 'wrap', gap: '6px' }}>
-          {(['NORMAL', 'WARNING', 'ANOMALY'] as const).map((s) => (
-            <button
-              key={s}
-              className={`basemap-pill-btn ${statusFilter === s ? 'active' : ''}`}
-              onClick={() => onSetStatusFilter(statusFilter === s ? null : s)}
-              title={`Show only ${s} stations`}
-            >
-              <span className={`basemap-radio-indicator ${statusFilter === s ? 'active' : ''}`} />
-              <span>{s}</span>
-            </button>
-          ))}
-        </div>
-        {statusFilter && (
-          <button className="map-options-clear-filter-btn" onClick={() => onSetStatusFilter(null)}>
-            Clear filter — show all stations
-          </button>
-        )}
       </div>
     </aside>
   );

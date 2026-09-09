@@ -206,6 +206,7 @@ export interface AnomaliesSummary {
   normalCount: number;
   warningCount: number;
   anomalyCount: number;
+  offlineCount?: number;
   activeAnomalies: Station[];
   activeWarnings: Station[];
 }

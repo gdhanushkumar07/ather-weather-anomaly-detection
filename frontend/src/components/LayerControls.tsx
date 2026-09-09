@@ -36,39 +36,51 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         <div
           className={`control-capsule ${activeLayers.temperature ? 'active' : ''}`}
           onClick={() => onToggleLayer('temperature')}
+          title="Surface Temperature observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.temperature ? 'active' : ''}`} />
-            <span>Temperature</span>
+            <span className="capsule-param-name">Temperature</span>
           </div>
-          <div className="circle-icon-badge temp-gradient-badge">
-            <Thermometer className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.temperature && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge temp-gradient-badge">
+              <Thermometer className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
 
         <div
           className={`control-capsule ${activeLayers.pressure ? 'active' : ''}`}
           onClick={() => onToggleLayer('pressure')}
+          title="Atmospheric Pressure observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.pressure ? 'active' : ''}`} />
-            <span>Pressure</span>
+            <span className="capsule-param-name">Pressure</span>
           </div>
-          <div className="circle-icon-badge pressure-gradient-badge">
-            <Gauge className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.pressure && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge pressure-gradient-badge">
+              <Gauge className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
 
         <div
           className={`control-capsule ${activeLayers.humidity ? 'active' : ''}`}
           onClick={() => onToggleLayer('humidity')}
+          title="Relative Humidity observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.humidity ? 'active' : ''}`} />
-            <span>Relative Humidity</span>
+            <span className="capsule-param-name">Relative Humidity</span>
           </div>
-          <div className="circle-icon-badge humidity-gradient-badge">
-            <Droplets className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.humidity && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge humidity-gradient-badge">
+              <Droplets className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
       </div>

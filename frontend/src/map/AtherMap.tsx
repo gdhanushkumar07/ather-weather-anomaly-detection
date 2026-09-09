@@ -5,7 +5,6 @@ import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
 import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField } from './StationLayer';
-import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 
@@ -29,7 +28,6 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
-  const colormapLayerRef = useRef<VaneColormapLayer | null>(null);
   const particlesLayerRef = useRef<VaneParticlesLayer | null>(null);
 
   const [isMapReady, setIsMapReady] = React.useState(false);
@@ -171,39 +169,20 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     updateSelectedStationHalo(map, selectedStationId);
   }, [selectedStationId, isMapReady]);
 
-  // 5. Vane Temperature WebGL Layer Toggle
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapReady) return;
+  // NOTE: There used to be a "Vane Temperature WebGL Layer" here that fetched
+  // a fully synthetic, procedurally generated global temperature field from
+  // /api/weather/grid (see backend/app/weather/grid_service.py — a math
+  // function of latitude/longitude only, with NO connection to any real AWS
+  // observation) and painted it as a full-viewport WebGL raster. That is
+  // exactly the "large cyan/colored tint that isn't actually data-driven"
+  // bug reported against this feature. It has been permanently removed.
+  // The ONLY temperature/pressure/humidity visualization now is the
+  // real-station-data parameter halo wired in effect 3b above
+  // (setParameterLayer, from StationLayer.ts), which is driven strictly by
+  // each station's own reported value.
 
-    if (activeLayers.temperature) {
-      if (!colormapLayerRef.current) {
-        fetchWeatherGrid('temperature')
-          .then((grid: GridFieldData) => {
-            if (!mapRef.current) return;
-            const layer = new VaneColormapLayer(grid);
-            colormapLayerRef.current = layer;
-            // Insert beneath reference overlay & stations
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
-            if (!map.getLayer(layer.id)) {
-              map.addLayer(layer, beforeId);
-            }
-          })
-          .catch((err) => console.error('Failed to load temperature field', err));
-      } else {
-        if (!map.getLayer(colormapLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
-          map.addLayer(colormapLayerRef.current, beforeId);
-        }
-      }
-    } else {
-      if (colormapLayerRef.current && map.getLayer(colormapLayerRef.current.id)) {
-        map.removeLayer(colormapLayerRef.current.id);
-      }
-    }
-  }, [activeLayers.temperature, isMapReady]);
-
-  // 6. Vane Wind WebGL Particle Layer Toggle
+  // 6. Vane Wind WebGL Particle Layer Toggle (unchanged — wind is out of
+  // scope for this fix and was not reported as broken).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
@@ -290,14 +269,46 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     <div className="map-viewport">
       <div ref={mapContainerRef} className="maplibre-container" />
 
-      {/* Dynamic Parameter Legend — reflects whichever of Temperature /
-          Pressure / Relative Humidity is actually active, using the real
-          per-station color ramps (Phase 3: Dynamic Legend). */}
+      {/* Phase 9: Active-Layer Indicator Badge */}
+      <div className="active-layer-indicator-pill">
+        <span className="active-layer-dot" />
+        <div className="active-layer-text">
+          <span className="layer-tag-label">ACTIVE LAYER: </span>
+          <strong className="layer-param-name">
+            {activeParameter === 'temperature'
+              ? 'SURFACE TEMPERATURE · AWS OBSERVATIONS'
+              : activeParameter === 'pressure'
+                ? 'ATMOSPHERIC PRESSURE · AWS OBSERVATIONS'
+                : activeParameter === 'humidity'
+                  ? 'RELATIVE HUMIDITY · AWS OBSERVATIONS'
+                  : activeLayers.wind
+                    ? 'WIND PARTICLES · GFS / METEO VECTOR'
+                    : `AWS NETWORK STATIONS · ${basemap === 'dark' ? 'DARK MAP' : 'SATELLITE'}`}
+          </strong>
+        </div>
+      </div>
+
+      {/* Phase 10: Dynamic Parameter Legend */}
       {activeParameter && (
         <div className="weather-legend">
+          <div className="legend-header-row">
+            <div className="legend-title-group">
+              <span className="legend-primary-title">
+                {activeParameter === 'temperature'
+                  ? 'SURFACE TEMPERATURE'
+                  : activeParameter === 'pressure'
+                    ? 'ATMOSPHERIC PRESSURE'
+                    : 'RELATIVE HUMIDITY'}
+              </span>
+              <span className="legend-unit-badge">
+                {activeParameter === 'temperature' ? '°C' : activeParameter === 'pressure' ? 'hPa' : '%'}
+              </span>
+            </div>
+            <span className="legend-source-tag">AWS IN-SITU / NWP REF</span>
+          </div>
+
           {activeParameter === 'temperature' && (
             <>
-              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Surface Temperature (°C)</div>
               <div className="legend-bar temp-gradient" />
               <div className="legend-labels">
                 <span>-30°</span><span>0°</span><span>+15°</span><span>+30°</span><span>+45°</span>
@@ -306,7 +317,6 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           )}
           {activeParameter === 'pressure' && (
             <>
-              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Atmospheric Pressure (hPa)</div>
               <div className="legend-bar pressure-gradient" />
               <div className="legend-labels">
                 <span>975</span><span>992</span><span>1013</span><span>1022</span><span>1035</span>
@@ -315,7 +325,6 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           )}
           {activeParameter === 'humidity' && (
             <>
-              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Relative Humidity (%)</div>
               <div className="legend-bar humidity-gradient" />
               <div className="legend-labels">
                 <span>10%</span><span>30%</span><span>55%</span><span>75%</span><span>98%</span>
@@ -323,9 +332,8 @@ export const AtherMap: React.FC<AtherMapProps> = ({
             </>
           )}
           <div className="legend-provenance-note">
-            Colored by each station's own reported value. Stations without a connected
-            AWS sensor feed show an NWP model reference value instead — see the station
-            panel for exact provenance per station.
+            Colored by each station's own reported value. Stations with active telemetry show AWS In-Situ;
+            others show NWP model reference — see the station panel for exact provenance.
           </div>
         </div>
       )}

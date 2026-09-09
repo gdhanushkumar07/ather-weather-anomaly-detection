@@ -4,6 +4,7 @@ import { TopNav } from './components/TopNav';
 import { LayerControls } from './components/LayerControls';
 import { StationPanel } from './panels/StationPanel';
 import { TestLabModal } from './components/TestLabModal';
+import { NetworkOverview } from './components/NetworkOverview';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
 import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary } from './services/api';
 
@@ -14,6 +15,7 @@ export const App: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
   const [isTestLabOpen, setIsTestLabOpen] = useState(false);
+  const [isOverviewOpen, setIsOverviewOpen] = useState(false);
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
     stations: true,
@@ -86,6 +88,19 @@ export const App: React.FC = () => {
         statusFilter={statusFilter}
         onSetStatusFilter={setStatusFilter}
         onOpenTestLab={() => setIsTestLabOpen(true)}
+        onToggleOverview={() => setIsOverviewOpen((prev) => !prev)}
+        isOverviewOpen={isOverviewOpen}
+      />
+
+      {/* Collapsible Network Overview & Regional Weather Intelligence */}
+      <NetworkOverview
+        summary={summary}
+        stationsGeoJSON={stationsGeoJSON}
+        isOpen={isOverviewOpen}
+        onToggle={() => setIsOverviewOpen((prev) => !prev)}
+        onSelectStation={(id) => {
+          handleSelectStation(id);
+        }}
       />
 
       {/* Weather Layer Controls Right Panel */}

@@ -61,6 +61,12 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
   const [isIncidentBusy, setIsIncidentBusy] = useState(false);
   const [showEscalationPreview, setShowEscalationPreview] = useState(false);
 
+  // 5-Layer accordion progressive disclosure (Phase 12)
+  const [expandedLayers, setExpandedLayers] = useState<Record<string, boolean>>({});
+  const toggleLayerExpand = (key: string) => {
+    setExpandedLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   useEffect(() => {
     if (station) {
       setCachedStation(station);
@@ -216,13 +222,13 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
     })
     .join(' ');
 
-  // 5-Layer card definitions
+  // 5-Layer card definitions (Phase 12)
   const layerDefs = [
-    { key: 'physics', label: 'Physics Validation', short: 'L1 Physics' },
-    { key: 'temporal', label: 'Temporal Pattern', short: 'L2 Temporal' },
-    { key: 'multivariate', label: 'Multivariate State', short: 'L3 Multivariate' },
-    { key: 'spatial', label: 'Spatial Consensus', short: 'L4 Spatial' },
-    { key: 'drift', label: 'Sensor Drift & Health', short: 'L5 Drift' },
+    { key: 'physics', num: '01', label: 'PHYSICS', full: 'Thermodynamic Boundary Validation' },
+    { key: 'temporal', num: '02', label: 'TEMPORAL', full: 'Temporal Rate of Change & Persistence' },
+    { key: 'multivariate', num: '03', label: 'MULTIVARIATE', full: 'Inter-Channel Correlation' },
+    { key: 'spatial', num: '04', label: 'SPATIAL', full: 'Regional AWS Mesh Consensus' },
+    { key: 'drift', num: '05', label: 'SENSOR HEALTH', full: 'Sensor Degradation & Drift' },
   ];
 
   const getLayerData = (key: string): CanonicalLayerCard => {
@@ -240,6 +246,32 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       reason: score >= 0.70 ? 'Elevated layer divergence detected' : 'Within normal statistical threshold',
     };
   };
+
+  // Phase 14: Evidence derivation from real engine output
+  const flaggedEvidence: string[] = (() => {
+    if (canonicalDiag?.evidence && canonicalDiag.evidence.length > 0) {
+      return canonicalDiag.evidence;
+    }
+    if (incident?.latest_snapshot?.evidence && incident.latest_snapshot.evidence.length > 0) {
+      return incident.latest_snapshot.evidence;
+    }
+    if (canonical?.reasons && canonical.reasons.length > 0) {
+      return canonical.reasons;
+    }
+    const list: string[] = [];
+    const l1 = getLayerData('physics');
+    const l2 = getLayerData('temporal');
+    const l3 = getLayerData('multivariate');
+    const l4 = getLayerData('spatial');
+    const l5 = getLayerData('drift');
+
+    if (l1.status === 'ANOMALY' || l1.status === 'VETO') list.push('Physics deviation: ' + l1.reason);
+    if (l2.status === 'ANOMALY') list.push('Temporal spike: ' + l2.reason);
+    if (l4.status === 'ANOMALY' || l4.status === 'WARNING') list.push('Spatial outlier: ' + l4.reason);
+    if (l3.status === 'ANOMALY') list.push('Multivariate inconsistency: ' + l3.reason);
+    if (l5.status === 'ANOMALY' || l5.status === 'WARNING') list.push('Sensor drift: ' + l5.reason);
+    return list;
+  })();
 
   return (
     <div className={`station-panel-wrapper ${station ? 'expanded' : 'collapsed'}`}>
@@ -287,36 +319,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
       </div>
 
       <div className="station-panel-body">
-        {/* 2. Status Block (§19.3) */}
-        <div className={`primary-status-banner ${status}`}>
-          <div className="status-banner-left">
-            <div className={`status-pill ${status}`}>
-              <span className="status-pill-dot" />
-              <span className="status-pill-text">{status}</span>
-            </div>
-            {severityLevel !== 'NONE' && (
-              <span className={`severity-tag ${severityLevel}`}>{severityLevel} SEVERITY</span>
-            )}
-          </div>
-
-          <div className="status-banner-metrics">
-            <div className="status-metric-item">
-              <span className="metric-title">ANOMALY SCORE</span>
-              <span className={`metric-val ${isAnomaly ? 'alert' : isWarning ? 'warn' : 'normal'}`}>
-                {(anomalyScore * 100).toFixed(0)}%
-              </span>
-            </div>
-            <div className="status-metric-item">
-              <span className="metric-title">CONFIDENCE</span>
-              <span className="metric-val" title={`Evidence quality: ${confidenceLevel}`}>
-                {(confidenceScore * 100).toFixed(0)}%
-                <span className={`conf-badge-mini ${confidenceLevel}`}>{confidenceLevel}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* 3. Current Conditions (§19.2) - Explicitly Sourced AWS Telemetry */}
+        {/* 1. Live Observations (§19.2) - Explicitly Sourced AWS Telemetry */}
         <div className="section-card observation-card">
           <div className="card-header-flex">
             <div className="card-title-group">
@@ -379,12 +382,8 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
             </div>
           </div>
 
-          {/* Model Forecast Comparison Drawer (Delineates Open-Meteo NWP from Station Data) */}
+          {/* Model Forecast Comparison Drawer */}
           {isNwpReference ? (
-            // The primary reading above IS the Open-Meteo NWP output for this
-            // station (no AWS sensor is connected) — fetching Open-Meteo again
-            // here would just compare the same source to itself, which is
-            // meaningless and would falsely look like independent validation.
             <div className="model-comparison-container">
               <div className="nwp-self-source-disclosure">
                 <CloudSun className="w-3.5 h-3.5 text-amber-400" />
@@ -396,82 +395,273 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
               </div>
             </div>
           ) : (
-          <div className="model-comparison-container">
-            <button
-              className="btn-toggle-comparison"
-              onClick={() => setShowModelComparison(!showModelComparison)}
-            >
-              <div className="toggle-left">
-                <CloudSun className="w-3.5 h-3.5 text-sky-400" />
-                <span>Open-Meteo NWP Model Reference</span>
-                <span className="model-tag-pill">NWP Forecast</span>
-              </div>
-              {showModelComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+            <div className="model-comparison-container">
+              <button
+                className="btn-toggle-comparison"
+                onClick={() => setShowModelComparison(!showModelComparison)}
+              >
+                <div className="toggle-left">
+                  <CloudSun className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Open-Meteo NWP Model Reference</span>
+                  <span className="model-tag-pill">NWP Forecast</span>
+                </div>
+                {showModelComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
 
-            {showModelComparison && (
-              <div className="model-comparison-drawer">
-                {isLoadingWeather ? (
-                  <div className="model-loading-hint">Fetching localized atmospheric model grid...</div>
-                ) : weatherError ? (
-                  <div className="model-error-hint">{weatherError}</div>
-                ) : currentWeather ? (
-                  <div className="model-grid-comparison">
-                    <div className="model-comparison-row">
-                      <span className="cmp-label">Model Temperature:</span>
-                      <span className="cmp-val">{currentWeather.temperature.toFixed(1)}°C</span>
-                      {obsTemp !== null && (
-                        <span className={`cmp-delta ${Math.abs(currentWeather.temperature - obsTemp) > 3.0 ? 'delta-high' : 'delta-ok'}`}>
-                          Δ {(obsTemp - currentWeather.temperature).toFixed(1)}°C
-                        </span>
-                      )}
+              {showModelComparison && (
+                <div className="model-comparison-drawer">
+                  {isLoadingWeather ? (
+                    <div className="model-loading-hint">Fetching localized atmospheric model grid...</div>
+                  ) : weatherError ? (
+                    <div className="model-error-hint">{weatherError}</div>
+                  ) : currentWeather ? (
+                    <div className="model-grid-comparison">
+                      <div className="model-comparison-row">
+                        <span className="cmp-label">Model Temperature:</span>
+                        <span className="cmp-val">{currentWeather.temperature.toFixed(1)}°C</span>
+                        {obsTemp !== null && (
+                          <span className={`cmp-delta ${Math.abs(currentWeather.temperature - obsTemp) > 3.0 ? 'delta-high' : 'delta-ok'}`}>
+                            Δ {(obsTemp - currentWeather.temperature).toFixed(1)}°C
+                          </span>
+                        )}
+                      </div>
+                      <div className="model-comparison-row">
+                        <span className="cmp-label">Model Pressure:</span>
+                        <span className="cmp-val">{currentWeather.pressure.toFixed(1)} hPa</span>
+                        {obsPress !== null && obsPress >= 1.0 && (
+                          <span className={`cmp-delta ${Math.abs(currentWeather.pressure - obsPress) > 15.0 ? 'delta-high' : 'delta-ok'}`}>
+                            Δ {(obsPress - currentWeather.pressure).toFixed(1)} hPa
+                          </span>
+                        )}
+                      </div>
+                      <div className="model-comparison-row">
+                        <span className="cmp-label">Model Humidity:</span>
+                        <span className="cmp-val">{Math.round(currentWeather.humidity)}%</span>
+                      </div>
+                      <div className="model-comparison-row">
+                        <span className="cmp-label">Model Wind:</span>
+                        <span className="cmp-val">{currentWeather.windSpeed} km/h {currentWeather.windDirection}</span>
+                      </div>
+                      <div className="model-provenance-note">
+                        * NWP reference is generated from Open-Meteo ECMWF/GFS global models at 0.1° resolution.
+                      </div>
                     </div>
-                    <div className="model-comparison-row">
-                      <span className="cmp-label">Model Pressure:</span>
-                      <span className="cmp-val">{currentWeather.pressure.toFixed(1)} hPa</span>
-                      {obsPress !== null && obsPress >= 1.0 && (
-                        <span className={`cmp-delta ${Math.abs(currentWeather.pressure - obsPress) > 15.0 ? 'delta-high' : 'delta-ok'}`}>
-                          Δ {(obsPress - currentWeather.pressure).toFixed(1)} hPa
-                        </span>
-                      )}
-                    </div>
-                    <div className="model-comparison-row">
-                      <span className="cmp-label">Model Humidity:</span>
-                      <span className="cmp-val">{Math.round(currentWeather.humidity)}%</span>
-                    </div>
-                    <div className="model-comparison-row">
-                      <span className="cmp-label">Model Wind:</span>
-                      <span className="cmp-val">{currentWeather.windSpeed} km/h {currentWeather.windDirection}</span>
-                    </div>
-                    <div className="model-provenance-note">
-                      * NWP reference is generated from Open-Meteo ECMWF/GFS global models at 0.1° resolution. Discrepancies may reflect microclimate or sensor calibration offsets.
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* 4. "Why?" / Analytical Summary (§19.4) */}
-        <div className="section-card explanation-card">
+        {/* 2. Station Health Section (Phase 11) */}
+        <div className="section-card station-health-card">
           <div className="card-header-flex">
             <div className="card-title-group">
-              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span className="card-section-title">ANALYSIS SUMMARY & EXPLANATION</span>
+              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="card-section-title">STATION HEALTH & TELEMETRY</span>
             </div>
-            {canonical?.veto_fired && <span className="veto-fired-pill">PHYSICS VETO FIRED</span>}
+            <div className={`status-pill ${status}`}>
+              <span className="status-pill-dot" />
+              <span className="status-pill-text">{status}</span>
+            </div>
           </div>
-          <p className="explanation-paragraph">
-            {canonical?.explanation ||
-              (isAnomaly
-                ? 'Elevated sensor channel divergence detected by multi-layer screening.'
-                : 'Nominal conditions verified across thermodynamic physical boundaries, statistical temporal series, multivariate correlation manifolds, and regional spatial mesh.')}
-          </p>
+
+          <div className="station-health-grid">
+            <div className="health-grid-col">
+              <span className="health-grid-lbl">Health Score</span>
+              <span className="health-grid-val">
+                {canonical?.sensor_health_index !== undefined ? `${canonical.sensor_health_index.toFixed(0)}%` : '100%'}
+              </span>
+            </div>
+            <div className="health-grid-col">
+              <span className="health-grid-lbl">Telemetry State</span>
+              <span className="health-grid-val">
+                {awsTelemetryStatus === 'TELEMETRY_AVAILABLE' ? 'ONLINE / CONNECTED' : 'UNAVAILABLE'}
+              </span>
+            </div>
+            <div className="health-grid-col">
+              <span className="health-grid-lbl">Anomaly Score</span>
+              <span className={`health-grid-val ${isAnomaly ? 'alert' : isWarning ? 'warn' : 'normal'}`}>
+                {(anomalyScore * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="health-grid-col">
+              <span className="health-grid-lbl">Confidence</span>
+              <span className="health-grid-val">
+                {(confidenceScore * 100).toFixed(0)}% ({confidenceLevel})
+              </span>
+            </div>
+          </div>
+
+          {canonical?.sensor_health_index !== undefined && (
+            <div className="health-bar-track">
+              <div
+                className="health-bar-fill"
+                style={{
+                  width: `${Math.max(5, canonical.sensor_health_index)}%`,
+                  backgroundColor:
+                    canonical.sensor_health_index > 75
+                      ? '#10b981'
+                      : canonical.sensor_health_index > 50
+                      ? '#f59e0b'
+                      : '#ef4444',
+                }}
+              />
+            </div>
+          )}
+
+          {canonical?.estimated_days_to_failure && (
+            <div className="days-failure-hint">
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+              <span>
+                Projected out-of-tolerance drift in ~{canonical.estimated_days_to_failure.toFixed(1)} days based on CUSUM trajectory
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* 5. 5-Layer Diagnostic Breakdown Cards (§19.6, §21) */}
+        {/* 3. Phase 13-16: Anomaly Intelligence & Incident Workflow (When Anomaly/Warning exists) */}
+        {(isAnomaly || isWarning) && (
+          <div className="section-card anomaly-intelligence-card">
+            <div className="card-header-flex">
+              <div className="card-title-group">
+                <AlertOctagon className="w-3.5 h-3.5 text-red-400" />
+                <span className="card-section-title">ANOMALY INTELLIGENCE</span>
+              </div>
+              <span className={`anomaly-severity-banner-pill ${severityLevel}`}>
+                {severityLevel}
+              </span>
+            </div>
+
+            <div className="anomaly-intelligence-details">
+              <div className="anomaly-headline">
+                <span className="anomaly-param-tag">
+                  {incident?.latest_snapshot?.parameter || 'Temperature'} Anomaly
+                </span>
+                <span className="anomaly-stn-tag">Station ID: {currentStation.id}</span>
+              </div>
+
+              <div className="anomaly-metrics-grid">
+                <div className="anomaly-metric-box">
+                  <span className="anomaly-box-lbl">Observed:</span>
+                  <span className="anomaly-box-val alert">
+                    {incident?.latest_snapshot?.observed !== undefined
+                      ? `${incident.latest_snapshot.observed} ${incident.latest_snapshot.unit || ''}`
+                      : obsTemp !== null && obsTemp !== undefined ? `${obsTemp.toFixed(1)} °C` : '--'}
+                  </span>
+                </div>
+                <div className="anomaly-metric-box">
+                  <span className="anomaly-box-lbl">Expected:</span>
+                  <span className="anomaly-box-val">
+                    {incident?.latest_snapshot?.expected_min !== undefined
+                      ? `${incident.latest_snapshot.expected_min}–${incident.latest_snapshot.expected_max} ${incident.latest_snapshot.unit || ''}`
+                      : currentWeather ? `${currentWeather.temperature.toFixed(1)} °C (NWP)` : 'Mesh Baseline'}
+                  </span>
+                </div>
+                <div className="anomaly-metric-box">
+                  <span className="anomaly-box-lbl">Anomaly Score:</span>
+                  <span className="anomaly-box-val alert">{(anomalyScore * 100).toFixed(0)}%</span>
+                </div>
+                <div className="anomaly-metric-box">
+                  <span className="anomaly-box-lbl">Confidence:</span>
+                  <span className="anomaly-box-val">{confidenceLevel}</span>
+                </div>
+              </div>
+
+              <div className="anomaly-root-cause-row">
+                <span className="root-cause-lbl">Root Cause:</span>
+                <strong className="root-cause-val">
+                  {String(canonicalDiag?.primary || canonical?.root_cause || incident?.latest_snapshot?.root_cause || 'Likely Sensor Fault').replace(/_/g, ' ')}
+                </strong>
+              </div>
+            </div>
+
+            {/* Phase 14: WHY WAS THIS FLAGGED */}
+            {flaggedEvidence.length > 0 && (
+              <div className="why-flagged-section">
+                <div className="why-flagged-header">
+                  <span>WHY THIS WAS FLAGGED</span>
+                </div>
+                <ul className="why-flagged-list">
+                  {flaggedEvidence.map((item, idx) => (
+                    <li key={idx} className="why-flagged-item">
+                      <Check className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Phase 15 & 16: WHAT SHOULD HAPPEN NEXT? & INCIDENT WORKFLOW */}
+            <div className="action-workflow-section">
+              <div className="action-header">
+                <span>RECOMMENDED ACTION</span>
+              </div>
+              <p className="action-text">
+                {canonicalDiag?.operator_action ||
+                  incident?.latest_snapshot?.recommended_action ||
+                  (isAnomaly
+                    ? 'Inspect temperature sensor calibration and cross-check neighboring stations.'
+                    : 'Continue routine telemetry monitoring.')}
+              </p>
+
+              {/* Workflow Stepper */}
+              <div className="incident-workflow-stepper">
+                <span className="step-pill done">DIAGNOSIS</span>
+                <span className="step-arrow">→</span>
+                <span className="step-pill done">ROOT CAUSE</span>
+                <span className="step-arrow">→</span>
+                <span className="step-pill active">RECOMMENDED ACTION</span>
+                <span className="step-arrow">→</span>
+                <span className="step-pill pending">INCIDENT</span>
+              </div>
+
+              {incident && incident.state !== 'RESOLVED' && incident.state !== 'DISMISSED' && (
+                <div className="incident-actions-row">
+                  <button
+                    className="incident-action-btn"
+                    disabled={isIncidentBusy || incident.state !== 'NEW'}
+                    onClick={() => handleIncidentAction('acknowledge')}
+                  >
+                    <UserCheck className="w-3 h-3" /> ACKNOWLEDGE
+                  </button>
+                  <button
+                    className="incident-action-btn"
+                    disabled={isIncidentBusy || incident.state === 'INVESTIGATING'}
+                    onClick={() => handleIncidentAction('investigate')}
+                  >
+                    <InvestigateIcon className="w-3 h-3" /> INVESTIGATE
+                  </button>
+                  <button
+                    className="incident-action-btn escalate"
+                    disabled={isIncidentBusy}
+                    onClick={() => setShowEscalationPreview(true)}
+                  >
+                    <Siren className="w-3 h-3" /> ESCALATE
+                  </button>
+                  <button
+                    className="incident-action-btn resolve"
+                    disabled={isIncidentBusy}
+                    onClick={() => handleIncidentAction('resolve')}
+                  >
+                    RESOLVE
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showEscalationPreview && cachedStation && (
+          <EscalationPreviewModal
+            stationId={cachedStation.id}
+            onClose={() => setShowEscalationPreview(false)}
+            onEscalated={() => refreshIncident(cachedStation.id)}
+          />
+        )}
+
+        {/* 4. Phase 12: 5-Layer Diagnostic Evaluation (Vertical Accordion) */}
         <div className="section-card layers-card">
           <div className="card-header-flex">
             <div className="card-title-group">
@@ -481,107 +671,67 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
             <span className="layers-count-badge">5 Screening Layers</span>
           </div>
 
-          <div className="layer-cards-list">
-            {layerDefs.map(({ key, label, short }) => {
+          <div className="layer-accordion-list">
+            {layerDefs.map(({ key, num, label, full }) => {
               const layerData = getLayerData(key);
-              const isPass = layerData.status === 'PASS';
-              const isVeto = layerData.status === 'VETO';
-              const isAlert = layerData.status === 'ANOMALY' || isVeto;
-              const isWarn = layerData.status === 'WARNING';
-              const isLimited = layerData.status === 'INSUFFICIENT_DATA' || layerData.status === 'LIMITED';
+              const isExpanded = Boolean(expandedLayers[key]);
+              const statusClass = layerData.status.toLowerCase();
 
               return (
-                <div key={key} className={`canonical-layer-item ${layerData.status}`}>
-                  <div className="layer-item-top">
-                    <div className="layer-item-title-group">
-                      <span className="layer-short-name">{short}</span>
-                      <span className="layer-full-name">{label}</span>
+                <div key={key} className={`layer-accordion-item ${statusClass}`}>
+                  <div
+                    className="layer-accordion-header"
+                    onClick={() => toggleLayerExpand(key)}
+                    title="Click to toggle layer diagnostic details"
+                  >
+                    <div className="layer-header-left">
+                      <span className="layer-num-badge">{num}</span>
+                      <span className="layer-name-title">{label}</span>
+                      <span className="layer-full-desc">{full}</span>
                     </div>
 
-                    <div className="layer-item-badges">
-                      <span className={`layer-status-pill ${layerData.status}`}>
-                        {layerData.status}
+                    <div className="layer-header-right">
+                      <span className={`layer-status-pill ${statusClass}`}>
+                        ● {layerData.status}
                       </span>
                       <span className="layer-score-pill">
                         {(layerData.score * 100).toFixed(0)}%
                       </span>
-                      {layerData.evidence_quality && (
-                        <span className={`layer-quality-tag ${layerData.evidence_quality}`}>
-                          {layerData.evidence_quality}
-                        </span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                       )}
                     </div>
                   </div>
 
-                  <div className="layer-reason-text">
-                    {layerData.reason}
-                  </div>
+                  {isExpanded && (
+                    <div className="layer-accordion-body">
+                      <div className="layer-expanded-grid">
+                        <div>
+                          <span className="layer-meta-lbl">Layer Score:</span>
+                          <span className="layer-meta-val">{(layerData.score * 100).toFixed(1)}%</span>
+                        </div>
+                        <div>
+                          <span className="layer-meta-lbl">Evidence Quality:</span>
+                          <span className={`layer-quality-tag ${layerData.evidence_quality || 'MEDIUM'}`}>
+                            {layerData.evidence_quality || 'MEDIUM'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="layer-reason-text">
+                        <span className="layer-reason-lbl">Reason: </span>
+                        {layerData.reason}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* 6. Root Cause Analysis (§19.7, §20) */}
-        {(isAnomaly || isWarning || canonicalDiag) && (
-          <div className="section-card root-cause-card">
-            <div className="card-header-flex">
-              <div className="card-title-group">
-                <AlertOctagon className="w-3.5 h-3.5 text-rose-400" />
-                <span className="card-section-title">ROOT CAUSE DIAGNOSIS</span>
-              </div>
-              <span className={`diagnosis-confidence-tag ${confidenceLevel}`}>
-                {confidenceLevel} CONFIDENCE
-              </span>
-            </div>
-
-            <div className="diagnosis-primary-box">
-              <span className="diagnosis-heading-label">PRIMARY CLASSIFICATION:</span>
-              <h4 className="diagnosis-primary-title">
-                {getGatedDiagnosisTitle(canonicalDiag?.primary || canonical?.root_cause, confidenceLevel)}
-              </h4>
-            </div>
-
-            {/* Supporting Evidence Items */}
-            {canonicalDiag?.evidence && canonicalDiag.evidence.length > 0 && (
-              <div className="diagnosis-evidence-box">
-                <span className="evidence-box-label">SUPPORTING TELEMETRY EVIDENCE:</span>
-                <ul className="evidence-bullet-list">
-                  {canonicalDiag.evidence.map((ev, idx) => (
-                    <li key={idx} className="evidence-bullet-item">
-                      <span className="bullet-dash">›</span>
-                      <span>{ev}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Alternative Hypotheses */}
-            {canonicalDiag?.alternatives && canonicalDiag.alternatives.length > 0 && (
-              <div className="diagnosis-alternatives-box">
-                <span className="alternatives-box-label">ALTERNATIVE HYPOTHESES CONSIDERED:</span>
-                <div className="alternatives-chips">
-                  {canonicalDiag.alternatives.map((alt, idx) => (
-                    <span key={idx} className="alternative-chip">
-                      {alt}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Operator Recommended Action */}
-            {canonicalDiag?.operator_action && (
-              <div className="operator-action-box">
-                <span className="action-box-label">RECOMMENDED ACTION:</span>
-                <p className="action-box-text">{canonicalDiag.operator_action}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 7. Meteorological Weather Analysis (§19.8) */}
+        {/* 5. ATHER Insight & Meteorological Analysis (§19.8, §19.9) */}
         {canonicalWeather && (
           <div className="section-card weather-analysis-card">
             <div className="card-header-flex">
@@ -604,7 +754,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           </div>
         )}
 
-        {/* 8. Operator Insights (§19.9) */}
+        {/* Operator Insights List */}
         {canonicalInsights.length > 0 && (
           <div className="section-card insights-card">
             <div className="card-header-flex">
@@ -639,114 +789,6 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose }) 
           </div>
         )}
 
-        {/* 8b. ATHER Incident Workflow (Phase 13-15) — only for actionable anomalies */}
-        {incident && (status === 'ANOMALY' || status === 'WARNING') && (
-          <div className="section-card incident-card">
-            <div className="card-header-flex">
-              <div className="card-title-group">
-                <IncidentIcon className="w-3.5 h-3.5 text-red-400" />
-                <span className="card-section-title">ATHER INCIDENT</span>
-              </div>
-              <span className={`incident-state-pill ${incident.state}`}>{incident.state}</span>
-            </div>
-
-            <div className="incident-summary-grid">
-              <div><span className="metric-title">STATION</span><div className="metric-val">{incident.station_id}</div></div>
-              <div><span className="metric-title">PARAMETER</span><div className="metric-val">{incident.latest_snapshot?.parameter}</div></div>
-              <div><span className="metric-title">OBSERVED</span><div className="metric-val">{incident.latest_snapshot?.observed} {incident.latest_snapshot?.unit}</div></div>
-              <div>
-                <span className="metric-title">EXPECTED</span>
-                <div className="metric-val">
-                  {incident.latest_snapshot?.expected_min ?? '--'}–{incident.latest_snapshot?.expected_max ?? '--'} {incident.latest_snapshot?.unit}
-                </div>
-              </div>
-              <div><span className="metric-title">SEVERITY</span><div className="metric-val">{incident.latest_snapshot?.severity}</div></div>
-              <div><span className="metric-title">CONFIDENCE</span><div className="metric-val">{Math.round((incident.latest_snapshot?.confidence || 0) * 100)}%</div></div>
-            </div>
-
-            <div className="incident-row">
-              <span className="insight-lbl">ROOT CAUSE:</span>
-              <span className="insight-val">{String(incident.latest_snapshot?.root_cause || '').replace(/_/g, ' ')}</span>
-            </div>
-            {incident.latest_snapshot?.evidence?.length > 0 && (
-              <ul className="test-lab-evidence-list">
-                {incident.latest_snapshot.evidence.slice(0, 4).map((ev: string, i: number) => <li key={i}>{ev}</li>)}
-              </ul>
-            )}
-            <div className="incident-row">
-              <span className="insight-lbl action">RECOMMENDED ACTION:</span>
-              <span className="insight-val action">{incident.latest_snapshot?.recommended_action}</span>
-            </div>
-
-            {incident.escalated && (
-              <div className="incident-escalated-note">Escalation preview was marked as escalated at {new Date(incident.escalated_at).toUTCString()}.</div>
-            )}
-
-            {incident.state !== 'RESOLVED' && incident.state !== 'DISMISSED' && (
-              <div className="incident-actions-row">
-                <button className="incident-action-btn" disabled={isIncidentBusy || incident.state !== 'NEW'} onClick={() => handleIncidentAction('acknowledge')}>
-                  <UserCheck className="w-3 h-3" /> ACKNOWLEDGE
-                </button>
-                <button className="incident-action-btn" disabled={isIncidentBusy || incident.state === 'INVESTIGATING'} onClick={() => handleIncidentAction('investigate')}>
-                  <InvestigateIcon className="w-3 h-3" /> INVESTIGATE
-                </button>
-                <button className="incident-action-btn escalate" disabled={isIncidentBusy} onClick={() => setShowEscalationPreview(true)}>
-                  <Siren className="w-3 h-3" /> ESCALATE
-                </button>
-                <button className="incident-action-btn resolve" disabled={isIncidentBusy} onClick={() => handleIncidentAction('resolve')}>
-                  RESOLVE
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {showEscalationPreview && cachedStation && (
-          <EscalationPreviewModal
-            stationId={cachedStation.id}
-            onClose={() => setShowEscalationPreview(false)}
-            onEscalated={() => refreshIncident(cachedStation.id)}
-          />
-        )}
-
-        {/* 9. Sensor Health / Projected Drift (§19.6 L5 Detail) */}
-        {canonical?.sensor_health_index !== undefined && (
-          <div className="section-card health-card">
-            <div className="card-header-flex">
-              <div className="card-title-group">
-                <Cpu className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="card-section-title">SENSOR ARRAY HEALTH</span>
-              </div>
-              <span className="health-percentage-pill">
-                {canonical.sensor_health_index.toFixed(0)}% Health
-              </span>
-            </div>
-
-            <div className="health-bar-track">
-              <div
-                className="health-bar-fill"
-                style={{
-                  width: `${Math.max(5, canonical.sensor_health_index)}%`,
-                  backgroundColor:
-                    canonical.sensor_health_index > 75
-                      ? '#10b981'
-                      : canonical.sensor_health_index > 50
-                      ? '#f59e0b'
-                      : '#ef4444',
-                }}
-              />
-            </div>
-
-            {canonical.estimated_days_to_failure && (
-              <div className="days-failure-hint">
-                <AlertTriangle className="w-3 h-3 text-amber-400" />
-                <span>
-                  Projected out-of-tolerance drift in ~{canonical.estimated_days_to_failure.toFixed(1)} days based on CUSUM trajectory
-                </span>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* 10. 24-Hour Diurnal Trend Sparkline (§19.11) */}
         {history && history.series.length > 0 && (

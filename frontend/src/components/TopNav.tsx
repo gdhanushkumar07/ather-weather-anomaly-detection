@@ -9,6 +9,8 @@ interface TopNavProps {
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
   onOpenTestLab?: () => void;
+  onToggleOverview?: () => void;
+  isOverviewOpen?: boolean;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -16,7 +18,9 @@ export const TopNav: React.FC<TopNavProps> = ({
   onSelectStation,
   statusFilter,
   onSetStatusFilter,
-  onOpenTestLab
+  onOpenTestLab,
+  onToggleOverview,
+  isOverviewOpen = false
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -115,10 +119,21 @@ export const TopNav: React.FC<TopNavProps> = ({
         )}
       </div>
 
-      {/* Navigation Section Pills (SkyGuard-inspired) */}
+      {/* Navigation Section Pills */}
       <div className="nav-capsule section-pills">
+        {onToggleOverview && (
+          <button
+            className={`nav-section-btn overview-toggle-btn ${isOverviewOpen ? 'active' : ''}`}
+            onClick={onToggleOverview}
+            title="Toggle Network & Weather Overview panel"
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Overview</span>
+          </button>
+        )}
+
         <button
-          className={`nav-section-btn ${statusFilter === null ? 'active' : ''}`}
+          className={`nav-section-btn ${statusFilter === null && !isOverviewOpen ? 'active' : ''}`}
           onClick={() => onSetStatusFilter(null)}
           title="Show all network stations"
         >
@@ -133,7 +148,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         >
           <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
           <span>Anomalies</span>
-          {summary?.anomalyCount ? (
+          {summary?.anomalyCount !== undefined && summary.anomalyCount > 0 ? (
             <span className="nav-badge-count anomaly">{summary.anomalyCount}</span>
           ) : null}
         </button>
@@ -145,7 +160,7 @@ export const TopNav: React.FC<TopNavProps> = ({
         >
           <Heart className="w-3.5 h-3.5 text-amber-400" />
           <span>Sensor Health</span>
-          {summary?.warningCount ? (
+          {summary?.warningCount !== undefined && summary.warningCount > 0 ? (
             <span className="nav-badge-count warning">{summary.warningCount}</span>
           ) : null}
         </button>
@@ -162,16 +177,16 @@ export const TopNav: React.FC<TopNavProps> = ({
         )}
       </div>
 
-      {/* Live Telemetry KPI Pills */}
+      {/* Live Telemetry KPI Pills — Data-driven, no magic fallback numbers */}
       <div className="nav-capsule live-stats-capsule">
         <div className="live-pill">
           <span className="live-dot-pulse" />
           <span>LIVE</span>
         </div>
 
-        <div className="stat-pill-item total" onClick={() => onSetStatusFilter(null)}>
+        <div className="stat-pill-item total" onClick={() => onSetStatusFilter(null)} title="Filter All Stations">
           <span className="stat-label">Stations:</span>
-          <span className="stat-val">{summary?.totalStations ?? 1655}</span>
+          <span className="stat-val">{summary?.totalStations ?? '--'}</span>
         </div>
 
         <div
@@ -180,7 +195,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           title="Filter Normal"
         >
           <span className="stat-bullet green" />
-          <span>{summary?.normalCount ?? 1607} Normal</span>
+          <span>{summary?.normalCount ?? '--'} Normal</span>
         </div>
 
         <div
@@ -189,7 +204,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           title="Filter Warning"
         >
           <span className="stat-bullet amber" />
-          <span>{summary?.warningCount ?? 3} Warning</span>
+          <span>{summary?.warningCount ?? '--'} Warning</span>
         </div>
 
         <div
@@ -198,7 +213,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           title="Filter Anomaly"
         >
           <span className="stat-bullet red" />
-          <span>{summary?.anomalyCount ?? 45} Anomaly</span>
+          <span>{summary?.anomalyCount ?? '--'} Anomaly</span>
         </div>
       </div>
     </header>

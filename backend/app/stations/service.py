@@ -255,15 +255,24 @@ class StationService:
                     "country": s["country"],
                     "region": s["region"],
                     "temperature": s.get("temperature"),
-                    "pressure": s.get("pressure"),
-                    "humidity": s.get("humidity"),
+                    # Pressure < 1 hPa is a known null-sentinel, not a real
+                    # measurement (see schema.py DataQuality policy) — never
+                    # let a 0.0 sentinel render as a real low-pressure value
+                    # on the map's parameter layers.
+                    "pressure": s.get("pressure") if (s.get("pressure") is not None and s.get("pressure") >= 1.0) else None,
+                    # Humidity is physically bounded [0, 100]; an out-of-range
+                    # value must be excluded from the map, not displayed as data.
+                    "humidity": s.get("humidity") if (s.get("humidity") is not None and 0.0 <= s.get("humidity") <= 100.0) else None,
                     "windSpeed": s.get("windSpeed"),
                     "windDirection": s.get("windDirection"),
                     "condition": s.get("condition", "Reported"),
                     "timestamp": s.get("timestamp", "Recent"),
                     "status": s.get("status", "NORMAL"),
                     "hasAnomaly": 1 if s.get("anomaly") else 0,
-                    "severity": s["anomaly"]["severity"] if s.get("anomaly") else "NONE"
+                    "severity": s["anomaly"]["severity"] if s.get("anomaly") else "NONE",
+                    # Provenance passthrough for map-layer disclosure (Phase 20 of the
+                    # provenance audit, Phase 3 "AWS vs NWP visual distinction" here).
+                    "source": s.get("dataSource", "UNKNOWN"),
                 }
             })
             count += 1

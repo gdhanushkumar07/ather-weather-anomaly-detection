@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight } from 'lucide-react';
+import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight, FlaskConical } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 
@@ -8,13 +8,15 @@ interface TopNavProps {
   onSelectStation: (stationId: string) => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  onOpenTestLab?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
   summary,
   onSelectStation,
   statusFilter,
-  onSetStatusFilter
+  onSetStatusFilter,
+  onOpenTestLab
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -147,6 +149,17 @@ export const TopNav: React.FC<TopNavProps> = ({
             <span className="nav-badge-count warning">{summary.warningCount}</span>
           ) : null}
         </button>
+
+        {onOpenTestLab && (
+          <button
+            className="nav-section-btn test-lab-launch-btn"
+            onClick={onOpenTestLab}
+            title="Open ATHER Diagnostic Test Lab — validate the engine with simulated fault scenarios"
+          >
+            <FlaskConical className="w-3.5 h-3.5 text-slate-400" />
+            <span>Test Lab</span>
+          </button>
+        )}
       </div>
 
       {/* Live Telemetry KPI Pills */}

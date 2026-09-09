@@ -3,6 +3,7 @@ import { AtherMap } from './map/AtherMap';
 import { TopNav } from './components/TopNav';
 import { LayerControls } from './components/LayerControls';
 import { StationPanel } from './panels/StationPanel';
+import { TestLabModal } from './components/TestLabModal';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
 import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary } from './services/api';
 
@@ -12,6 +13,7 @@ export const App: React.FC = () => {
   const [summary, setSummary] = useState<AnomaliesSummary | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
+  const [isTestLabOpen, setIsTestLabOpen] = useState(false);
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
     stations: true,
@@ -56,11 +58,23 @@ export const App: React.FC = () => {
     }
   };
 
+  // Temperature / Pressure / Relative Humidity are mutually exclusive — the
+  // "ATHER CORE INPUTS" panel selects ONE active spatial parameter at a time
+  // (clicking the active one turns it off). Wind and the AWS marker toggle
+  // remain independent boolean toggles, unchanged from existing behavior.
+  const PARAMETER_KEYS: WeatherLayerType[] = ['temperature', 'pressure', 'humidity'];
+
   const handleToggleLayer = (layer: WeatherLayerType) => {
-    setActiveLayers((prev) => ({
-      ...prev,
-      [layer]: !prev[layer]
-    }));
+    setActiveLayers((prev) => {
+      if (PARAMETER_KEYS.includes(layer)) {
+        const turningOn = !prev[layer];
+        const next = { ...prev };
+        PARAMETER_KEYS.forEach((k) => { next[k] = false; });
+        next[layer] = turningOn;
+        return next;
+      }
+      return { ...prev, [layer]: !prev[layer] };
+    });
   };
 
   return (
@@ -71,6 +85,7 @@ export const App: React.FC = () => {
         onSelectStation={handleSelectStation}
         statusFilter={statusFilter}
         onSetStatusFilter={setStatusFilter}
+        onOpenTestLab={() => setIsTestLabOpen(true)}
       />
 
       {/* Weather Layer Controls Right Panel */}
@@ -96,6 +111,17 @@ export const App: React.FC = () => {
       <StationPanel
         station={selectedStation}
         onClose={() => setSelectedStation(null)}
+      />
+
+      {/* ATHER Diagnostic Test Lab — secondary workspace overlay (Phase 6) */}
+      <TestLabModal
+        isOpen={isTestLabOpen}
+        onClose={() => setIsTestLabOpen(false)}
+        stations={
+          stationsGeoJSON?.features
+            .map((f) => ({ id: String(f.properties?.id ?? ''), name: String(f.properties?.name ?? f.properties?.id ?? '') }))
+            .filter((s) => s.id) ?? []
+        }
       />
     </div>
   );

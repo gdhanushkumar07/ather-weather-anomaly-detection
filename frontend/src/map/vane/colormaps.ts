@@ -22,6 +22,43 @@ export const TEMPERATURE_STOPS: ColormapStops = [
 ];
 export const TEMPERATURE_CLIM: [number, number] = [-30, 45];
 
+// Pressure and humidity ramps follow the same semantic color science already
+// used elsewhere in this project (see src/utils/meteorology.ts PRESSURE_STOPS /
+// HUMIDITY_STOPS), expressed here as hex stops for MapLibre GL's native
+// 'interpolate' paint expressions (see toMapLibreColorExpression below).
+export const PRESSURE_STOPS: ColormapStops = [
+  [975, '#e11d48'],
+  [992, '#f97316'],
+  [1006, '#eab308'],
+  [1013, '#94a3b8'],
+  [1022, '#3b82f6'],
+  [1035, '#4338ca'],
+];
+export const PRESSURE_CLIM: [number, number] = [975, 1035];
+
+export const HUMIDITY_STOPS: ColormapStops = [
+  [10, '#d97706'],
+  [30, '#eab308'],
+  [55, '#0d9488'],
+  [75, '#2563eb'],
+  [98, '#1d4ed8'],
+];
+export const HUMIDITY_CLIM: [number, number] = [10, 98];
+
+/**
+ * Converts a ColormapStops table into a MapLibre GL 'interpolate' expression
+ * driven directly by a real per-feature property (e.g. station temperature).
+ * This is the standard, dependency-free way to do data-driven circle-color
+ * styling in MapLibre GL JS — no additional heatmap library needed.
+ */
+export function toMapLibreColorExpression(field: string, stops: ColormapStops): any[] {
+  const expr: any[] = ['interpolate', ['linear'], ['get', field]];
+  for (const [value, color] of stops) {
+    expr.push(value, color);
+  }
+  return expr;
+}
+
 export function parseColor(hex: string): [number, number, number, number] {
   let h = hex.replace('#', '');
   if (h.length === 3) h = [...h].map((c) => c + c).join('');

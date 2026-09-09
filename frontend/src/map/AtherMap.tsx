@@ -4,7 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo } from './StationLayer';
+import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField } from './StationLayer';
 import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
@@ -146,6 +146,24 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     setStationLayersVisibility(map, activeLayers.stations);
   }, [activeLayers.stations, isMapReady]);
 
+  // 3b. Real-data parameter halo (Phase 3 weather-layer fix): colors each
+  // station by its ACTUAL reported temperature/pressure/humidity value.
+  // Temperature/Pressure/Humidity are mutually exclusive in activeLayers
+  // (see App.tsx), so at most one of these is ever active.
+  const activeParameter: ParameterField | null = activeLayers.pressure
+    ? 'pressure'
+    : activeLayers.humidity
+      ? 'humidity'
+      : activeLayers.temperature
+        ? 'temperature'
+        : null;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    setParameterLayer(map, activeParameter);
+  }, [activeParameter, isMapReady]);
+
   // 4. Update Selected Station Halo
   useEffect(() => {
     const map = mapRef.current;
@@ -272,17 +290,42 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     <div className="map-viewport">
       <div ref={mapContainerRef} className="maplibre-container" />
 
-      {/* Temperature Colormap Legend */}
-      {activeLayers.temperature && (
+      {/* Dynamic Parameter Legend — reflects whichever of Temperature /
+          Pressure / Relative Humidity is actually active, using the real
+          per-station color ramps (Phase 3: Dynamic Legend). */}
+      {activeParameter && (
         <div className="weather-legend">
-          <div style={{ fontWeight: 600, color: '#f8fafc' }}>Surface Temperature (°C)</div>
-          <div className="legend-bar temp-gradient" />
-          <div className="legend-labels">
-            <span>-30°</span>
-            <span>0°</span>
-            <span>+15°</span>
-            <span>+30°</span>
-            <span>+45°</span>
+          {activeParameter === 'temperature' && (
+            <>
+              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Surface Temperature (°C)</div>
+              <div className="legend-bar temp-gradient" />
+              <div className="legend-labels">
+                <span>-30°</span><span>0°</span><span>+15°</span><span>+30°</span><span>+45°</span>
+              </div>
+            </>
+          )}
+          {activeParameter === 'pressure' && (
+            <>
+              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Atmospheric Pressure (hPa)</div>
+              <div className="legend-bar pressure-gradient" />
+              <div className="legend-labels">
+                <span>975</span><span>992</span><span>1013</span><span>1022</span><span>1035</span>
+              </div>
+            </>
+          )}
+          {activeParameter === 'humidity' && (
+            <>
+              <div style={{ fontWeight: 600, color: '#f8fafc' }}>Relative Humidity (%)</div>
+              <div className="legend-bar humidity-gradient" />
+              <div className="legend-labels">
+                <span>10%</span><span>30%</span><span>55%</span><span>75%</span><span>98%</span>
+              </div>
+            </>
+          )}
+          <div className="legend-provenance-note">
+            Colored by each station's own reported value. Stations without a connected
+            AWS sensor feed show an NWP model reference value instead — see the station
+            panel for exact provenance per station.
           </div>
         </div>
       )}

@@ -14,6 +14,8 @@ from .weather.grid_service import grid_service
 from .weather.open_meteo import open_meteo_service
 from .ingestion.adapter import IngestionAdapter
 from .anomaly.detector import detector
+from .simulation import service as simulation_service
+from .incidents import service as incident_service
 
 app = FastAPI(
     title="ATHER Core API",
@@ -196,3 +198,88 @@ def ingest_observation(payload: Dict[str, Any]):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER TEST LAB — Isolated Simulation Engine (Phase 5-12)
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/simulation/scenarios")
+def get_simulation_scenarios():
+    """Lists the predefined ATHER Test Lab fault-injection scenarios."""
+    return {"scenarios": simulation_service.list_scenarios()}
+
+@app.post("/api/simulation/run")
+def run_simulation(payload: Dict[str, Any]):
+    """
+    Runs a predefined scenario through a fresh, isolated AnomalyDetector
+    instance — the SAME diagnostic engine production uses. Never touches
+    real station state, the production detector singleton, or real
+    incidents. See app/simulation/service.py for the isolation guarantee.
+    """
+    scenario_id = payload.get("scenario_id")
+    if not scenario_id:
+        raise HTTPException(status_code=400, detail="scenario_id is required")
+    base_station_id = payload.get("base_station_id")
+    try:
+        return simulation_service.run_simulation(scenario_id, base_station_id=base_station_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER INCIDENT WORKFLOW (Phase 13-15)
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/stations/{station_id}/incident")
+def get_incident(station_id: str):
+    """Returns the current incident record for a station (auto-created from
+    diagnostic evidence if an actionable anomaly exists and none is open)."""
+    incident = incident_service.incident_store.get_or_create(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"No incident data available for '{station_id}'")
+    return incident
+
+@app.post("/api/stations/{station_id}/incident/acknowledge")
+def acknowledge_incident(station_id: str):
+    incident = incident_service.incident_store.acknowledge(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return incident
+
+@app.post("/api/stations/{station_id}/incident/investigate")
+def investigate_incident(station_id: str):
+    incident = incident_service.incident_store.investigate(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return incident
+
+@app.post("/api/stations/{station_id}/incident/resolve")
+def resolve_incident(station_id: str):
+    incident = incident_service.incident_store.resolve(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return incident
+
+@app.post("/api/stations/{station_id}/incident/dismiss")
+def dismiss_incident(station_id: str):
+    incident = incident_service.incident_store.dismiss(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return incident
+
+@app.get("/api/stations/{station_id}/escalation-preview")
+def get_escalation_preview(station_id: str):
+    """Builds a preview of what an escalation alert WOULD contain. This never
+    sends a real email/SMS/notification — see app/incidents/service.py."""
+    preview = incident_service.incident_store.build_escalation_preview(station_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return preview
+
+@app.post("/api/stations/{station_id}/escalation-preview/mark-escalated")
+def mark_escalated(station_id: str):
+    incident = incident_service.incident_store.mark_escalated(station_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    return incident

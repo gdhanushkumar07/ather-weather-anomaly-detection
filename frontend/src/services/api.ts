@@ -75,3 +75,55 @@ export async function ingestObservation(payload: any) {
   if (!res.ok) throw new Error(`Ingest failed: ${res.statusText}`);
   return res.json();
 }
+
+// ── ATHER Test Lab (isolated simulation engine) ─────────────────────────
+
+export async function fetchSimulationScenarios(): Promise<{ scenarios: any[] }> {
+  const res = await fetch(`${API_BASE}/simulation/scenarios`);
+  if (!res.ok) throw new Error(`Failed to fetch simulation scenarios: ${res.statusText}`);
+  return res.json();
+}
+
+export async function runSimulation(scenarioId: string, baseStationId?: string | null) {
+  const res = await fetch(`${API_BASE}/simulation/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scenario_id: scenarioId, base_station_id: baseStationId || undefined })
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Simulation failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+// ── ATHER Incident Workflow ──────────────────────────────────────────────
+
+export async function fetchIncident(stationId: string) {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incident`);
+  if (!res.ok) throw new Error(`Failed to fetch incident for ${stationId}: ${res.statusText}`);
+  return res.json();
+}
+
+async function postIncidentAction(stationId: string, action: string) {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incident/${action}`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Incident action '${action}' failed: ${res.statusText}`);
+  return res.json();
+}
+
+export const acknowledgeIncident = (stationId: string) => postIncidentAction(stationId, 'acknowledge');
+export const investigateIncident = (stationId: string) => postIncidentAction(stationId, 'investigate');
+export const resolveIncident = (stationId: string) => postIncidentAction(stationId, 'resolve');
+export const dismissIncident = (stationId: string) => postIncidentAction(stationId, 'dismiss');
+
+export async function fetchEscalationPreview(stationId: string) {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/escalation-preview`);
+  if (!res.ok) throw new Error(`Failed to fetch escalation preview for ${stationId}: ${res.statusText}`);
+  return res.json();
+}
+
+export async function markEscalated(stationId: string) {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/escalation-preview/mark-escalated`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to mark escalated for ${stationId}: ${res.statusText}`);
+  return res.json();
+}

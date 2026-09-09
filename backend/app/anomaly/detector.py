@@ -696,7 +696,12 @@ class AnomalyDetector:
             l1_reason = "All observed parameters fall within thermodynamic terrestrial envelopes"
 
         # 2. Temporal
-        h_pts = d2.get("history_points", 0)
+        # BUGFIX: layer2_temporal.py stores per-channel counts under
+        # "historical_points" (plural, nested dict) — not the scalar
+        # "history_points" this used to look up, which always defaulted to 0
+        # and forced this card to show INSUFFICIENT_DATA / "0 samples" even
+        # when real temporal history existed and was actively used above.
+        h_pts = max(d2.get("historical_points", {}).values(), default=0)
         if h_pts < 3 or d2.get("status") == "INSUFFICIENT_DATA":
             l2_status = "INSUFFICIENT_DATA"
             l2_conf = "INSUFFICIENT_DATA"
@@ -760,7 +765,13 @@ class AnomalyDetector:
             l5_conf = "INSUFFICIENT_DATA"
             l5_reason = "Not applicable: this station has no connected AWS in-situ sensor; value is a NWP model reference."
         else:
-            s_cnt = d5.get("samples_tracked", 0)
+            # BUGFIX: layer5_drift.py never sets a top-level "samples_tracked"
+            # key (per-channel counts live under detail["channel_drift"][ch]
+            # ["samples_tracked"]) — this always defaulted to 0, forcing the
+            # card to show "Drift monitoring initializing" indefinitely.
+            # detail["samples_in_radius"] is actually total readings processed
+            # for this station (a misleading name, but the right scalar here).
+            s_cnt = d5.get("samples_in_radius", 0)
             if s_cnt < 5:
                 l5_status = "INSUFFICIENT_DATA"
                 l5_conf = "INSUFFICIENT_DATA"

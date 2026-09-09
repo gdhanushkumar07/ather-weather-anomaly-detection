@@ -1,6 +1,16 @@
 import maplibregl from 'maplibre-gl';
+import { toMapLibreColorExpression, TEMPERATURE_STOPS, PRESSURE_STOPS, HUMIDITY_STOPS } from './vane/colormaps';
 
 export const STATIONS_SOURCE_ID = 'ather-stations-source';
+export const PARAMETER_HALO_LAYER_ID = 'ather-parameter-halo';
+
+export type ParameterField = 'temperature' | 'pressure' | 'humidity';
+
+const PARAMETER_COLOR_STOPS: Record<ParameterField, ReturnType<typeof toMapLibreColorExpression>> = {
+  temperature: toMapLibreColorExpression('temperature', TEMPERATURE_STOPS),
+  pressure: toMapLibreColorExpression('pressure', PRESSURE_STOPS),
+  humidity: toMapLibreColorExpression('humidity', HUMIDITY_STOPS),
+};
 export const CLUSTERS_LAYER_ID = 'ather-clusters';
 export const CLUSTER_COUNT_LAYER_ID = 'ather-cluster-count';
 export const ANOMALY_PULSE_LAYER_ID = 'ather-anomaly-pulse';
@@ -117,6 +127,29 @@ export function setupStationLayers(
     });
   }
 
+  // 5a. Real-data parameter halo (Temperature / Pressure / Relative Humidity).
+  // Colors each unclustered station by its ACTUAL reported value for the
+  // currently selected parameter (real lat/lon/value from the same station
+  // GeoJSON already loaded — no new network request, no synthetic grid).
+  // Hidden by default; toggled on by setParameterLayer(). Sits behind the
+  // status ring/core so existing anomaly-status coloring is never removed —
+  // this is purely additive.
+  if (!map.getLayer(PARAMETER_HALO_LAYER_ID)) {
+    map.addLayer({
+      id: PARAMETER_HALO_LAYER_ID,
+      type: 'circle',
+      source: STATIONS_SOURCE_ID,
+      filter: ['literal', false], // disabled until setParameterLayer() activates it
+      paint: {
+        'circle-color': '#94a3b8',
+        'circle-radius': 11,
+        'circle-opacity': 0.55,
+        'circle-blur': 0.35
+      },
+      layout: { visibility: 'none' }
+    });
+  }
+
   // 5. Professional Weather Station Marker - Outer Status Ring
   if (!map.getLayer(UNCLUSTERED_RING_LAYER_ID)) {
     map.addLayer({
@@ -226,6 +259,30 @@ export function setupStationLayers(
     map.on('mouseenter', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
   }
+}
+
+/**
+ * Shows/hides and re-colors the real-data parameter halo layer. `field` is
+ * null to hide it (no parameter selected). Only unclustered stations that
+ * actually reported a non-null value for the field are shown — missing
+ * values stay missing, never substituted (Phase 3 of the weather-layer fix).
+ */
+export function setParameterLayer(map: maplibregl.Map, field: ParameterField | null) {
+  if (!map.getLayer(PARAMETER_HALO_LAYER_ID)) return;
+
+  if (!field) {
+    map.setLayoutProperty(PARAMETER_HALO_LAYER_ID, 'visibility', 'none');
+    return;
+  }
+
+  map.setFilter(PARAMETER_HALO_LAYER_ID, [
+    'all',
+    ['!', ['has', 'point_count']],
+    ['has', field],
+    ['!=', ['get', field], null],
+  ]);
+  map.setPaintProperty(PARAMETER_HALO_LAYER_ID, 'circle-color', PARAMETER_COLOR_STOPS[field]);
+  map.setLayoutProperty(PARAMETER_HALO_LAYER_ID, 'visibility', 'visible');
 }
 
 export function updateSelectedStationHalo(map: maplibregl.Map, selectedStationId: string | null) {

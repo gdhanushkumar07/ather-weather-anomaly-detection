@@ -178,26 +178,36 @@ export const TimelineSlider: React.FC<TimelineSliderProps> = ({
           </div>
         </div>
 
+{/* Timeline Day Markers & Interactive Scrubber Track */}
         <div className="relative w-full pt-1 pb-1">
+          {/* Day markers */}
           <div className="relative w-full h-3.5 text-[10px] text-slate-400 font-medium select-none">
-            {dayTicks.map((dt) => (
-              <div
-                key={dt.hourOffset}
-                className="absolute transform -translate-x-1/2 flex flex-col items-center cursor-pointer hover:text-cyan-300 transition-colors"
-                style={{ left: `${dt.pct}%` }}
-                onClick={() => onTimeChange(dt.hourOffset)}
-              >
-                <span>{dt.label} {dt.dateNumber}</span>
-              </div>
-            ))}
+            {dayTicks.map((dt, i) => {
+              const isFirst = i === 0;
+              const isLast = i === dayTicks.length - 1;
+              
+              return (
+                <div
+                  key={dt.hourOffset}
+                  className={`absolute flex flex-col cursor-pointer hover:text-cyan-300 transition-colors ${
+                    isFirst ? 'left-0 items-start' : isLast ? 'right-0 items-end' : 'transform -translate-x-1/2 items-center'
+                  }`}
+                  style={!isFirst && !isLast ? { left: `${dt.pct}%` } : {}}
+                  onClick={() => onTimeChange(dt.hourOffset)}
+                >
+                  <span>{dt.label} {dt.dateNumber}</span>
+                </div>
+              );
+            })}
           </div>
 
+          {/* Scrubber Track Area (Now a proper sibling outside the text height wrapper) */}
           <div
             ref={trackRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            className="relative w-full h-5 flex items-center cursor-pointer touch-none group"
+            className="relative w-full h-5 flex items-center cursor-pointer touch-none group mt-1"
           >
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
               <div

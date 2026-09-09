@@ -1,59 +1,13 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import type { Map as LeafletMap } from 'leaflet';
+import React, { useEffect, useState, useRef } from 'react';
 import L from 'leaflet';
-import type { AtherStationData } from '../../types/weather';
 import { fetchAtherStations } from '../../utils/api';
+import type { AtherStationData, AIAnomalyItem } from '../../types/weather';
 
 interface AIAnomalyLayerProps {
-  map: LeafletMap | null;
+  map: L.Map | null;
   visible: boolean;
-  onSelectStation: (station: any) => void;
+  onSelectStation: (station: AIAnomalyItem) => void;
 }
-
-/** Map ATHER severity_score to visual styling */
-function getSeverityStyle(station: AtherStationData) {
-  const { is_anomaly, severity_score, sensor_health_index } = station.anomaly;
-
-  if (!is_anomaly) {
-    return {
-      color: '#22c55e',       // green-500
-      border: '#16a34a',      // green-600
-      bgPulse: '',
-      label: '✓',
-      statusText: 'Normal',
-    };
-  }
-
-  if (severity_score > 0.7) {
-    return {
-      color: '#ef4444',       // red-500
-      border: '#dc2626',      // red-600
-      bgPulse: 'bg-red-500/40',
-      label: '!',
-      statusText: 'Critical',
-    };
-  }
-
-  if (severity_score > 0.4) {
-    return {
-      color: '#f97316',       // orange-500
-      border: '#ea580c',      // orange-600
-      bgPulse: 'bg-orange-500/30',
-      label: '⚠',
-      statusText: 'Severe',
-    };
-  }
-
-  return {
-    color: '#eab308',         // yellow-500
-    border: '#ca8a04',        // yellow-600
-    bgPulse: '',
-    label: '~',
-    statusText: 'Moderate',
-  };
-}
-
-const REFRESH_INTERVAL_MS = 60_000; // 60 seconds
 
 export const AIAnomalyLayer: React.FC<AIAnomalyLayerProps> = ({
   map,
@@ -61,35 +15,30 @@ export const AIAnomalyLayer: React.FC<AIAnomalyLayerProps> = ({
   onSelectStation,
 }) => {
   const [stations, setStations] = useState<AtherStationData[]>([]);
-  const [atherStatus, setAtherStatus] = useState<string>('loading');
   const layerGroupRef = useRef<L.LayerGroup | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadStations = useCallback(async () => {
-    try {
-      const data = await fetchAtherStations();
-      setStations(data.stations || []);
-      setAtherStatus(data.status || 'offline');
-    } catch (err) {
-      console.warn('Could not load ATHER station data:', err);
-      setAtherStatus('error');
-    }
-  }, []);
-
-  // Initial load + auto-refresh
   useEffect(() => {
-    loadStations();
-
-    intervalRef.current = setInterval(loadStations, REFRESH_INTERVAL_MS);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+    let isMounted = true;
+    const loadData = async () => {
+      try {
+        const data = await fetchAtherStations();
+        if (isMounted && data && data.stations) {
+          setStations(data.stations);
+        }
+      } catch (err) {
+        console.error('Failed to fetch stations for map:', err);
       }
     };
-  }, [loadStations]);
 
-  // Render markers
+    loadData();
+    const interval = window.setInterval(loadData, 10000);
+    
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   useEffect(() => {
     if (!map) return;
 
@@ -97,76 +46,121 @@ export const AIAnomalyLayer: React.FC<AIAnomalyLayerProps> = ({
       layerGroupRef.current = L.layerGroup().addTo(map);
     }
 
-    const lg = layerGroupRef.current;
-    lg.clearLayers();
+    const layerGroup = layerGroupRef.current;
+    layerGroup.clearLayers();
 
     if (!visible) return;
 
-    stations.forEach((st) => {
-      const style = getSeverityStyle(st);
-      const tempStr = `${st.weather.temperature_c.toFixed(1)}°C`;
-      const isAnomaly = st.anomaly.is_anomaly;
+    // 1. Draw Live API Stations (Green/Amber/Red)
+    stations.forEach((station) => {
+      const isAnomaly = station.anomaly?.is_anomaly;
+      const confidence = station.anomaly?.confidence_score || 0;
+      const isCritical = isAnomaly && confidence >= 0.8;
 
-      const iconHtml = `
-        <div class="relative flex items-center justify-center cursor-pointer group">
-          ${
-            isAnomaly && style.bgPulse
-              ? `<div class="absolute w-8 h-8 rounded-full ${style.bgPulse} animate-ping"></div>`
-              : ''
-          }
-          <div 
-            style="background: ${style.color}; border-color: ${style.border};"
-            class="relative w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-lg border-2 transform transition-transform group-hover:scale-125"
-          >
-            ${style.label}
+      const mappedStation = {
+        id: station.station_id,
+        stationName: station.name || station.station_id,
+        state: '',
+        lat: station.lat,
+        lon: station.lon,
+        severity: (isCritical ? 'D4' : isAnomaly ? 'D3' : 'D1') as any,
+        severityLabel: isAnomaly ? 'Anomaly' : 'Healthy',
+        status: (isCritical ? 'Critical' : isAnomaly ? 'Warning' : 'Active') as any,
+        anomalyType: (station.anomaly?.root_cause || 'Sensor Drift') as any,
+        confidenceScore: confidence,
+        soilMoistureIndex: 0,
+        heatAnomalyDelta: station.weather?.temperature_c || 0,
+        rainfallDeficitPercent: 0,
+        aiRecommendation: station.anomaly?.explanation || 'Operating normally.',
+        lastUpdated: station.timestamp,
+      } as AIAnomalyItem;
+
+      let iconHtml = '';
+      if (isCritical) {
+        iconHtml = `
+          <div class="relative flex items-center justify-center w-8 h-8 group cursor-pointer hover:scale-110 transition-transform">
+            <div class="absolute w-full h-full rounded-full bg-red-500/50 animate-ping"></div>
+            <div class="relative w-4 h-4 rounded-full bg-red-500 border-2 border-white shadow-[0_0_15px_rgba(239,68,68,1)]"></div>
           </div>
-          <div class="absolute -top-8 px-2 py-0.5 rounded bg-slate-900/90 text-white text-[10px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border border-white/10 shadow-md">
-            ${st.name} · ${tempStr} · ${style.statusText}
+        `;
+      } else if (isAnomaly) {
+        iconHtml = `
+          <div class="relative flex items-center justify-center w-6 h-6 group cursor-pointer hover:scale-110 transition-transform">
+            <div class="absolute w-full h-full rounded-full bg-amber-500/50 animate-ping" style="animation-duration: 2s;"></div>
+            <div class="relative w-3 h-3 rounded-full bg-amber-500 border-[1.5px] border-white shadow-[0_0_10px_rgba(245,158,11,1)]"></div>
+          </div>
+        `;
+      } else {
+        iconHtml = `
+          <div class="relative flex items-center justify-center w-4 h-4 group cursor-pointer hover:scale-150 transition-transform">
+            <div class="absolute w-full h-full rounded-full bg-emerald-500/20"></div>
+            <div class="relative w-2 h-2 rounded-full bg-emerald-400 border border-white shadow-[0_0_8px_rgba(52,211,153,0.8)]"></div>
+          </div>
+        `;
+      }
+
+      const customIcon = L.divIcon({
+        html: iconHtml,
+        className: 'bg-transparent border-none',
+        iconSize: isCritical ? [32, 32] : isAnomaly ? [24, 24] : [16, 16],
+        iconAnchor: isCritical ? [16, 16] : isAnomaly ? [12, 12] : [8, 8],
+      });
+
+      const marker = L.marker([station.lat, station.lon], { icon: customIcon });
+
+      // FIX: Stop event bubbling so the popup stays open!
+      marker.on('click', (e) => {
+        L.DomEvent.stopPropagation(e);
+        onSelectStation(mappedStation);
+      });
+
+      marker.bindTooltip(`
+        <div class="px-2 py-1">
+          <div class="text-xs font-bold uppercase tracking-wider text-slate-800">
+            ${station.name || station.station_id}
+          </div>
+          <div class="text-[10px] font-bold ${isAnomaly ? 'text-red-600' : 'text-emerald-600'}">
+            ${isAnomaly ? '⚠️ ANOMALY DETECTED' : '✓ SYSTEM HEALTHY'}
           </div>
         </div>
-      `;
+      `, { direction: 'top', offset: [0, -10], className: 'rounded-lg border-none shadow-xl bg-white/90 backdrop-blur-md' });
 
-      const markerIcon = L.divIcon({
-        html: iconHtml,
-        className: 'ather-station-marker',
+      marker.addTo(layerGroup);
+    });
+
+    // 2. Draw Static Blue Base Hubs (Major Cities)
+    const majorCities = [
+      { name: 'Mumbai', lat: 19.076, lon: 72.8777 },
+      { name: 'Delhi', lat: 28.6139, lon: 77.209 },
+      { name: 'Bengaluru', lat: 12.9716, lon: 77.5946 },
+      { name: 'Hyderabad', lat: 17.385, lon: 78.4867 },
+    ];
+
+    majorCities.forEach(city => {
+      const cityIcon = L.divIcon({
+        html: `
+          <div class="relative flex items-center justify-center w-6 h-6">
+            <div class="absolute w-full h-full rounded-full bg-blue-500/40 animate-pulse"></div>
+            <div class="relative w-2.5 h-2.5 rounded-full bg-blue-400 border-[1.5px] border-white shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
+          </div>
+        `,
+        className: 'bg-transparent border-none',
         iconSize: [24, 24],
         iconAnchor: [12, 12],
       });
 
-      const marker = L.marker([st.lat, st.lon], { icon: markerIcon });
-      marker.on('click', () => {
-        // Convert to AIAnomalyItem-compatible format for CompactWeatherOverlay
-        onSelectStation({
-          id: st.station_id,
-          stationName: st.name,
-          state: 'India',
-          lat: st.lat,
-          lon: st.lon,
-          severity: st.anomaly.is_anomaly
-            ? (st.anomaly.severity_score > 0.7 ? 'D3' : st.anomaly.severity_score > 0.4 ? 'D2' : 'D1')
-            : 'D0',
-          severityLabel: st.anomaly.root_cause,
-          status: style.statusText as any,
-          anomalyType: st.anomaly.root_cause,
-          confidenceScore: Math.round(st.anomaly.confidence_score * 1000) / 10,
-          soilMoistureIndex: 50,
-          heatAnomalyDelta: 0,
-          rainfallDeficitPercent: 0,
-          aiRecommendation: st.anomaly.explanation,
-          lastUpdated: new Date(st.timestamp).toLocaleTimeString(),
-          // Pass full ATHER data for the overlay
-          atherData: st,
-        });
-      });
+      const cityMarker = L.marker([city.lat, city.lon], { icon: cityIcon });
+      
+      cityMarker.bindTooltip(`
+        <div class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-800">
+          ${city.name} (Base Hub)
+        </div>
+      `, { direction: 'top', offset: [0, -8], className: 'rounded-lg border-none shadow-xl bg-white/90 backdrop-blur-md' });
 
-      marker.addTo(lg);
+      cityMarker.addTo(layerGroup);
     });
 
-    return () => {
-      lg.clearLayers();
-    };
   }, [map, visible, stations, onSelectStation]);
 
-  return null;
+  return null; 
 };
-

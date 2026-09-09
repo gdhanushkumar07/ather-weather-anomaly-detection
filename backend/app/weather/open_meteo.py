@@ -53,10 +53,29 @@ def degrees_to_cardinal(deg: Optional[float]) -> str:
     ]
     return cardinals[(val % 16)]
 
+import os
+
 class OpenMeteoService:
-    def __init__(self, cache_ttl_seconds: int = 300):
+    def __init__(self, cache_ttl_seconds: int = 1800):
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.cache_ttl = cache_ttl_seconds
+        self._cache_file = os.path.join(os.path.dirname(__file__), ".weather_cache.json")
+        self._load_disk_cache()
+
+    def _load_disk_cache(self):
+        try:
+            if os.path.exists(self._cache_file):
+                with open(self._cache_file, "r", encoding="utf-8") as f:
+                    self.cache = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load disk cache: {e}")
+
+    def _save_disk_cache(self):
+        try:
+            with open(self._cache_file, "w", encoding="utf-8") as f:
+                json.dump(self.cache, f)
+        except Exception as e:
+            pass
 
     def get_current_weather(self, lat: float, lon: float) -> Dict[str, Any]:
         """
@@ -88,41 +107,47 @@ class OpenMeteoService:
             headers={"User-Agent": "ATHER-Weather-Intelligence/1.0 (academic-monitoring)"}
         )
 
-        with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
-            if response.status != 200:
-                raise RuntimeError(f"Open-Meteo returned status {response.status}")
-            raw = json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
+                if response.status != 200:
+                    raise RuntimeError(f"Open-Meteo returned status {response.status}")
+                raw = json.loads(response.read().decode("utf-8"))
 
-        current = raw.get("current", {})
-        weather_code = current.get("weather_code", 0)
-        wind_deg = current.get("wind_direction_10m")
+            current = raw.get("current", {})
+            weather_code = current.get("weather_code", 0)
+            wind_deg = current.get("wind_direction_10m")
 
-        formatted_data = {
-            "latitude": lat,
-            "longitude": lon,
-            "temperature": current.get("temperature_2m"),
-            "apparentTemperature": current.get("apparent_temperature"),
-            "humidity": current.get("relative_humidity_2m"),
-            "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
-            "surfacePressure": current.get("surface_pressure"),
-            "windSpeed": current.get("wind_speed_10m"),
-            "windGusts": current.get("wind_gusts_10m"),
-            "windDirectionDeg": wind_deg,
-            "windDirection": degrees_to_cardinal(wind_deg),
-            "precipitation": current.get("precipitation", 0.0),
-            "weatherCode": weather_code,
-            "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
-            "timestamp": current.get("time"),
-            "source": "Open-Meteo"
-        }
+            formatted_data = {
+                "latitude": lat,
+                "longitude": lon,
+                "temperature": current.get("temperature_2m"),
+                "apparentTemperature": current.get("apparent_temperature"),
+                "humidity": current.get("relative_humidity_2m"),
+                "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
+                "surfacePressure": current.get("surface_pressure"),
+                "windSpeed": current.get("wind_speed_10m"),
+                "windGusts": current.get("wind_gusts_10m"),
+                "windDirectionDeg": wind_deg,
+                "windDirection": degrees_to_cardinal(wind_deg),
+                "precipitation": current.get("precipitation", 0.0),
+                "weatherCode": weather_code,
+                "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
+                "timestamp": current.get("time"),
+                "source": "Open-Meteo"
+            }
 
-        # Store in cache
-        self.cache[cache_key] = {
-            "cached_at": now,
-            "data": formatted_data
-        }
-
-        return formatted_data
+            # Store in cache
+            self.cache[cache_key] = {
+                "cached_at": now,
+                "data": formatted_data
+            }
+            self._save_disk_cache()
+            return formatted_data
+        except Exception as e:
+            # Fallback to existing cache even if expired
+            if cache_key in self.cache:
+                return self.cache[cache_key]["data"]
+            raise e
 
     def get_batch_weather(
         self,
@@ -145,15 +170,19 @@ class OpenMeteoService:
         indices_to_fetch = []
         for idx, (lat, lon) in enumerate(coords):
             cache_key = f"{round(lat, 3)}_{round(lon, 3)}"
-            if cache_key in self.cache and now - self.cache[cache_key]["cached_at"] < self.cache_ttl:
+            if cache_key in self.cache:
                 results[idx] = self.cache[cache_key]["data"]
+                # Only re-fetch if older than TTL
+                if now - self.cache[cache_key]["cached_at"] >= self.cache_ttl:
+                    indices_to_fetch.append(idx)
             else:
                 indices_to_fetch.append(idx)
 
         if not indices_to_fetch:
             return results
 
-        # Fetch in chunks of up to 50
+        # Fetch in chunks with pacing
+        updated_any = False
         for i in range(0, len(indices_to_fetch), chunk_size):
             chunk_indices = indices_to_fetch[i : i + chunk_size]
             chunk_coords = [coords[ci] for ci in chunk_indices]
@@ -166,54 +195,63 @@ class OpenMeteoService:
                 "current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
             )
 
-            try:
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "ATHER-Weather-Intelligence/1.0 (academic-monitoring)"}
-                )
-                with urllib.request.urlopen(req, context=ctx, timeout=8) as response:
-                    if response.status == 200:
-                        raw = json.loads(response.read().decode("utf-8"))
-                        if isinstance(raw, dict):
-                            raw_list = [raw]
-                        elif isinstance(raw, list):
-                            raw_list = raw
-                        else:
-                            raw_list = []
+            # Throttle between chunks to prevent 429
+            if i > 0:
+                time.sleep(0.4)
 
-                        for j, item in enumerate(raw_list):
-                            if j >= len(chunk_indices):
-                                break
-                            target_idx = chunk_indices[j]
-                            orig_lat, orig_lon = coords[target_idx]
-                            current = item.get("current", {})
-                            weather_code = current.get("weather_code", 0)
-                            wind_deg = current.get("wind_direction_10m")
+            for attempt in range(2):
+                try:
+                    req = urllib.request.Request(
+                        url,
+                        headers={"User-Agent": "ATHER-Weather-Intelligence/1.0 (academic-monitoring)"}
+                    )
+                    with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
+                        if response.status == 200:
+                            raw = json.loads(response.read().decode("utf-8"))
+                            raw_list = [raw] if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
 
-                            formatted_data = {
-                                "latitude": orig_lat,
-                                "longitude": orig_lon,
-                                "temperature": current.get("temperature_2m"),
-                                "apparentTemperature": current.get("apparent_temperature"),
-                                "humidity": current.get("relative_humidity_2m"),
-                                "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
-                                "surfacePressure": current.get("surface_pressure"),
-                                "windSpeed": current.get("wind_speed_10m"),
-                                "windGusts": current.get("wind_gusts_10m"),
-                                "windDirectionDeg": wind_deg,
-                                "windDirection": degrees_to_cardinal(wind_deg),
-                                "precipitation": current.get("precipitation", 0.0),
-                                "weatherCode": weather_code,
-                                "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
-                                "timestamp": current.get("time"),
-                                "source": "AWS Live Feed (Open-Meteo In-Situ)"
-                            }
+                            for j, item in enumerate(raw_list):
+                                if j >= len(chunk_indices):
+                                    break
+                                target_idx = chunk_indices[j]
+                                orig_lat, orig_lon = coords[target_idx]
+                                current = item.get("current", {})
+                                weather_code = current.get("weather_code", 0)
+                                wind_deg = current.get("wind_direction_10m")
 
-                            cache_key = f"{round(orig_lat, 3)}_{round(orig_lon, 3)}"
-                            self.cache[cache_key] = {"cached_at": now, "data": formatted_data}
-                            results[target_idx] = formatted_data
-            except Exception as e:
-                print(f"Warning: Open-Meteo batch weather fetch error for chunk {i}: {e}")
+                                formatted_data = {
+                                    "latitude": orig_lat,
+                                    "longitude": orig_lon,
+                                    "temperature": current.get("temperature_2m"),
+                                    "apparentTemperature": current.get("apparent_temperature"),
+                                    "humidity": current.get("relative_humidity_2m"),
+                                    "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
+                                    "surfacePressure": current.get("surface_pressure"),
+                                    "windSpeed": current.get("wind_speed_10m"),
+                                    "windGusts": current.get("wind_gusts_10m"),
+                                    "windDirectionDeg": wind_deg,
+                                    "windDirection": degrees_to_cardinal(wind_deg),
+                                    "precipitation": current.get("precipitation", 0.0),
+                                    "weatherCode": weather_code,
+                                    "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
+                                    "timestamp": current.get("time"),
+                                    "source": "AWS Live Feed (Open-Meteo In-Situ)"
+                                }
+
+                                cache_key = f"{round(orig_lat, 3)}_{round(orig_lon, 3)}"
+                                self.cache[cache_key] = {"cached_at": now, "data": formatted_data}
+                                results[target_idx] = formatted_data
+                                updated_any = True
+                            break
+                except Exception as e:
+                    if "429" in str(e) and attempt == 0:
+                        time.sleep(1.5)
+                        continue
+                    print(f"Warning: Open-Meteo batch weather fetch error for chunk {i}: {e}")
+                    break
+
+        if updated_any:
+            self._save_disk_cache()
 
         return results
 

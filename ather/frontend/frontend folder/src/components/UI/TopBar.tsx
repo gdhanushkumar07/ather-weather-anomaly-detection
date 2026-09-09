@@ -46,7 +46,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     { name: 'Hyderabad', lat: 17.385, lon: 78.4867, country: 'India' },
   ];
 
-  // Debounced search
   useEffect(() => {
     if (!query || query.trim().length < 2) {
       setResults([]);
@@ -65,7 +64,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Click outside listener
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -87,9 +85,8 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   return (
     <>
-      {/* Top-Left Floating Controls: ATHER Logo, Search, Quick Locations */}
-      <div className="absolute top-3 left-3 z-30 flex items-center gap-2 max-w-[calc(100vw-260px)]">
-        {/* ATHER Logo Badge */}
+      {/* Bumped to z-40 so it stays above side panels */}
+      <div className="absolute top-3 left-4 z-40 flex items-center gap-2 max-w-[calc(100vw-260px)]">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 shadow-xl border border-white/20 select-none shrink-0 cursor-pointer hover:opacity-95 transition-opacity">
           <CloudSun className="w-4 h-4 text-white animate-pulse" />
           <span className="font-extrabold tracking-wider text-xs sm:text-sm text-white drop-shadow">
@@ -97,7 +94,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           </span>
         </div>
 
-        {/* Floating Search Bar */}
         <div className="relative shrink-0" ref={dropdownRef}>
           <div className="flex items-center windy-glass rounded-full px-3 py-1.5 w-44 sm:w-56 md:w-64 shadow-2xl focus-within:border-cyan-400/70 transition-all border border-white/10">
             {isSearching ? (
@@ -126,9 +122,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             )}
           </div>
 
-          {/* Autocomplete Dropdown */}
           {showDropdown && results.length > 0 && (
-            <div className="absolute top-10 left-0 w-72 windy-glass rounded-2xl p-1.5 shadow-2xl z-40 flex flex-col gap-1 max-h-72 overflow-y-auto border border-white/10">
+            <div className="absolute top-10 left-0 w-72 windy-glass rounded-2xl p-1.5 shadow-2xl z-50 flex flex-col gap-1 max-h-72 overflow-y-auto border border-white/10">
               {results.map((item, idx) => (
                 <button
                   key={idx}
@@ -157,7 +152,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           )}
         </div>
 
-        {/* Quick Location Pills */}
         <div className="hidden lg:flex items-center gap-1 shrink-0">
           {quickCities.map((city) => (
             <button
@@ -171,9 +165,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Top-Right Floating Controls: AI Anomalies, Webcams, Units, Menu */}
-      <div className="absolute top-3 right-3 z-30 flex items-center gap-1.5 sm:gap-2">
-        {/* ATHER Anomaly Layer Button */}
+      {/* Bumped to z-40 so it stays above side panels */}
+      <div className="absolute top-3 right-4 z-40 flex items-center gap-1.5 sm:gap-2">
         <button
           onClick={onSelectAnomalies}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all shadow-xl border ${
@@ -187,7 +180,6 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="hidden sm:inline">ATHER Anomalies</span>
         </button>
 
-        {/* Webcams Toggle Button */}
         <button
           onClick={onToggleWebcams}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-xl border ${
@@ -201,34 +193,30 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span className="hidden sm:inline">Webcams</span>
         </button>
 
-        {/* Unit Toggle Button */}
         <button
           onClick={onToggleUnitSystem}
           className="text-xs font-semibold px-2.5 py-1.5 rounded-full windy-glass text-slate-300 hover:text-cyan-300 hover:bg-white/15 transition-all shadow-xl border border-white/10 active:scale-95"
-          title="Toggle units (°C / °F)"
         >
           {unitSystem === 'metric' ? '°C' : '°F'}
         </button>
 
-        {/* Menu & Particle Settings Button */}
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setShowMenuDropdown(!showMenuDropdown)}
             className="w-8 h-8 rounded-full windy-glass flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/15 transition-all shadow-xl border border-white/10 active:scale-95"
-            title="Menu & Settings"
           >
             <Menu className="w-4 h-4" />
           </button>
 
           {showMenuDropdown && (
-            <div className="absolute right-0 top-10 w-56 windy-glass rounded-2xl p-3 shadow-2xl z-40 border border-white/10 flex flex-col gap-2.5 animate-in fade-in slide-in-from-top-2">
-              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 pb-1 border-b border-white/10">
+            <div className="absolute right-0 top-12 w-56 windy-glass rounded-2xl p-4 shadow-2xl z-50 border border-white/10 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5 pb-2 border-b border-white/10">
                 <Sliders className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Simulation Parameters</span>
               </div>
 
               <div>
-                <div className="flex justify-between text-xs text-slate-300 mb-1">
+                <div className="flex justify-between text-xs text-slate-300 mb-1.5">
                   <span>Particle Density</span>
                   <span className="text-cyan-400 font-mono">{Math.round(particleDensity * 100)}%</span>
                 </div>
@@ -244,7 +232,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               </div>
 
               <div>
-                <div className="flex justify-between text-xs text-slate-300 mb-1">
+                <div className="flex justify-between text-xs text-slate-300 mb-1.5">
                   <span>Flow Velocity</span>
                   <span className="text-cyan-400 font-mono">{Math.round(speedMultiplier * 100)}%</span>
                 </div>

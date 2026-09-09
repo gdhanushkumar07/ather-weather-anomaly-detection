@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import type React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L, { type Map as LeafletMap } from 'leaflet';
 import { WindParticleCanvas } from './WindParticleCanvas';
 import { HeatmapOverlay } from './HeatmapOverlay';
 import { AIAnomalyLayer } from './AIAnomalyLayer';
 import { WebcamMarkers } from './WebcamMarkers';
+
 import type {
   WeatherLayerType,
   AltitudeLevel,
@@ -27,6 +27,10 @@ interface WeatherMapProps {
   showWebcams: boolean;
   particleDensity: number;
   speedMultiplier: number;
+  // Command Center integration props (optional for backward compatibility)
+  activeView?: string;
+  showAnomalies?: boolean;
+  selectedStation?: AIAnomalyItem | null;
 }
 
 export const WeatherMap: React.FC<WeatherMapProps> = ({
@@ -41,6 +45,9 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
   showWebcams,
   particleDensity,
   speedMultiplier,
+  activeView,
+  showAnomalies,
+  selectedStation,
 }) => {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
@@ -59,7 +66,7 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Centered over India by default (matching prompt instructions)
+    // Centered over India by default (matching SIH AWS deployment area)
     const map = L.map(mapContainerRef.current, {
       center: [20.5937, 78.9629],
       zoom: 5,
@@ -69,7 +76,7 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
       attributionControl: false,
     });
 
-    // Esri World Dark Gray Base tile layer (100% free, no API key required)
+    // Esri World Dark Gray Base tile layer (clean mission-control backdrop)
     const darkTiles = L.tileLayer(
       'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
       {
@@ -114,7 +121,6 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
       newUrl = 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
       attribution = 'OpenTopoMap';
     } else {
-      // Default: Esri World Dark Gray Base (free, no API key required)
       newUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
       attribution = 'Tiles © Esri — Esri, DeLorme, NAVTEQ';
     }
@@ -153,11 +159,10 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
     }
   }, [selectedLocation]);
 
-  // Fly to location helper
+  // Fly to location helper for selected coordinates
   useEffect(() => {
     if (!mapInstanceRef.current || !selectedLocation) return;
     const map = mapInstanceRef.current;
-    // Check if target is currently in viewport
     const curCenter = map.getCenter();
     const dist = Math.hypot(curCenter.lat - selectedLocation.lat, curCenter.lng - selectedLocation.lon);
     if (dist > 3) {
@@ -166,6 +171,15 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
       });
     }
   }, [selectedLocation]);
+
+  // Fly to selected station if clicked from sidebar or panels
+  useEffect(() => {
+    if (!mapInstanceRef.current || !selectedStation) return;
+    const map = mapInstanceRef.current;
+    map.flyTo([selectedStation.lat, selectedStation.lon], Math.max(map.getZoom(), 8), {
+      duration: 1.2,
+    });
+  }, [selectedStation]);
 
   const handleLocateMe = () => {
     if (!navigator.geolocation || !mapInstanceRef.current) return;
@@ -184,6 +198,15 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
   const handleZoomIn = () => mapInstanceRef.current?.zoomIn();
   const handleZoomOut = () => mapInstanceRef.current?.zoomOut();
 
+  // AWS Stations remain visible during overview, anomalies, stations, or when anomalies layer is active
+  const isAnomalyLayerVisible =
+    showAnomalies ??
+    (activeLayer === 'anomalies' ||
+      activeView === 'anomalies' ||
+      activeView === 'stations' ||
+      activeView === 'overview' ||
+      !activeView);
+
   return (
     <div className="relative w-full h-full overflow-hidden">
       {/* Map Container */}
@@ -198,7 +221,7 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
         />
       )}
 
-      {/* Wind Particles Overlay (Wind Streamlines) */}
+      {/* Wind Particles Overlay */}
       {mapReady && (
         <WindParticleCanvas
           map={mapInstanceRef.current}
@@ -215,7 +238,7 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
       {mapReady && (
         <AIAnomalyLayer
           map={mapInstanceRef.current}
-          visible={activeLayer === 'anomalies'}
+          visible={isAnomalyLayerVisible}
           onSelectStation={onSelectStation}
         />
       )}
@@ -229,8 +252,8 @@ export const WeatherMap: React.FC<WeatherMapProps> = ({
         />
       )}
 
-      {/* Map Navigation Controls (Top Left under search) */}
-      <div className="absolute top-20 left-4 z-20 flex flex-col gap-1.5">
+      {/* Map Navigation Controls positioned clearly to the right of CommandSidebar */}
+      <div className="absolute bottom-6 left-[280px] z-20 flex flex-col gap-1.5">
         <div className="windy-glass rounded-lg overflow-hidden flex flex-col divide-y divide-white/10 shadow-xl">
           <button
             onClick={handleZoomIn}

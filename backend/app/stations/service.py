@@ -5,6 +5,7 @@ Manages weather station metadata, real-time telemetry, spatial querying,
 and caching for the ATHER platform.
 """
 
+import csv
 import json
 import math
 import time
@@ -15,6 +16,7 @@ from schema import station_dict_to_reading
 
 BASE_DIR = Path(__file__).resolve().parents[2] # backend directory
 DATA_PATH = BASE_DIR.parent / "data" / "stations.json"
+CSV_PATH = BASE_DIR / "WeatherUnionInfra.csv"
 
 class StationService:
     def __init__(self):
@@ -24,12 +26,12 @@ class StationService:
     def _load_data(self):
         if not DATA_PATH.exists():
             print(f"Warning: {DATA_PATH} not found.")
-            return
+            station_list = []
+        else:
+            with open(DATA_PATH, "r", encoding="utf-8") as f:
+                station_list = json.load(f)
 
-        with open(DATA_PATH, "r", encoding="utf-8") as f:
-            station_list = json.load(f)
-
-        # 1. Store stations and populate spatial pool
+        # 1. Store existing stations and populate spatial pool
         readings = []
         for s in station_list:
             self._stations[s["id"]] = s
@@ -54,7 +56,103 @@ class StationService:
                 s["status"] = status
                 s["anomaly"] = anomaly
 
+        # 3. Ingest and normalize Indian AWS stations from WeatherUnionInfra.csv
+        self._load_weather_union_csv()
+
         print(f"StationService: Loaded {len(self._stations)} stations and initialized 5-Layer Anomaly Engine.")
+
+    def _load_weather_union_csv(self):
+        if not CSV_PATH.exists():
+            print(f"Warning: {CSV_PATH} not found.")
+            return
+
+        city_region_map = {
+            "Bengaluru": "Karnataka",
+            "Chennai": "Tamil Nadu",
+            "Delhi NCR": "Delhi NCR",
+            "Hyderabad": "Telangana",
+            "Kolkata": "West Bengal",
+            "Mumbai": "Maharashtra",
+            "Pune": "Maharashtra",
+        }
+
+        new_readings = []
+        added_count = 0
+        skipped_non_aws = 0
+        skipped_invalid = 0
+        duplicate_count = 0
+
+        with open(CSV_PATH, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                device_type = row.get("device_type", "").strip()
+                # Phase 2: Only Automated weather system records
+                if "Automated weather system" not in device_type:
+                    skipped_non_aws += 1
+                    continue
+
+                locality_id = row.get("localityId", "").strip()
+                if not locality_id:
+                    skipped_invalid += 1
+                    continue
+
+                city_name = row.get("cityName", "").strip()
+                locality_name = row.get("localityName", "").strip()
+
+                try:
+                    lat = float(row.get("latitude", 0))
+                    lon = float(row.get("longitude", 0))
+                except (ValueError, TypeError):
+                    skipped_invalid += 1
+                    continue
+
+                # Phase 6 & Phase 12: Validate Indian geographic coordinates
+                if not (6.0 <= lat <= 38.0 and 68.0 <= lon <= 98.0):
+                    skipped_invalid += 1
+                    continue
+
+                # Phase 11: Deduplication - existing station priority
+                if locality_id in self._stations:
+                    duplicate_count += 1
+                    continue
+
+                region = city_region_map.get(city_name, city_name)
+                station_name = f"{locality_name} AWS" if locality_name else f"WeatherUnion AWS {locality_id}"
+                town_str = f"{locality_name}, {city_name}, {region}, India" if locality_name else f"{city_name}, {region}, India"
+
+                # Phase 4 & Phase 10: Canonical ATHER station schema
+                stn_dict = {
+                    "id": locality_id,
+                    "name": station_name,
+                    "town": town_str,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "country": "India",
+                    "region": region,
+                    "temperature": None,
+                    "pressure": None,
+                    "humidity": None,
+                    "windSpeed": None,
+                    "windDirection": None,
+                    "condition": "Offline",
+                    "timestamp": "No Data",
+                    "status": "OFFLINE",
+                    "anomaly": None,
+                    "device_type": "Automated weather system",
+                    "localityId": locality_id
+                }
+
+                self._stations[locality_id] = stn_dict
+                new_readings.append(station_dict_to_reading(stn_dict))
+                added_count += 1
+
+        if new_readings:
+            detector.update_spatial_pool(new_readings)
+
+        print(
+            f"StationService: Ingested {added_count} Indian AWS stations from WeatherUnionInfra.csv "
+            f"({skipped_non_aws} non-AWS skipped, {skipped_invalid} invalid, {duplicate_count} duplicates)."
+        )
 
     def get_all_stations(self, limit: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
         res = list(self._stations.values())
@@ -81,10 +179,10 @@ class StationService:
             lon = s.get("longitude", 0)
 
             # Viewport bounding box filtering if provided
-            if min_lat is not None and max_lat is not None:
+            if isinstance(min_lat, (int, float)) and isinstance(max_lat, (int, float)):
                 if not (min_lat <= lat <= max_lat):
                     continue
-            if min_lon is not None and max_lon is not None:
+            if isinstance(min_lon, (int, float)) and isinstance(max_lon, (int, float)):
                 if not (min_lon <= lon <= max_lon):
                     continue
 
@@ -126,21 +224,30 @@ class StationService:
         }
 
     def get_station(self, station_id: str) -> Optional[Dict[str, Any]]:
-        return self._stations.get(station_id)
+        stn = self._stations.get(station_id)
+        if stn:
+            return stn
+        # Fallback check by localityId or without ATHER prefix
+        clean_id = station_id.replace("ATHER-IND-", "").replace("ATHER-", "")
+        for s in self._stations.values():
+            if s.get("localityId") == station_id or s.get("id") == clean_id or s.get("localityId") == clean_id:
+                return s
+        return None
 
     def get_station_anomaly(self, station_id: str) -> Optional[Dict[str, Any]]:
         """
         Returns canonical §16 analysis assessment for a specific station,
         with backwards-compatible top-level keys for existing frontend consumers.
         """
-        stn = self._stations.get(station_id)
+        stn = self.get_station(station_id)
         if not stn:
             return None
 
-        alert = detector.get_station_alert(station_id)
+        resolved_id = stn.get("id", station_id)
+        alert = detector.get_station_alert(resolved_id)
         if not alert:
             status, anomaly_dict = detector.evaluate_station(stn)
-            alert = detector.get_station_alert(station_id)
+            alert = detector.get_station_alert(resolved_id)
 
         if not alert:
             return None
@@ -166,19 +273,25 @@ class StationService:
         res["observation"]["wind_direction"] = stn.get("windDirection")
         res["observation"]["condition"] = stn.get("condition")
 
+        is_offline = stn.get("status") == "OFFLINE"
+
         # Top-level backward compatibility attributes
         res["station_id"] = alert.station_id
-        res["status"] = alert.status
-        res["is_anomaly"] = alert.is_anomaly
-        res["anomaly_score"] = round(alert.severity_score, 3)
+        res["status"] = "OFFLINE" if is_offline else alert.status
+        res["is_anomaly"] = False if is_offline else alert.is_anomaly
+        res["anomaly_score"] = 0.0 if is_offline else round(alert.severity_score, 3)
         res["confidence"] = round(alert.confidence_score, 3)
-        res["veto_fired"] = alert.veto_fired
-        res["root_cause"] = alert.root_cause.value
-        res["affected_channels"] = alert.affected_channels
+        res["veto_fired"] = False if is_offline else alert.veto_fired
+        res["root_cause"] = "OFFLINE" if is_offline else alert.root_cause.value
+        res["affected_channels"] = [] if is_offline else alert.affected_channels
         res["layer_scores"] = {k: round(v, 3) for k, v in alert.layer_scores.items()}
         res["layers_scores"] = res["layer_scores"]
-        res["reasons"] = alert.reasons
-        res["explanation"] = alert.explanation
+        res["reasons"] = [] if is_offline else alert.reasons
+        res["explanation"] = (
+            "Station is registered in network registry. Awaiting live sensor telemetry transmission."
+            if is_offline
+            else alert.explanation
+        )
         res["sensor_health_index"] = round(alert.sensor_health_index, 1)
         res["health_index"] = res["sensor_health_index"]
         res["estimated_days_to_failure"] = (
@@ -189,7 +302,18 @@ class StationService:
         res["days_to_failure"] = res["estimated_days_to_failure"]
         res["raw_values"] = alert.raw_values
         res["corrected_values"] = alert.corrected_values
-        res["operator_action"] = alert.operator_action
+        res["operator_action"] = (
+            "Station currently offline. Verify hardware connectivity or ingest telemetry."
+            if is_offline
+            else alert.operator_action
+        )
+
+        if is_offline and "overall" in res:
+            res["overall"]["status"] = "OFFLINE"
+            res["overall"]["score"] = 0.0
+            res["overall"]["severity"] = "NONE"
+        if is_offline and "diagnosis" in res:
+            res["diagnosis"]["status"] = "OFFLINE"
 
         return res
 
@@ -200,14 +324,16 @@ class StationService:
             if (q in s.get("name", "").lower() or 
                 q in s.get("town", "").lower() or 
                 q in s.get("id", "").lower() or
-                q in s.get("country", "").lower()):
+                q in s.get("localityId", "").lower() or
+                q in s.get("country", "").lower() or
+                q in s.get("region", "").lower()):
                 matches.append(s)
                 if len(matches) >= limit:
                     break
         return matches
 
     def get_observations_history(self, station_id: str, hours: int = 24) -> List[Dict[str, Any]]:
-        stn = self._stations.get(station_id)
+        stn = self.get_station(station_id)
         if not stn:
             return []
 
@@ -215,6 +341,10 @@ class StationService:
         has_press = stn.get("pressure") is not None and stn.get("pressure") >= 1.0
         has_humid = stn.get("humidity") is not None
         has_wind = stn.get("windSpeed") is not None
+
+        # If station has no observations across any channel, return empty list
+        if not (has_temp or has_press or has_humid or has_wind):
+            return []
 
         base_temp = stn.get("temperature") if has_temp else 24.0
         base_press = stn.get("pressure") if has_press else 1013.2
@@ -272,17 +402,25 @@ class StationService:
     def get_anomalies_summary(self) -> Dict[str, Any]:
         anomalies = []
         warnings = []
+        offline_count = 0
+        normal_count = 0
         for s in self._stations.values():
-            if s.get("status") == "ANOMALY":
+            st = s.get("status")
+            if st == "ANOMALY":
                 anomalies.append(s)
-            elif s.get("status") == "WARNING":
+            elif st == "WARNING":
                 warnings.append(s)
+            elif st == "OFFLINE":
+                offline_count += 1
+            else:
+                normal_count += 1
 
         return {
             "totalStations": len(self._stations),
-            "normalCount": len(self._stations) - len(anomalies) - len(warnings),
+            "normalCount": normal_count,
             "warningCount": len(warnings),
             "anomalyCount": len(anomalies),
+            "offlineCount": offline_count,
             "activeAnomalies": anomalies[:30],
             "activeWarnings": warnings[:30]
         }

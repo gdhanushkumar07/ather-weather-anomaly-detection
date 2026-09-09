@@ -77,5 +77,67 @@ class TestAtherBackend(unittest.TestCase):
         self.assertEqual(norm["temperature"], 25.0)
         self.assertAlmostEqual(norm["pressure"], 1013.2, places=1)
 
+    def test_weather_union_stations_loading(self):
+        stns = station_service.get_all_stations()
+        self.assertEqual(len(stns), 1951)
+
+        # Verify Indian stations count (4 existing flagship + 296 WeatherUnion AWS)
+        indian_stns = [s for s in stns if s.get("country") == "India"]
+        self.assertEqual(len(indian_stns), 300)
+
+        # Check sample Indian AWS station from CSV
+        zwl = station_service.get_station("ZWL003467")
+        self.assertIsNotNone(zwl)
+        self.assertEqual(zwl["name"], "Banashankari AWS")
+        self.assertEqual(zwl["country"], "India")
+        self.assertEqual(zwl["region"], "Karnataka")
+        self.assertAlmostEqual(zwl["latitude"], 12.936787, places=5)
+        self.assertAlmostEqual(zwl["longitude"], 77.556079, places=5)
+        self.assertEqual(zwl["status"], "OFFLINE")
+        self.assertIsNone(zwl["temperature"])
+        self.assertIsNone(zwl["pressure"])
+        self.assertIsNone(zwl["humidity"])
+
+        # Check search functionality for newly integrated stations
+        by_locality = station_service.search("Banashankari")
+        self.assertTrue(any(s["id"] == "ZWL003467" for s in by_locality))
+
+        by_id = station_service.search("ZWL003467")
+        self.assertEqual(len(by_id), 1)
+        self.assertEqual(by_id[0]["id"], "ZWL003467")
+
+        by_city = station_service.search("Bengaluru", limit=100)
+        self.assertGreater(len(by_city), 10)
+
+        # Verify rain gauge device types were excluded (e.g. ZWL003133 from Paldi is a rain gauge)
+        rain_gauge = station_service.get_station("ZWL003133")
+        self.assertIsNone(rain_gauge)
+
+    def test_weather_union_telemetry_ingestion(self):
+        # Ingest nominal telemetry for ZWL004900 (Rajarajeshwari Nagar AWS)
+        payload = {
+            "id": "ZWL004900",
+            "temperature": 27.2,
+            "pressure": 1011.5,
+            "humidity": 65,
+            "windSpeed": 12.0,
+            "condition": "Partly Cloudy"
+        }
+        updated = station_service.ingest_observation("ZWL004900", payload)
+        self.assertEqual(updated["status"], "NORMAL")
+        self.assertEqual(updated["temperature"], 27.2)
+
+        # Ingest anomalous temperature spike
+        spike_payload = {
+            "id": "ZWL004900",
+            "temperature": 53.5,
+            "pressure": 1011.5,
+            "humidity": 20,
+            "windSpeed": 15.0
+        }
+        updated_spike = station_service.ingest_observation("ZWL004900", spike_payload)
+        self.assertEqual(updated_spike["status"], "ANOMALY")
+        self.assertIsNotNone(updated_spike["anomaly"])
+
 if __name__ == "__main__":
     unittest.main()

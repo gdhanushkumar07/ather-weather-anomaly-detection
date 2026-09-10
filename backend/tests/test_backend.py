@@ -122,15 +122,15 @@ class TestAtherBackend(unittest.TestCase):
         # Ingest nominal telemetry for ZWL004900 (Rajarajeshwari Nagar AWS)
         payload = {
             "id": "ZWL004900",
-            "temperature": 27.2,
-            "pressure": 1011.5,
-            "humidity": 65,
-            "windSpeed": 12.0,
+            "temperature": 20.4,
+            "pressure": 1012.5,
+            "humidity": 96,
+            "windSpeed": 4.8,
             "condition": "Partly Cloudy"
         }
         updated = station_service.ingest_observation("ZWL004900", payload)
         self.assertIn(updated["status"], ["NORMAL", "WARNING"])
-        self.assertEqual(updated["temperature"], 27.2)
+        self.assertEqual(updated["temperature"], 20.4)
 
         # Ingest anomalous temperature spike
         spike_payload = {

@@ -15,3 +15,7 @@ __pycache__/
 data/incidents.db
 data/incidents.db-wal
 data/incidents.db-shm
+
+# Runtime caches
+*.cache.json
+.weather_cache.json

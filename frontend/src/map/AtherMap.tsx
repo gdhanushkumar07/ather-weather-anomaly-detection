@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
@@ -9,9 +9,11 @@ import {
   setStationLayersVisibility,
   updateSelectedStationHalo,
   updateNeighborConnections,
-  clearNeighborConnections
+  clearNeighborConnections,
+  setParameterLayer,
+  ParameterField,
+  setAnomalyOverlayVisibility
 } from './StationLayer';
-import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 import { AWSNeighbor } from '../aws/awsGeo';
@@ -27,6 +29,22 @@ const MAP_BACKGROUND_COLOR = '#080c14';
 // station-level zoom, not an arbitrarily different threshold.
 const AWS_MODEL_ZOOM_THRESHOLD = 8.0;
 
+export interface MapViewState {
+  center: [number, number];
+  zoom: number;
+  bearing: number;
+  pitch: number;
+}
+
+export interface AtherMapHandle {
+  /** Current camera view, or null if the map hasn't initialized yet. */
+  getViewState: () => MapViewState | null;
+  /** Immediately jumps to a previously captured view (no animation) — used
+   * to restore exactly what the user was looking at before they navigated
+   * away, undoing any fly-to-station that happened in between. */
+  restoreViewState: (state: MapViewState) => void;
+}
+
 interface AtherMapProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
   selectedStationId: string | null;
@@ -37,9 +55,17 @@ interface AtherMapProps {
   isGlobeMode?: boolean;
   onToggleGlobeMode?: () => void;
   neighbors?: AWSNeighbor[];
+  showAnomalyOverlay?: boolean;
+  /** Whether the Map workspace is the one currently visible. Used to skip
+   * the fly-to-selected-station animation when nobody can see it (station
+   * selected from another workspace), and to resize the map after it
+   * becomes visible again (its container was display:none, which can leave
+   * MapLibre's canvas at a stale size). Defaults to true so any other
+   * caller of AtherMap keeps prior behavior. */
+  isActive?: boolean;
 }
 
-export const AtherMap: React.FC<AtherMapProps> = ({
+export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
   stationsGeoJSON,
   selectedStationId,
   onSelectStation,
@@ -48,17 +74,46 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   onToggleBasemap,
   isGlobeMode = false,
   onToggleGlobeMode,
-  neighbors = []
-}) => {
+  neighbors = [],
+  showAnomalyOverlay = true,
+  isActive = true
+}, ref) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
-  const colormapLayerRef = useRef<VaneColormapLayer | null>(null);
   const particlesLayerRef = useRef<VaneParticlesLayer | null>(null);
 
   const [isMapReady, setIsMapReady] = React.useState(false);
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
+
+  useImperativeHandle(ref, () => ({
+    getViewState: () => {
+      const map = mapRef.current;
+      if (!map) return null;
+      const c = map.getCenter();
+      return { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+    },
+    restoreViewState: (state: MapViewState) => {
+      mapRef.current?.jumpTo({ center: state.center, zoom: state.zoom, bearing: state.bearing, pitch: state.pitch });
+    }
+  }), []);
+
+  // Always-current, non-reactive read of `isActive` for effects that must
+  // NOT re-run just because visibility toggled (see the fly-to-station
+  // effect below).
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  // Re-measure the map after its container becomes visible again — while
+  // display:none, MapLibre may have last computed a stale/zero canvas size.
+  const wasActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActiveRef.current && mapRef.current) {
+      mapRef.current.resize();
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive]);
 
   // 1. Initialize MapLibre with both Dark Canvas and Satellite Imagery Basemaps
   useEffect(() => {
@@ -203,6 +258,33 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     setStationLayersVisibility(map, activeLayers.stations);
   }, [activeLayers.stations, isMapReady]);
 
+  // 3a2. Anomaly overlay (Map Options): independent of the AWS markers
+  // toggle, but re-synced whenever markers are toggled since turning
+  // markers off forces the pulse halo off too (see setStationLayersVisibility).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    setAnomalyOverlayVisibility(map, activeLayers.stations && showAnomalyOverlay);
+  }, [showAnomalyOverlay, activeLayers.stations, isMapReady]);
+
+  // 3b. Real-data parameter halo (Phase 3 weather-layer fix): colors each
+  // station by its ACTUAL reported temperature/pressure/humidity value.
+  // Temperature/Pressure/Humidity are mutually exclusive in activeLayers
+  // (see App.tsx), so at most one of these is ever active.
+  const activeParameter: ParameterField | null = activeLayers.pressure
+    ? 'pressure'
+    : activeLayers.humidity
+      ? 'humidity'
+      : activeLayers.temperature
+        ? 'temperature'
+        : null;
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    setParameterLayer(map, activeParameter);
+  }, [activeParameter, isMapReady]);
+
   // 4. Update Selected Station Halo
   useEffect(() => {
     const map = mapRef.current;
@@ -255,39 +337,20 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     };
   }, [isMapReady]);
 
-  // 5. Vane Temperature WebGL Layer Toggle
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapReady) return;
+  // NOTE: There used to be a "Vane Temperature WebGL Layer" here that fetched
+  // a fully synthetic, procedurally generated global temperature field from
+  // /api/weather/grid (see backend/app/weather/grid_service.py — a math
+  // function of latitude/longitude only, with NO connection to any real AWS
+  // observation) and painted it as a full-viewport WebGL raster. That is
+  // exactly the "large cyan/colored tint that isn't actually data-driven"
+  // bug reported against this feature. It has been permanently removed.
+  // The ONLY temperature/pressure/humidity visualization now is the
+  // real-station-data parameter halo wired in effect 3b above
+  // (setParameterLayer, from StationLayer.ts), which is driven strictly by
+  // each station's own reported value.
 
-    if (activeLayers.temperature) {
-      if (!colormapLayerRef.current) {
-        fetchWeatherGrid('temperature')
-          .then((grid: GridFieldData) => {
-            if (!mapRef.current) return;
-            const layer = new VaneColormapLayer(grid);
-            colormapLayerRef.current = layer;
-            // Insert beneath reference overlay & stations
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
-            if (!map.getLayer(layer.id)) {
-              map.addLayer(layer, beforeId);
-            }
-          })
-          .catch((err) => console.error('Failed to load temperature field', err));
-      } else {
-        if (!map.getLayer(colormapLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
-          map.addLayer(colormapLayerRef.current, beforeId);
-        }
-      }
-    } else {
-      if (colormapLayerRef.current && map.getLayer(colormapLayerRef.current.id)) {
-        map.removeLayer(colormapLayerRef.current.id);
-      }
-    }
-  }, [activeLayers.temperature, isMapReady]);
-
-  // 6. Vane Wind WebGL Particle Layer Toggle
+  // 6. Vane Wind WebGL Particle Layer Toggle (unchanged — wind is out of
+  // scope for this fix and was not reported as broken).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
@@ -338,9 +401,16 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [basemap, isMapReady]);
 
-  // 7. Fly to selected station
+  // 7. Fly to selected station — only when the map is actually the visible
+  // workspace at the moment of selection (Phase 9/31 of the map-state-
+  // persistence fix): flying while hidden has no visual purpose and would
+  // silently change the view the user returns to after visiting Station
+  // Intelligence. isActive is read via a ref, NOT a dependency — otherwise
+  // this effect would re-fire (and fly again) every time the user comes
+  // BACK to the map, since selectedStationId is intentionally left set so
+  // the station stays highlighted.
   useEffect(() => {
-    if (!selectedStationId || !mapRef.current || !stationsGeoJSON) return;
+    if (!isActiveRef.current || !selectedStationId || !mapRef.current || !stationsGeoJSON) return;
     const feature = stationsGeoJSON.features.find((f) => f.properties?.id === selectedStationId);
     if (feature && feature.geometry.type === 'Point') {
       const [lon, lat] = feature.geometry.coordinates;
@@ -398,17 +468,71 @@ export const AtherMap: React.FC<AtherMapProps> = ({
         />
       )}
 
-      {/* Temperature Colormap Legend */}
-      {activeLayers.temperature && (
+      {/* Phase 9: Active-Layer Indicator Badge */}
+      <div className="active-layer-indicator-pill">
+        <span className="active-layer-dot" />
+        <div className="active-layer-text">
+          <span className="layer-tag-label">ACTIVE LAYER: </span>
+          <strong className="layer-param-name">
+            {activeParameter === 'temperature'
+              ? 'SURFACE TEMPERATURE · AWS OBSERVATIONS'
+              : activeParameter === 'pressure'
+                ? 'ATMOSPHERIC PRESSURE · AWS OBSERVATIONS'
+                : activeParameter === 'humidity'
+                  ? 'RELATIVE HUMIDITY · AWS OBSERVATIONS'
+                  : activeLayers.wind
+                    ? 'WIND PARTICLES · GFS / METEO VECTOR'
+                    : `AWS NETWORK STATIONS · ${basemap === 'dark' ? 'DARK MAP' : 'SATELLITE'}`}
+          </strong>
+        </div>
+      </div>
+
+      {/* Phase 10: Dynamic Parameter Legend */}
+      {activeParameter && (
         <div className="weather-legend">
-          <div style={{ fontWeight: 600, color: '#f8fafc' }}>Surface Temperature (°C)</div>
-          <div className="legend-bar temp-gradient" />
-          <div className="legend-labels">
-            <span>-30°</span>
-            <span>0°</span>
-            <span>+15°</span>
-            <span>+30°</span>
-            <span>+45°</span>
+          <div className="legend-header-row">
+            <div className="legend-title-group">
+              <span className="legend-primary-title">
+                {activeParameter === 'temperature'
+                  ? 'SURFACE TEMPERATURE'
+                  : activeParameter === 'pressure'
+                    ? 'ATMOSPHERIC PRESSURE'
+                    : 'RELATIVE HUMIDITY'}
+              </span>
+              <span className="legend-unit-badge">
+                {activeParameter === 'temperature' ? '°C' : activeParameter === 'pressure' ? 'hPa' : '%'}
+              </span>
+            </div>
+            <span className="legend-source-tag">AWS IN-SITU / NWP REF</span>
+          </div>
+
+          {activeParameter === 'temperature' && (
+            <>
+              <div className="legend-bar temp-gradient" />
+              <div className="legend-labels">
+                <span>-30°</span><span>0°</span><span>+15°</span><span>+30°</span><span>+45°</span>
+              </div>
+            </>
+          )}
+          {activeParameter === 'pressure' && (
+            <>
+              <div className="legend-bar pressure-gradient" />
+              <div className="legend-labels">
+                <span>975</span><span>992</span><span>1013</span><span>1022</span><span>1035</span>
+              </div>
+            </>
+          )}
+          {activeParameter === 'humidity' && (
+            <>
+              <div className="legend-bar humidity-gradient" />
+              <div className="legend-labels">
+                <span>10%</span><span>30%</span><span>55%</span><span>75%</span><span>98%</span>
+              </div>
+            </>
+          )}
+          <div className="legend-provenance-note">
+            Colored by each station's own reported value. Stations with active telemetry show AWS In-Situ;
+            others show NWP model reference — see the station panel for exact provenance.
           </div>
         </div>
       )}
@@ -456,4 +580,4 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       </div>
     </div>
   );
-};
+});

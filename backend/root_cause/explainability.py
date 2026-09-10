@@ -159,6 +159,16 @@ class ExplanationGenerator:
         if fault_type == FaultType.COMMUNICATION_OUTAGE:
             return f"Data communication disruption at {stn_id}. No valid sensor readings received."
 
+        if fault_type == FaultType.MODEL_REFERENCE_INCONSISTENCY:
+            # No physical sensor is connected — never fall through to the
+            # generic "Sensor health: X%" wording below (Phase 27 guard).
+            return (
+                f"Anomalous pattern detected at {stn_id} in the NWP model reference value "
+                f"(no AWS in-situ sensor is connected for this station). Observed: {obs_str}. "
+                f"Evidence: {ev_str}. This reflects model-output behavior, not physical "
+                f"sensor health, and should not be treated as a hardware fault."
+            )
+
         # Generic fallback
         return (
             f"Anomaly at {stn_id}. Observed: {obs_str}. "

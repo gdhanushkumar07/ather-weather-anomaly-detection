@@ -68,7 +68,14 @@ export interface CanonicalObservation {
   wind_speed: number | null;
   wind_direction?: string | null;
   condition?: string | null;
+  /** Verified provenance — 'AWS_IN_SITU' | 'NWP_MODEL_REFERENCE' | 'MISSING' | 'UNKNOWN'.
+   *  NEVER assume this is measured AWS telemetry; render conditionally. */
   source: string;
+  /** 'LIVE' | 'STALE' | 'UNKNOWN' | 'MISSING' — derived from the real observation
+   *  timestamp, never from request time. */
+  freshness?: string;
+  observation_timestamp?: string | null;
+  received_timestamp?: string | null;
 }
 
 export interface CanonicalOverall {
@@ -118,6 +125,9 @@ export interface StationAnomalyAssessment {
   raw_values?: Record<string, number | null>;
   corrected_values?: Record<string, number | null>;
   operator_action?: string;
+  /** 'TELEMETRY_AVAILABLE' | 'TELEMETRY_UNAVAILABLE' — whether a real AWS
+   *  sensor feed (not a model reference) is connected for this station. */
+  aws_telemetry_status?: string;
 
   // Canonical Section 16 elements
   station?: {
@@ -196,6 +206,7 @@ export interface AnomaliesSummary {
   normalCount: number;
   warningCount: number;
   anomalyCount: number;
+  offlineCount?: number;
   activeAnomalies: Station[];
   activeWarnings: Station[];
 }

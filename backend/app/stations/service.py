@@ -11,8 +11,43 @@ import math
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timezone
 from ..anomaly.detector import detector
-from schema import station_dict_to_reading
+from schema import station_dict_to_reading, ObservationSource, Freshness
+from config import CONFIG
+from ..incidents import service as incident_service
+
+
+def _enum_val(x: Any) -> Optional[str]:
+    """Unwraps a str-Enum to its plain string value without relying on
+    str-Enum's version-inconsistent __str__ behavior."""
+    if x is None:
+        return None
+    return x.value if hasattr(x, "value") else str(x)
+
+# Open-Meteo's `current` block updates on an hourly model cadence. 90 minutes
+# gives a conservative buffer above that cadence before calling data STALE.
+_NWP_CADENCE_MINUTES = 90.0
+
+
+def _plausible(value: Optional[float], lo: float, hi: float) -> Optional[float]:
+    """Returns `value` unchanged if it is a real number within [lo, hi],
+    otherwise None. Used to keep physically-impossible/corrupt raw sensor
+    readings (observed in real station data — e.g. -5573C, or a 20.5 hPa
+    pressure sensor fault) out of any map layer or display that presents a
+    value as a genuine observation. This never fabricates a substitute
+    value — an implausible reading becomes "missing", not "corrected"."""
+    if value is None:
+        return None
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    if v != v:  # NaN
+        return None
+    if lo <= v <= hi:
+        return v
+    return None
 
 BASE_DIR = Path(__file__).resolve().parents[2] # backend directory
 DATA_PATH = BASE_DIR.parent / "data" / "stations.json"
@@ -32,8 +67,23 @@ class StationService:
                 station_list = json.load(f)
 
         # 1. Store existing stations and populate spatial pool
+        #
+        # PROVENANCE NOTE: this dataset (data/stations.json) was generated once
+        # offline by data/normalize_stations.py from a scraped community mesonet
+        # feed — the values are genuine crowdsourced in-situ readings at the time
+        # of the scrape, but the file is a static snapshot with no live refresh
+        # path, and no verifiable per-station observation time survived that
+        # process. We therefore tag it AWS_IN_SITU (a real sensor network, not a
+        # model) but freshness UNKNOWN — never LIVE — because staleness cannot
+        # be honestly determined. See Phase 1-4 of the provenance audit.
         readings = []
         for s in station_list:
+            has_value = s.get("temperature") is not None or s.get("humidity") is not None or (
+                s.get("pressure") is not None and s.get("pressure") not in (0, 0.0)
+            )
+            s["dataSource"] = ObservationSource.AWS_IN_SITU if has_value else ObservationSource.MISSING
+            s.setdefault("observationTimestamp", None)  # not verifiable for this static snapshot
+            s["freshness"] = Freshness.MISSING if not has_value else Freshness.UNKNOWN
             self._stations[s["id"]] = s
             readings.append(station_dict_to_reading(s))
 
@@ -55,6 +105,7 @@ class StationService:
             else:
                 s["status"] = status
                 s["anomaly"] = anomaly
+                self._sync_incident(s)
 
         # 3. Ingest and normalize Indian AWS stations from WeatherUnionInfra.csv
         self._load_weather_union_csv()
@@ -135,7 +186,15 @@ class StationService:
 
             w = weather_list[i] if i < len(weather_list) else None
 
-            # Canonical ATHER station schema
+            # PROVENANCE NOTE: WeatherUnionInfra.csv carries only locality metadata
+            # (name/coordinates) — it has NO telemetry columns, and no real
+            # WeatherUnion live-telemetry API is integrated. Every numeric value
+            # for these stations comes from Open-Meteo, a NWP model — it must
+            # NEVER be labeled as measured AWS telemetry. Per Phase 3 of the
+            # provenance audit, these stations are REGISTERED + LOCATED but
+            # TELEMETRY UNAVAILABLE from a physical AWS sensor; the reference
+            # value is shown for context only, clearly tagged NWP_MODEL_REFERENCE.
+            has_ref_value = bool(w and w.get("temperature") is not None)
             stn_dict = {
                 "id": locality_id,
                 "name": station_name,
@@ -154,7 +213,11 @@ class StationService:
                 "status": "OFFLINE",
                 "anomaly": None,
                 "device_type": "Automated weather system",
-                "localityId": locality_id
+                "localityId": locality_id,
+                "dataSource": ObservationSource.NWP_MODEL_REFERENCE if has_ref_value else ObservationSource.MISSING,
+                "observationTimestamp": w.get("timestamp") if w else None,
+                "sourceCadenceMinutes": _NWP_CADENCE_MINUTES,
+                "awsTelemetryStatus": "TELEMETRY_UNAVAILABLE",
             }
 
             # Evaluate with 5-Layer Anomaly Detection Engine
@@ -162,6 +225,11 @@ class StationService:
                 status, anomaly = detector.evaluate_station(stn_dict)
                 stn_dict["status"] = status
                 stn_dict["anomaly"] = anomaly
+                # NOTE: this dataset is NWP-referenced (see dataSource above),
+                # so _sync_incident's own gate will correctly no-op here —
+                # called anyway so this stays correct if the source ever
+                # becomes real AWS telemetry (Phase 3: never incident from NWP).
+                self._sync_incident(stn_dict)
 
             self._stations[locality_id] = stn_dict
             new_readings.append(station_dict_to_reading(stn_dict))
@@ -222,16 +290,30 @@ class StationService:
                     "town": s["town"],
                     "country": s["country"],
                     "region": s["region"],
-                    "temperature": s.get("temperature"),
-                    "pressure": s.get("pressure"),
-                    "humidity": s.get("humidity"),
+                    # Physically-impossible or corrupt raw sensor values (found in
+                    # real community-network data — e.g. a station reporting
+                    # -5573C, or 20.5/1359.5 hPa) must never be plotted as if they
+                    # were valid observations. Reuse the SAME hard physical bounds
+                    # already used by the L1 Physics veto (config.py CONFIG.physics)
+                    # so the map layer and the anomaly engine agree on what counts
+                    # as a physically plausible reading.
+                    "temperature": _plausible(s.get("temperature"), CONFIG.physics.temp_min_c, CONFIG.physics.temp_max_c),
+                    # Pressure < 1 hPa is additionally a known null-sentinel, not a
+                    # real measurement (see schema.py DataQuality policy).
+                    "pressure": _plausible(s.get("pressure"), max(CONFIG.physics.pressure_min_hpa, 1.0), CONFIG.physics.pressure_max_hpa),
+                    # Humidity is physically bounded [0, 100]; an out-of-range
+                    # value must be excluded from the map, not displayed as data.
+                    "humidity": _plausible(s.get("humidity"), 0.0, 100.0),
                     "windSpeed": s.get("windSpeed"),
                     "windDirection": s.get("windDirection"),
                     "condition": s.get("condition", "Reported"),
                     "timestamp": s.get("timestamp", "Recent"),
                     "status": s.get("status", "NORMAL"),
                     "hasAnomaly": 1 if s.get("anomaly") else 0,
-                    "severity": s["anomaly"]["severity"] if s.get("anomaly") else "NONE"
+                    "severity": s["anomaly"]["severity"] if s.get("anomaly") else "NONE",
+                    # Provenance passthrough for map-layer disclosure (Phase 20 of the
+                    # provenance audit, Phase 3 "AWS vs NWP visual distinction" here).
+                    "source": s.get("dataSource", "UNKNOWN"),
                 }
             })
             count += 1
@@ -267,6 +349,12 @@ class StationService:
                     stn["windDirection"] = w.get("windDirection")
                     stn["condition"] = w.get("condition", "Reported")
                     stn["timestamp"] = w.get("timestamp", "Recent")
+                    # This is an on-demand Open-Meteo fetch — a NWP model
+                    # reference, not measured AWS telemetry. Tag it honestly.
+                    stn["dataSource"] = ObservationSource.NWP_MODEL_REFERENCE
+                    stn["observationTimestamp"] = w.get("timestamp")
+                    stn["sourceCadenceMinutes"] = _NWP_CADENCE_MINUTES
+                    stn["awsTelemetryStatus"] = "TELEMETRY_UNAVAILABLE"
                     status, anomaly = detector.evaluate_station(stn)
                     stn["status"] = status
                     stn["anomaly"] = anomaly
@@ -275,6 +363,76 @@ class StationService:
                 print(f"On-demand weather fetch for {station_id}: {e}")
 
         return stn
+
+    def _build_incident_snapshot(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> Optional[Dict[str, Any]]:
+        """
+        Builds the normalized evaluation snapshot handed to
+        incident_service.upsert_from_evaluation(). Every field is read
+        directly from the real AnomalyAlert already produced by the 5-layer
+        engine for this station (detector.get_station_alert) — this never
+        computes or fabricates a separate anomaly judgement (Phase 2/3 of
+        the incident-workflow spec: reuse the existing ATHER fusion rules,
+        do not invent a parallel threshold system).
+        """
+        stn_id = stn.get("id")
+        if not stn_id:
+            return None
+        alert = detector.get_station_alert(stn_id)
+        if alert is None:
+            return None
+
+        is_offline = stn.get("status") == "OFFLINE"
+        status = "OFFLINE" if is_offline else alert.status
+        if status not in ("WARNING", "ANOMALY"):
+            return None  # Phase 3: no incident for NORMAL/OFFLINE/insufficient-evidence-only results
+
+        canonical = alert.to_canonical_dict() or {}
+        obs = canonical.get("observation", {})
+        legacy_anomaly = stn.get("anomaly") or {}
+
+        return {
+            "station_id": stn_id,
+            "station_name": stn.get("name"),
+            "town": stn.get("town"),
+            "region": stn.get("region"),
+            "country": stn.get("country"),
+            "parameter": legacy_anomaly.get("parameter", "Sensor Array"),
+            "observed_value": legacy_anomaly.get("observed"),
+            "expected_min": legacy_anomaly.get("expectedMin"),
+            "expected_max": legacy_anomaly.get("expectedMax"),
+            "unit": legacy_anomaly.get("unit", ""),
+            "status": status,
+            "severity": canonical.get("overall", {}).get("severity"),
+            "anomaly_score": round(alert.severity_score, 3),
+            "confidence": round(alert.confidence_score, 3),
+            "root_cause": _enum_val(alert.root_cause),
+            "root_cause_confidence": _enum_val(alert.diagnosis_confidence),
+            "recommended_action": alert.operator_action,
+            "evidence": alert.reasons or [],
+            "diagnostic_layers": canonical.get("layers"),
+            "fusion_result": {
+                "status": status,
+                "score": round(alert.severity_score, 3),
+                "confidence": round(alert.confidence_score, 3),
+                "explanation": alert.explanation,
+            },
+            "observation_timestamp": obs.get("observation_timestamp") or obs.get("timestamp"),
+            "obs_source": _enum_val(obs.get("source")),
+            "freshness": _enum_val(obs.get("freshness")),
+            "source": source,
+        }
+
+    def _sync_incident(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> None:
+        """Best-effort incident upsert — never lets an incident-persistence
+        problem break station evaluation/ingestion (Phase 20: incident
+        creation is additive to the existing pipeline, not a precondition
+        for it)."""
+        try:
+            snapshot = self._build_incident_snapshot(stn, source=source)
+            if snapshot:
+                incident_service.upsert_from_evaluation(snapshot)
+        except Exception as e:
+            print(f"Incident sync failed for {stn.get('id')}: {e}")
 
     def get_station_anomaly(self, station_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -289,6 +447,8 @@ class StationService:
         alert = detector.get_station_alert(resolved_id)
         if not alert:
             status, anomaly_dict = detector.evaluate_station(stn)
+            stn["status"] = status
+            stn["anomaly"] = anomaly_dict
             alert = detector.get_station_alert(resolved_id)
 
         if not alert:
@@ -314,6 +474,16 @@ class StationService:
         res["observation"]["wind_speed"] = stn.get("windSpeed")
         res["observation"]["wind_direction"] = stn.get("windDirection")
         res["observation"]["condition"] = stn.get("condition")
+
+        # Provenance passthrough (Phase 1-4, 20, 27): the canonical observation
+        # must reflect the REAL source/freshness computed at ingestion time,
+        # never an assumed "AWS Station Data" label.
+        reading_dict = station_dict_to_reading(stn).to_dict()
+        res["observation"]["source"] = reading_dict["source"]
+        res["observation"]["freshness"] = reading_dict["freshness"]
+        res["observation"]["observation_timestamp"] = reading_dict["observation_timestamp"]
+        res["observation"]["received_timestamp"] = reading_dict["received_timestamp"]
+        res["aws_telemetry_status"] = stn.get("awsTelemetryStatus", "TELEMETRY_AVAILABLE")
 
         is_offline = stn.get("status") == "OFFLINE"
 
@@ -356,6 +526,12 @@ class StationService:
             res["overall"]["severity"] = "NONE"
         if is_offline and "diagnosis" in res:
             res["diagnosis"]["status"] = "OFFLINE"
+
+        # Phase 20/27: this is the on-demand "view station" evaluation path —
+        # the richest evidence snapshot available (full L1-L5 canonical
+        # cards), so it is also an incident sync point.
+        if not is_offline:
+            self._sync_incident(stn)
 
         return res
 
@@ -489,6 +665,15 @@ class StationService:
                 stn[k] = payload[k]
 
         stn["timestamp"] = "Just now"
+        # Pushed telemetry from a real station driver (WeeWX/WOW-BE/native) is
+        # the one genuinely measured AWS pathway in this system. The receipt
+        # time is used as the observation time since ingest adapters do not
+        # currently surface the device's own clock.
+        now_iso = datetime.now(timezone.utc).isoformat()
+        stn["dataSource"] = ObservationSource.AWS_IN_SITU
+        stn["observationTimestamp"] = now_iso
+        stn["sourceCadenceMinutes"] = 15.0
+        stn["awsTelemetryStatus"] = "TELEMETRY_AVAILABLE"
 
         # Re-evaluate with anomaly detector
         status, anomaly = detector.evaluate_station(stn)
@@ -499,6 +684,12 @@ class StationService:
         detector.update_spatial_pool([station_dict_to_reading(stn)])
 
         self._stations[station_id] = stn
+
+        # Phase 20: incident creation belongs in the backend pipeline, not
+        # the frontend — this is the genuine "new live AWS observation
+        # arrived" event for pushed telemetry (WeeWX/WOW-BE/native ingest).
+        self._sync_incident(stn)
+
         return stn
 
 # Singleton instance

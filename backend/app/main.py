@@ -14,6 +14,8 @@ from .weather.grid_service import grid_service
 from .weather.open_meteo import open_meteo_service
 from .ingestion.adapter import IngestionAdapter
 from .anomaly.detector import detector
+from .simulation import service as simulation_service
+from .incidents import service as incident_service
 
 app = FastAPI(
     title="ATHER Core API",
@@ -196,3 +198,137 @@ def ingest_observation(payload: Dict[str, Any]):
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER TEST LAB — Isolated Simulation Engine (Phase 5-12)
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/simulation/scenarios")
+def get_simulation_scenarios():
+    """Lists the predefined ATHER Test Lab fault-injection scenarios."""
+    return {"scenarios": simulation_service.list_scenarios()}
+
+@app.post("/api/simulation/run")
+def run_simulation(payload: Dict[str, Any]):
+    """
+    Runs a predefined scenario through a fresh, isolated AnomalyDetector
+    instance — the SAME diagnostic engine production uses. Never touches
+    real station state, the production detector singleton, or real
+    incidents. See app/simulation/service.py for the isolation guarantee.
+    """
+    scenario_id = payload.get("scenario_id")
+    if not scenario_id:
+        raise HTTPException(status_code=400, detail="scenario_id is required")
+    base_station_id = payload.get("base_station_id")
+    try:
+        return simulation_service.run_simulation(scenario_id, base_station_id=base_station_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER INCIDENT WORKFLOW — persistent, production-grade (SQLite-backed)
+#
+# DETECT -> VALIDATE -> CORRELATE -> PERSIST -> EXPLAIN -> DIAGNOSE ->
+# RECOMMEND -> ACKNOWLEDGE -> INVESTIGATE -> ESCALATE -> RESOLVE
+#
+# Incidents are created/updated automatically by the backend pipeline
+# (app/stations/service.py._sync_incident, called from live ingestion and
+# on-demand evaluation) — these endpoints only render and request state
+# changes on already-persisted incidents (Phase 44: backend is the
+# authoritative source of truth for status/severity/confidence/evidence).
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/incidents")
+def list_incidents(status: Optional[str] = None, station_id: Optional[str] = None, source: Optional[str] = "LIVE_AWS"):
+    """Lists persisted incidents. `source` defaults to LIVE_AWS only — a
+    Test Lab simulation incident is never returned here unless the caller
+    explicitly asks for source=TEST_SIMULATION (Phase 36)."""
+    return {"incidents": incident_service.list_all(status=status, source=source, station_id=station_id)}
+
+@app.get("/api/incidents/active-counts")
+def get_active_incident_counts(source: Optional[str] = "LIVE_AWS"):
+    """Real counts for the operational incident counter (Phase 24/43) —
+    derived from persisted incidents, not recomputed independently."""
+    return incident_service.get_active_counts(source=source)
+
+@app.get("/api/incidents/{incident_id}")
+def get_incident(incident_id: str):
+    incident = incident_service.get(incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    return incident
+
+@app.post("/api/incidents/{incident_id}/acknowledge")
+def acknowledge_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
+    actor = (payload or {}).get("actor", "operator")
+    try:
+        return incident_service.acknowledge(incident_id, actor=actor)
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+@app.post("/api/incidents/{incident_id}/investigate")
+def investigate_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
+    actor = (payload or {}).get("actor", "operator")
+    try:
+        return incident_service.investigate(incident_id, actor=actor)
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+@app.post("/api/incidents/{incident_id}/escalate")
+def escalate_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
+    actor = (payload or {}).get("actor", "operator")
+    try:
+        return incident_service.escalate(incident_id, actor=actor)
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+@app.post("/api/incidents/{incident_id}/resolve")
+def resolve_incident(incident_id: str, payload: Dict[str, Any]):
+    actor = payload.get("actor", "operator")
+    notes = payload.get("resolution_notes", "")
+    resolution_type = payload.get("resolution_type", "")
+    try:
+        return incident_service.resolve(incident_id, actor, notes, resolution_type)
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/incidents/{incident_id}/dismiss")
+def dismiss_incident(incident_id: str, payload: Dict[str, Any]):
+    actor = payload.get("actor", "operator")
+    reason = payload.get("dismissal_reason", "")
+    try:
+        return incident_service.dismiss(incident_id, actor, reason)
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/incidents/{incident_id}/escalation-preview")
+def get_escalation_preview(incident_id: str):
+    """Builds a preview of what an escalation alert WOULD contain. This never
+    sends a real email/SMS/notification — see app/incidents/service.py."""
+    preview = incident_service.build_escalation_preview(incident_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    return preview
+
+@app.get("/api/stations/{station_id}/incidents")
+def get_station_incidents(station_id: str, source: Optional[str] = "LIVE_AWS"):
+    """Incident history for a single station (Phase 21/27: Station
+    Intelligence -> incident history). Returns persisted incidents only —
+    never fabricates a record for a station that has never been actionable."""
+    return {"incidents": incident_service.list_all(source=source, station_id=station_id)}

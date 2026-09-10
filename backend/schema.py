@@ -38,6 +38,62 @@ class SensorChannel(str, Enum):
 
 
 # ─────────────────────────────────────────────────────────────────
+# Data Provenance — distinguishes measured AWS telemetry from
+# model/reference data. NEVER present NWP_MODEL_REFERENCE as AWS
+# in-situ telemetry anywhere in the API or UI (see Phase 20/27).
+# ─────────────────────────────────────────────────────────────────
+
+class ObservationSource(str, Enum):
+    AWS_IN_SITU          = "AWS_IN_SITU"           # Measured by a real physical AWS sensor / pushed telemetry
+    NWP_MODEL_REFERENCE  = "NWP_MODEL_REFERENCE"   # Open-Meteo (or other) numerical weather model output
+    SYNTHETIC_TEST       = "SYNTHETIC_TEST"        # Fabricated data used only in unit tests
+    MISSING              = "MISSING"               # No observation obtained at all
+    UNKNOWN              = "UNKNOWN"               # Source could not be determined (legacy path)
+
+
+class Freshness(str, Enum):
+    LIVE     = "LIVE"       # Observation timestamp within the source's accepted cadence window
+    STALE    = "STALE"      # Observation timestamp older than the accepted cadence window
+    UNKNOWN  = "UNKNOWN"    # No reliable observation timestamp exists — cadence/age cannot be verified
+    MISSING  = "MISSING"    # No observation at all
+
+
+def classify_freshness(
+    observation_timestamp: Optional[datetime],
+    received_timestamp: Optional[datetime] = None,
+    cadence_minutes: float = 90.0,
+    has_value: bool = True,
+) -> str:
+    """
+    Determines freshness from an ACTUAL observation timestamp — never from the
+    frontend/backend request time. If the observation timestamp is unknown,
+    freshness is UNKNOWN (not silently LIVE).
+
+    cadence_minutes: the source's known update cadence, used as the staleness
+    window. Callers must pass a value appropriate to the actual source
+    (e.g. ~90 min for hourly NWP model output; conservative default otherwise).
+    """
+    if not has_value:
+        return Freshness.MISSING
+    if observation_timestamp is None:
+        return Freshness.UNKNOWN
+    ref = received_timestamp or datetime.now(timezone.utc)
+    try:
+        obs = observation_timestamp
+        if obs.tzinfo is None:
+            obs = obs.replace(tzinfo=timezone.utc)
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
+        age_minutes = (ref - obs).total_seconds() / 60.0
+    except Exception:
+        return Freshness.UNKNOWN
+    if age_minutes < 0:
+        # Observation claims to be from the future — untrustworthy, treat conservatively
+        return Freshness.UNKNOWN
+    return Freshness.LIVE if age_minutes <= cadence_minutes else Freshness.STALE
+
+
+# ─────────────────────────────────────────────────────────────────
 # Station Metadata
 # ─────────────────────────────────────────────────────────────────
 
@@ -66,6 +122,19 @@ class AWSReading(BaseModel):
     lat:         float = 0.0
     lon:         float = 0.0
     elevation_m: Optional[float] = 0.0
+
+    # ── Provenance (Phase 1-4) ──────────────────────────────────────
+    # source: where the numeric values actually came from — NEVER label
+    #   NWP_MODEL_REFERENCE data as AWS_IN_SITU anywhere downstream.
+    # observation_timestamp: the REAL time the value was valid at the source
+    #   (e.g. Open-Meteo's `current.time`, or a pushed telemetry payload's own
+    #   clock). None when the true observation time cannot be verified —
+    #   never silently defaulted to "now".
+    # received_timestamp: when ATHER's backend obtained/loaded the value.
+    source:                 str                = ObservationSource.UNKNOWN
+    observation_timestamp:  Optional[datetime]  = None
+    received_timestamp:     datetime            = Field(default_factory=lambda: datetime.now(timezone.utc))
+    freshness:               str                = Freshness.UNKNOWN
 
     # Per-channel data quality labels — set by station_dict_to_reading() or validator
     data_quality: Dict[str, str] = Field(
@@ -155,6 +224,10 @@ class AWSReading(BaseModel):
             "lon":            self.lon,
             "elevation_m":    self.elevation_m,
             "data_quality":   self.data_quality,
+            "source":                self.source,
+            "freshness":             self.freshness,
+            "observation_timestamp": self.observation_timestamp.isoformat() if self.observation_timestamp else None,
+            "received_timestamp":    self.received_timestamp.isoformat() if self.received_timestamp else None,
         }
 
 
@@ -173,6 +246,11 @@ class FaultType(str, Enum):
     POSSIBLE_WEATHER_CHANGE = "POSSIBLE_WEATHER_CHANGE"
     COMMUNICATION_OUTAGE  = "COMMUNICATION_OUTAGE"
     INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    # Fired instead of a hardware-fault category when the observation source
+    # is NOT a physical AWS sensor (e.g. NWP_MODEL_REFERENCE) — there is no
+    # sensor hardware to diagnose, so ATHER must not claim FROZEN_SENSOR,
+    # SENSOR_SPIKE, CALIBRATION_DRIFT, etc. against model output.
+    MODEL_REFERENCE_INCONSISTENCY = "MODEL_REFERENCE_INCONSISTENCY"
 
 
 class DiagnosisConfidence(str, Enum):
@@ -253,7 +331,10 @@ class AnomalyAlert(BaseModel):
                 "pressure": self.raw_values.get("pressure_hpa"),
                 "relative_humidity": self.raw_values.get("humidity_pct"),
                 "wind_speed": self.raw_values.get("wind_speed_kmh"),
-                "source": "AWS Station Data"
+                # Fallback path only — real evaluations populate canonical_result
+                # directly with the verified source. Never assume AWS here.
+                "source": ObservationSource.UNKNOWN,
+                "freshness": Freshness.UNKNOWN,
             },
             "overall": {
                 "status": self.status,
@@ -464,9 +545,39 @@ def station_dict_to_reading(stn: Dict[str, Any]) -> AWSReading:
     # ── Elevation ───────────────────────────────────────────────────
     elev_val = _safe_float(stn.get("elevation") or stn.get("elevation_m")) or 0.0
 
+    # ── Provenance ─────────────────────────────────────────────────
+    # dataSource / observationTimestamp are populated explicitly by
+    # station_service.py at ingestion time based on where the values
+    # actually came from. Never inferred, never defaulted to AWS_IN_SITU.
+    received_ts = datetime.now(timezone.utc)
+    source = stn.get("dataSource") or ObservationSource.UNKNOWN
+
+    obs_ts_raw = stn.get("observationTimestamp")
+    obs_ts: Optional[datetime] = None
+    if obs_ts_raw:
+        try:
+            if isinstance(obs_ts_raw, datetime):
+                obs_ts = obs_ts_raw
+            else:
+                obs_ts = datetime.fromisoformat(str(obs_ts_raw).replace("Z", "+00:00"))
+        except Exception:
+            obs_ts = None
+
+    has_any_value = temp_val is not None or press_val is not None or hum_val is not None
+    cadence = float(stn.get("sourceCadenceMinutes", 90.0))
+    freshness = stn.get("freshness") or classify_freshness(
+        observation_timestamp=obs_ts,
+        received_timestamp=received_ts,
+        cadence_minutes=cadence,
+        has_value=has_any_value,
+    )
+
     return AWSReading(
         station_id=stn_id,
-        timestamp=datetime.now(timezone.utc),
+        # `timestamp` remains the processing-sequence clock used internally by
+        # Layer 2 to space consecutive readings — NOT a claim about true
+        # observation validity time. See observation_timestamp for that.
+        timestamp=received_ts,
         temperature_c=temp_val,
         pressure_hpa=press_val,
         humidity_pct=hum_val,
@@ -479,5 +590,9 @@ def station_dict_to_reading(stn: Dict[str, Any]) -> AWSReading:
             "temperature_c": temp_quality,
             "pressure_hpa":  press_quality,
             "humidity_pct":  hum_quality,
-        }
+        },
+        source=source,
+        observation_timestamp=obs_ts,
+        received_timestamp=received_ts,
+        freshness=freshness,
     )

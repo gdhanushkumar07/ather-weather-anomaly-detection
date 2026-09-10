@@ -1,34 +1,53 @@
 import React from 'react';
-import { Thermometer, Gauge, Droplets, Radio, Eye, Moon, Satellite, Globe } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Filter, Globe } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
+  isOpen: boolean;
+  onClose: () => void;
   activeLayers: Record<WeatherLayerType, boolean>;
   onToggleLayer: (layer: WeatherLayerType) => void;
-  isStationPanelOpen?: boolean;
   basemap: 'dark' | 'satellite';
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
+  showAnomalyOverlay: boolean;
+  onToggleAnomalyOverlay: () => void;
+  statusFilter: string | null;
+  onSetStatusFilter: (status: string | null) => void;
   isGlobeMode?: boolean;
   onToggleGlobeMode?: () => void;
 }
 
+/**
+ * MAP OPTIONS popover (UI architecture restructure, Phase 5). This used to
+ * be a permanent floating panel sitting on top of the map at all times —
+ * that is exactly the "map as a dumping ground" problem the restructure
+ * targets. It is now a compact, on-demand popover: closed by default,
+ * opened only via the small "Map Options" trigger in the Map workspace,
+ * and closable. All existing toggle logic/markup below is unchanged.
+ */
 export const LayerControls: React.FC<LayerControlsProps> = ({
+  isOpen,
+  onClose,
   activeLayers,
   onToggleLayer,
-  isStationPanelOpen = false,
   basemap,
   onToggleBasemap,
+  showAnomalyOverlay,
+  onToggleAnomalyOverlay,
+  statusFilter,
+  onSetStatusFilter,
   isGlobeMode = false,
   onToggleGlobeMode
 }) => {
+  if (!isOpen) return null;
+
   return (
-    <aside className={`weather-controls-right ${isStationPanelOpen ? 'shifted' : ''}`}>
-      {/* Top Active Status Capsule (Matches Reference Image) */}
-      <div className="active-mode-capsule">
-        <Eye className="w-3.5 h-3.5 text-cyan-400" />
-        <span className="active-mode-text">
-          Active: <strong className="text-white">{isGlobeMode ? '3D Satellite Globe' : (basemap === 'satellite' ? 'Satellite (Clear)' : 'Dark Map (Base)')}</strong>
-        </span>
+    <aside className="weather-controls-right map-options-popover">
+      <div className="map-options-popover-header">
+        <span className="map-options-popover-title">MAP OPTIONS</span>
+        <button className="map-options-close-btn" onClick={onClose} title="Close Map Options">
+          <X className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* 3D Earth Globe Mode Toggle */}
@@ -55,74 +74,121 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
         </div>
       )}
 
-      {/* Core Meteorological Inputs */}
+      {/* Group 1: Map Layers — the three parameter visualizations (mutually exclusive). */}
       <div className="control-group-card">
         <div className="control-group-header">
-          <span>ATHER CORE INPUTS</span>
+          <span>MAP LAYERS</span>
         </div>
 
         <div
           className={`control-capsule ${activeLayers.temperature ? 'active' : ''}`}
           onClick={() => onToggleLayer('temperature')}
+          title="Surface Temperature observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.temperature ? 'active' : ''}`} />
-            <span>Temperature</span>
+            <span className="capsule-param-name">Temperature</span>
           </div>
-          <div className="circle-icon-badge temp-gradient-badge">
-            <Thermometer className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.temperature && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge temp-gradient-badge">
+              <Thermometer className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
 
         <div
           className={`control-capsule ${activeLayers.pressure ? 'active' : ''}`}
           onClick={() => onToggleLayer('pressure')}
+          title="Atmospheric Pressure observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.pressure ? 'active' : ''}`} />
-            <span>Pressure</span>
+            <span className="capsule-param-name">Pressure</span>
           </div>
-          <div className="circle-icon-badge pressure-gradient-badge">
-            <Gauge className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.pressure && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge pressure-gradient-badge">
+              <Gauge className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
 
         <div
           className={`control-capsule ${activeLayers.humidity ? 'active' : ''}`}
           onClick={() => onToggleLayer('humidity')}
+          title="Relative Humidity observation layer"
         >
           <div className="control-capsule-left">
             <span className={`radio-dot ${activeLayers.humidity ? 'active' : ''}`} />
-            <span>Relative Humidity</span>
+            <span className="capsule-param-name">Relative Humidity</span>
           </div>
-          <div className="circle-icon-badge humidity-gradient-badge">
-            <Droplets className="w-3 h-3 text-white" />
+          <div className="capsule-badge-group">
+            {activeLayers.humidity && <span className="active-tag-mini">ACTIVE</span>}
+            <div className="circle-icon-badge humidity-gradient-badge">
+              <Droplets className="w-3 h-3 text-white" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* AWS Monitoring Section */}
+      {/* Group 2: Display — everything controlling what's drawn on top of the
+          basemap (markers, anomaly halo, status filter), consolidated into
+          one compact group instead of three separate cards. */}
       <div className="control-group-card">
         <div className="control-group-header">
-          <span>AWS MONITORING</span>
+          <span>DISPLAY</span>
         </div>
+
         <div
-          className={`aws-station-toggle ${activeLayers.stations ? 'active' : ''}`}
+          className={`display-row-toggle ${activeLayers.stations ? 'active' : ''}`}
           onClick={() => onToggleLayer('stations')}
           title="Toggle Global AWS Station Observation Markers"
         >
           <div className="aws-toggle-left">
-            <span className={`aws-status-dot ${activeLayers.stations ? 'active' : ''}`} />
-            <span className="aws-status-text">AWS MARKERS</span>
-          </div>
-          <div className="aws-toggle-right">
-            <span className="aws-state-badge">{activeLayers.stations ? '(ON)' : '(OFF)'}</span>
             <Radio className="w-3.5 h-3.5" />
+            <span className="aws-status-text">AWS Markers</span>
           </div>
+          <span className={`display-row-state ${activeLayers.stations ? 'on' : ''}`}>{activeLayers.stations ? 'ON' : 'OFF'}</span>
+        </div>
+
+        <div
+          className={`display-row-toggle ${showAnomalyOverlay ? 'active' : ''}`}
+          onClick={onToggleAnomalyOverlay}
+          title="Toggle the pulsing anomaly-alert halo on anomalous stations"
+        >
+          <div className="aws-toggle-left">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            <span className="aws-status-text">Anomaly Halo</span>
+          </div>
+          <span className={`display-row-state ${showAnomalyOverlay ? 'on' : ''}`}>{showAnomalyOverlay ? 'ON' : 'OFF'}</span>
+        </div>
+
+        <div className="display-row-divider" />
+
+        <div className="display-row-label">
+          <Filter className="w-3 h-3" /> Station status
+        </div>
+        <div className="status-filter-chip-row">
+          {(['NORMAL', 'WARNING', 'ANOMALY'] as const).map((s) => (
+            <button
+              key={s}
+              className={`status-filter-chip ${s.toLowerCase()} ${statusFilter === s ? 'active' : ''}`}
+              onClick={() => onSetStatusFilter(statusFilter === s ? null : s)}
+              title={`Show only ${s} stations`}
+            >
+              {s}
+            </button>
+          ))}
+          {statusFilter && (
+            <button className="status-filter-chip clear" onClick={() => onSetStatusFilter(null)} title="Clear filter">
+              ALL
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Basemap Selection */}
+      {/* Group 3: Basemap */}
       <div className="control-group-card">
         <div className="control-group-header">
           <span>BASEMAP</span>
@@ -149,4 +215,3 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
     </aside>
   );
 };
-

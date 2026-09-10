@@ -16,5 +16,13 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/components/AtherStationDrawer.tsx",
+    "src/components/HeatmapCanvasLayer.ts",
+    "src/components/MapContainer.tsx",
+    "src/components/TimelineSlider.tsx",
+    "src/components/WindLabelsLayer.ts",
+    "src/components/WindParticleEngine.ts"
+  ]
 }

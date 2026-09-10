@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight } from 'lucide-react';
+import { Search, Activity, AlertTriangle, Radio, Wifi, Heart, ShieldAlert, ArrowUpRight, Globe } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 
@@ -8,14 +8,19 @@ interface TopNavProps {
   onSelectStation: (stationId: string) => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
   summary,
   onSelectStation,
   statusFilter,
-  onSetStatusFilter
+  onSetStatusFilter,
+  isGlobeMode = false,
+  onToggleGlobeMode
 }) => {
+
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -147,6 +152,18 @@ export const TopNav: React.FC<TopNavProps> = ({
             <span className="nav-badge-count warning">{summary.warningCount}</span>
           ) : null}
         </button>
+
+        {onToggleGlobeMode && (
+          <button
+            className={`nav-section-btn ${isGlobeMode ? 'active' : ''}`}
+            onClick={onToggleGlobeMode}
+            title={isGlobeMode ? "Exit 3D Globe to Map" : "Open 3D Satellite Globe"}
+            style={{ borderColor: isGlobeMode ? '#00e5ff' : undefined }}
+          >
+            <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-cyan-300 animate-pulse' : 'text-slate-400'}`} />
+            <span style={{ color: isGlobeMode ? '#00e5ff' : undefined }}>3D Globe</span>
+          </button>
+        )}
       </div>
 
       {/* Live Telemetry KPI Pills */}

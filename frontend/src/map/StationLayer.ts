@@ -254,3 +254,140 @@ export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean
     }
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Three-neighbor validation: connection lines + neighbor highlight markers.
+// Native MapLibre GeoJSON source/layers -- geo-attachment, pan/zoom/rotate
+// tracking, and rendering are all handled by the map itself, exactly like
+// every other station layer above. No separate positioning system.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const NEIGHBOR_LINES_SOURCE_ID = 'ather-neighbor-lines-source';
+export const NEIGHBOR_LINES_GLOW_LAYER_ID = 'ather-neighbor-lines-glow';
+export const NEIGHBOR_LINES_LAYER_ID = 'ather-neighbor-lines';
+export const NEIGHBOR_HIGHLIGHT_SOURCE_ID = 'ather-neighbor-highlight-source';
+export const NEIGHBOR_HIGHLIGHT_LAYER_ID = 'ather-neighbor-highlight';
+
+const NEIGHBOR_LINE_OPACITY = 0.85;
+const NEIGHBOR_LINE_GLOW_OPACITY = 0.14;
+
+export function ensureNeighborLayers(map: maplibregl.Map) {
+  if (!map.getSource(NEIGHBOR_LINES_SOURCE_ID)) {
+    map.addSource(NEIGHBOR_LINES_SOURCE_ID, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+  }
+  if (!map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID)) {
+    map.addSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+  }
+
+  // Soft glow beneath the crisp line -- thin and understated, not a thick bar.
+  if (!map.getLayer(NEIGHBOR_LINES_GLOW_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_LINES_GLOW_LAYER_ID,
+      type: 'line',
+      source: NEIGHBOR_LINES_SOURCE_ID,
+      paint: {
+        'line-color': '#00e5ff',
+        'line-width': 5,
+        'line-opacity': 0,
+        'line-blur': 3
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' }
+    });
+  }
+  if (!map.getLayer(NEIGHBOR_LINES_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_LINES_LAYER_ID,
+      type: 'line',
+      source: NEIGHBOR_LINES_SOURCE_ID,
+      paint: {
+        'line-color': '#00e5ff',
+        'line-width': 1.5,
+        'line-opacity': 0
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' }
+    });
+  }
+  // Neighbor highlight ring -- distinguishes the 3 nearest stations from
+  // every other unclustered marker without replacing the marker itself.
+  if (!map.getLayer(NEIGHBOR_HIGHLIGHT_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_HIGHLIGHT_LAYER_ID,
+      type: 'circle',
+      source: NEIGHBOR_HIGHLIGHT_SOURCE_ID,
+      paint: {
+        'circle-color': 'rgba(0, 229, 255, 0.0)',
+        'circle-radius': 12,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#00e5ff',
+        'circle-stroke-opacity': 0.9
+      }
+    });
+  }
+}
+
+export interface NeighborLinePoint {
+  lng: number;
+  lat: number;
+}
+
+/** Draws primary->neighbor connection lines and highlights the neighbor markers. */
+export function updateNeighborConnections(
+  map: maplibregl.Map,
+  primary: NeighborLinePoint,
+  neighbors: NeighborLinePoint[]
+) {
+  ensureNeighborLayers(map);
+
+  const lineFeatures: GeoJSON.Feature[] = neighbors.map((n) => ({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [primary.lng, primary.lat],
+        [n.lng, n.lat]
+      ]
+    }
+  }));
+
+  const pointFeatures: GeoJSON.Feature[] = neighbors.map((n) => ({
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Point', coordinates: [n.lng, n.lat] }
+  }));
+
+  const linesSrc = map.getSource(NEIGHBOR_LINES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  linesSrc?.setData({ type: 'FeatureCollection', features: lineFeatures });
+
+  const highlightSrc = map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  highlightSrc?.setData({ type: 'FeatureCollection', features: pointFeatures });
+
+  animateNeighborLinesIn(map);
+}
+
+export function clearNeighborConnections(map: maplibregl.Map) {
+  const linesSrc = map.getSource(NEIGHBOR_LINES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  linesSrc?.setData({ type: 'FeatureCollection', features: [] });
+  const highlightSrc = map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  highlightSrc?.setData({ type: 'FeatureCollection', features: [] });
+}
+
+/** Subtle "lines drawing outward" fade-in when a primary station is selected. */
+function animateNeighborLinesIn(map: maplibregl.Map, durationMs = 600) {
+  const start = performance.now();
+  function step(now: number) {
+    if (!map.getLayer(NEIGHBOR_LINES_LAYER_ID)) return;
+    const t = Math.min(1, (now - start) / durationMs);
+    const eased = 1 - Math.pow(1 - t, 3);
+    map.setPaintProperty(NEIGHBOR_LINES_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_OPACITY * eased);
+    map.setPaintProperty(NEIGHBOR_LINES_GLOW_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_GLOW_OPACITY * eased);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}

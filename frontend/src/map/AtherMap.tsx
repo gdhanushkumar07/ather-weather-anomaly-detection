@@ -1,18 +1,31 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo } from './StationLayer';
+import {
+  setupStationLayers,
+  setStationLayersVisibility,
+  updateSelectedStationHalo,
+  updateNeighborConnections,
+  clearNeighborConnections
+} from './StationLayer';
 import { VaneColormapLayer, GridFieldData } from './vane/ColormapLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
+import { AWSNeighbor } from '../aws/awsGeo';
+import { AWSStationOverlay } from '../aws/AWSStationOverlay';
 
-// Below this MapLibre zoom level, the map renders in native 3D globe
-// projection (MapLibre's own globe mode -- same clustering layers, same
-// data, just a different camera projection). At/above it, flat mercator.
-const GLOBE_ZOOM_BREAKPOINT = 2.5;
+// Matches --bg-app in index.css, so any not-yet-loaded tile area (network
+// latency during pan/zoom) shows a seamless dark fill instead of a black gap.
+const MAP_BACKGROUND_COLOR = '#080c14';
+
+// Same "close enough to fly to a single station" zoom level already used by
+// the existing "fly to selected station" effect below -- reused here so the
+// 3D AWS model appears exactly when the map itself considers you at
+// station-level zoom, not an arbitrarily different threshold.
+const AWS_MODEL_ZOOM_THRESHOLD = 8.0;
 
 interface AtherMapProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
@@ -21,6 +34,9 @@ interface AtherMapProps {
   activeLayers: Record<WeatherLayerType, boolean>;
   basemap: 'dark' | 'satellite';
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
+  neighbors?: AWSNeighbor[];
 }
 
 export const AtherMap: React.FC<AtherMapProps> = ({
@@ -29,7 +45,10 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   onSelectStation,
   activeLayers,
   basemap,
-  onToggleBasemap
+  onToggleBasemap,
+  isGlobeMode = false,
+  onToggleGlobeMode,
+  neighbors = []
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -40,7 +59,6 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const [isMapReady, setIsMapReady] = React.useState(false);
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
-  const currentProjectionRef = useRef<'globe' | 'mercator'>('globe');
 
   // 1. Initialize MapLibre with both Dark Canvas and Satellite Imagery Basemaps
   useEffect(() => {
@@ -50,6 +68,14 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       container: mapContainerRef.current,
       style: {
         version: 8,
+        // Globe projection is set once, here, and never toggled again.
+        // MapLibre's own renderer automatically and smoothly blends globe
+        // rendering into flat mercator as the user zooms in (see
+        // GlobeTransform's built-in `_globeness` interpolation) -- forcing a
+        // manual setProjection() switch at a fixed zoom breakpoint fights
+        // against that built-in transition and was the actual cause of the
+        // stutter/sudden-switch/seam artifacts during zoom.
+        projection: { type: 'globe' },
         sources: {
           esri_dark_base: {
             type: 'raster',
@@ -83,6 +109,16 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           }
         },
         layers: [
+          {
+            // Renders beneath everything else. Without this, any screen
+            // area whose raster tile hasn't finished loading yet (network
+            // latency during fast pan/zoom) shows the canvas's own clear
+            // color -- effectively a black gap/flash. A solid fill matching
+            // the app's own background makes that moment invisible instead.
+            id: 'ather-map-background',
+            type: 'background',
+            paint: { 'background-color': MAP_BACKGROUND_COLOR }
+          },
           {
             id: 'esri-dark-gray-base',
             type: 'raster',
@@ -145,32 +181,20 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     setupStationLayers(map, stationsGeoJSON, (id) => onSelectStationRef.current(id));
   }, [stationsGeoJSON, isMapReady]);
 
-  // 2b. Switch between MapLibre's native 3D globe and flat mercator
-  // projection based on zoom, tied to the normal scroll/zoom gesture --
-  // no separate manual toggle. The same station clustering source/layers
-  // render correctly in either projection automatically; only the camera
-  // projection changes, so markers stay genuinely geo-attached at every
-  // zoom level. Only calls setProjection when actually crossing the
-  // breakpoint, not on every zoom tick.
+  // 2c. Fly to World 3D Globe when globe mode is toggled
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady) return;
 
-    const applyProjectionForZoom = () => {
-      const desired: 'globe' | 'mercator' =
-        map.getZoom() < GLOBE_ZOOM_BREAKPOINT ? 'globe' : 'mercator';
-      if (currentProjectionRef.current !== desired) {
-        currentProjectionRef.current = desired;
-        map.setProjection({ type: desired });
-      }
-    };
-
-    applyProjectionForZoom();
-    map.on('zoom', applyProjectionForZoom);
-    return () => {
-      map.off('zoom', applyProjectionForZoom);
-    };
-  }, [isMapReady]);
+    if (isGlobeMode) {
+      map.flyTo({
+        center: [15, 20],
+        zoom: 1.8,
+        duration: 1200,
+        essential: true
+      });
+    }
+  }, [isGlobeMode, isMapReady]);
 
   // 3. Station layer visibility toggle
   useEffect(() => {
@@ -185,6 +209,51 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     if (!map || !isMapReady) return;
     updateSelectedStationHalo(map, selectedStationId);
   }, [selectedStationId, isMapReady]);
+
+  // 4b. Three-neighbor validation connection lines + highlight markers.
+  // Native MapLibre line/circle layers -- geo-attachment during pan/zoom/
+  // rotate is handled by the map itself (see StationLayer.ts), same as
+  // every other station layer.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    if (!selectedStationId || neighbors.length === 0 || !stationsGeoJSON) {
+      clearNeighborConnections(map);
+      return;
+    }
+    const primaryFeature = stationsGeoJSON.features.find((f) => f.properties?.id === selectedStationId);
+    if (!primaryFeature || primaryFeature.geometry.type !== 'Point') {
+      clearNeighborConnections(map);
+      return;
+    }
+    const [pLng, pLat] = primaryFeature.geometry.coordinates;
+    updateNeighborConnections(
+      map,
+      { lng: pLng, lat: pLat },
+      neighbors.map((n) => ({ lng: n.lng, lat: n.lat }))
+    );
+  }, [selectedStationId, neighbors, stationsGeoJSON, isMapReady]);
+
+  // 4c. Track whether we're at close/station-level zoom, for gating the 3D
+  // AWS model overlay. A boolean, updated only when it actually crosses the
+  // threshold -- not on every zoom tick -- to avoid re-rendering on every
+  // scroll frame.
+  const [isCloseZoom, setIsCloseZoom] = React.useState(false);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    const checkZoom = () => {
+      const close = map.getZoom() >= AWS_MODEL_ZOOM_THRESHOLD;
+      setIsCloseZoom((prev) => (prev !== close ? close : prev));
+    };
+    checkZoom();
+    map.on('zoom', checkZoom);
+    return () => {
+      map.off('zoom', checkZoom);
+    };
+  }, [isMapReady]);
 
   // 5. Vane Temperature WebGL Layer Toggle
   useEffect(() => {
@@ -284,26 +353,50 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [selectedStationId, stationsGeoJSON]);
 
-  const handleZoomIn = () => {
+  const handleZoomIn = useCallback(() => {
     mapRef.current?.zoomIn({ duration: 300 });
-  };
+  }, []);
 
-  const handleZoomOut = () => {
+  const handleZoomOut = useCallback(() => {
     mapRef.current?.zoomOut({ duration: 300 });
-  };
+  }, []);
 
-  const handleResetWorldView = () => {
+  const handleResetWorldView = useCallback(() => {
     mapRef.current?.flyTo({
       center: [15, 20],
       zoom: 1.9,
       duration: 1200,
       essential: true
     });
-  };
+  }, []);
+
+  // Selected station's real coordinates/status, for the 3D AWS overlay.
+  // Recomputed only when the selection or the underlying data actually
+  // changes -- not on every render.
+  const selectedFeature = React.useMemo(() => {
+    if (!selectedStationId || !stationsGeoJSON) return null;
+    const f = stationsGeoJSON.features.find((feat) => feat.properties?.id === selectedStationId);
+    if (!f || f.geometry.type !== 'Point') return null;
+    const [lng, lat] = f.geometry.coordinates;
+    return { lng, lat, status: f.properties?.status || 'NORMAL', name: f.properties?.name || selectedStationId };
+  }, [selectedStationId, stationsGeoJSON]);
 
   return (
     <div className="map-viewport">
       <div ref={mapContainerRef} className="maplibre-container" />
+
+      {/* Realistic 3D AWS model -- only the selected station, only at close
+          zoom. At most one 3D scene ever exists at a time. */}
+      {isMapReady && mapRef.current && isCloseZoom && selectedFeature && (
+        <AWSStationOverlay
+          map={mapRef.current}
+          stationId={selectedStationId as string}
+          stationName={selectedFeature.name}
+          lng={selectedFeature.lng}
+          lat={selectedFeature.lat}
+          status={selectedFeature.status}
+        />
+      )}
 
       {/* Temperature Colormap Legend */}
       {activeLayers.temperature && (
@@ -331,8 +424,12 @@ export const AtherMap: React.FC<AtherMapProps> = ({
           </button>
         </div>
 
-        <button className="map-control-btn" onClick={handleResetWorldView} title="Reset to Full World View">
-          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+        <button
+          className={`map-control-btn ${isGlobeMode ? 'active-sat' : ''}`}
+          onClick={onToggleGlobeMode || handleResetWorldView}
+          title={isGlobeMode ? "Exit 3D Globe to 2D Map" : "Open 3D Satellite Earth Globe"}
+        >
+          <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-amber-400' : 'text-cyan-400'}`} />
         </button>
 
         <button

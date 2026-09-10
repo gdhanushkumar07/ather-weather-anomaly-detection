@@ -201,3 +201,63 @@ export interface AnomaliesSummary {
 }
 
 export type WeatherLayerType = 'stations' | 'temperature' | 'wind' | 'pressure' | 'humidity';
+
+export interface LocationCoords {
+  lat: number;
+  lon: number;
+  name?: string;
+  country?: string;
+  admin1?: string;
+  elevation?: number;
+}
+
+export interface AtherStationData {
+  station_id: string;
+  id?: string;
+  name: string;
+  town?: string;
+  country?: string;
+  region?: string;
+  lat: number;
+  lon: number;
+  latitude?: number;
+  longitude?: number;
+  weather: {
+    temperature_c: number;
+    humidity_pct?: number;
+    pressure_hpa?: number;
+    wind_kph?: number;
+    condition?: string;
+  };
+  temperature?: number | null;
+  pressure?: number | null;
+  humidity?: number | null;
+  windSpeed?: number | null;
+  windDirection?: string | null;
+  condition?: string;
+  status: 'NORMAL' | 'WARNING' | 'ANOMALY' | 'OFFLINE';
+  anomaly: {
+    is_anomaly: boolean;
+    severity_score: number;
+    severity_label?: string;
+    root_cause?: string;
+    explanation?: string;
+  };
+  [key: string]: any;
+}
+
+export interface AIAnomalyItem {
+  id: string;
+  station_id?: string;
+  title?: string;
+  name?: string;
+  level?: 'D0' | 'D1' | 'D2' | 'D3' | 'D4' | 'D5';
+  lat: number;
+  lon: number;
+  riskScore: number;
+  category: string;
+  desc: string;
+  atherData?: AtherStationData;
+  [key: string]: any;
+}
+

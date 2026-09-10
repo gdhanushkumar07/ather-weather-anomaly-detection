@@ -2047,3 +2047,290 @@ body {
   line-height: 1.35;
 }
 
+/* 3D Interactive Satellite Globe Overlay Styles */
+.windy-glass {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.5);
+}
+
+.globe-mode-banner {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  pointer-events: auto;
+}
+
+.globe-mode-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  background: rgba(14, 20, 32, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 229, 255, 0.2);
+  font-size: 12px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.globe-exit-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #00e5ff;
+  border-radius: 9999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 6px;
+}
+
+.globe-exit-btn:hover {
+  background: rgba(0, 229, 255, 0.2);
+  border-color: #00e5ff;
+  color: #fff;
+}
+
+/* ── AWS 3D station overlay ─────────────────────────────────────────── */
+
+.aws-hover-tooltip {
+  position: absolute;
+  bottom: 88%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-surface-elevated, rgba(20, 28, 44, 0.94));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 140px;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.aws-tooltip-id {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f8fafc;
+  font-family: var(--font-mono, monospace);
+}
+
+.aws-tooltip-loc {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+.aws-tooltip-status {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.aws-tooltip-status.status-NORMAL { color: #10b981; }
+.aws-tooltip-status.status-WARNING { color: #f59e0b; }
+.aws-tooltip-status.status-ANOMALY { color: #ef4444; }
+.aws-tooltip-status.status-OFFLINE { color: #94a3b8; }
+
+.aws-model-fallback-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  margin: auto;
+  box-shadow: 0 0 10px currentColor;
+}
+
+/* ── Nearest station validation panel section ───────────────────────── */
+
+.neighbor-verdict-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.neighbor-verdict-pill.verdict-CONSISTENT {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.neighbor-verdict-pill.verdict-SUSPICIOUS {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.neighbor-verdict-pill.verdict-ANOMALOUS {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.neighbor-verdict-pill.verdict-INSUFFICIENT_DATA {
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.neighbor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.neighbor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.neighbor-index {
+  font-size: 10px;
+  font-weight: 700;
+  color: #00e5ff;
+  width: 20px;
+}
+
+.neighbor-id {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  color: #e2e8f0;
+}
+
+.neighbor-distance {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.neighbor-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.neighbor-status-dot.status-NORMAL { background: #10b981; box-shadow: 0 0 4px #10b981; }
+.neighbor-status-dot.status-WARNING { background: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
+.neighbor-status-dot.status-ANOMALY { background: #ef4444; box-shadow: 0 0 4px #ef4444; }
+.neighbor-status-dot.status-OFFLINE { background: #94a3b8; }
+
+.neighbor-check-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-top: 4px;
+  margin-bottom: 6px;
+}
+
+.neighbor-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+@keyframes neighborCheckReveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.neighbor-check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  opacity: 0;
+  animation: neighborCheckReveal 260ms ease forwards;
+}
+
+.neighbor-check-row.ok {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.neighbor-check-row.warn {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.neighbor-check-row span:first-of-type {
+  color: #e2e8f0;
+  flex: 1;
+}
+
+.neighbor-check-reason {
+  font-size: 9px;
+  color: #64748b !important;
+  font-family: var(--font-mono, monospace);
+}
+
+.neighbor-comparison-table {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.neighbor-comparison-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.cmp-param-label {
+  color: #94a3b8;
+}
+
+.cmp-param-val {
+  font-family: var(--font-mono, monospace);
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.cmp-param-val.neighbor {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.cmp-param-arrow {
+  color: #475569;
+  font-size: 10px;
+}
+
+.cmp-param-delta {
+  font-family: var(--font-mono, monospace);
+  color: #00e5ff;
+  font-size: 10px;
+}
+
+.neighbor-validation-note {
+  font-size: 10px;
+  color: #64748b;
+  margin-top: 10px;
+  line-height: 1.4;
+}
+
+

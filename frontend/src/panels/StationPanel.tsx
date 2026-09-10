@@ -395,7 +395,8 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
       </div>
 
       <div className="station-panel-body">
-        {/* 2. Station Representative Visual Asset (Phase 6, 26) */}
+        {/* 2 & 3. Visual + Current Observations side by side (Phase 13/15) */}
+        <div className="station-grid-row">
         <div className="station-visual-card">
           <div className="station-visual-header">
             <div className="station-visual-badge">
@@ -558,6 +559,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
           )}
         </div>
+        </div>
 
         {/* 2. Station Health Section (Phase 11) */}
         <div className="section-card station-health-card">
@@ -665,6 +667,11 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
           </div>
         )}
 
+        {/* 7 & 8. Diagnostics + Root Cause/Action side by side when there is
+            something to explain (Phase 20/21/42) — a single plain wrapper
+            (no grid class) when the station is normal, so the diagnostics
+            card alone still renders full width unchanged. */}
+        <div className={isAnomaly || isWarning ? 'station-grid-row' : undefined}>
         {/* 7. Phase 15, 28: 5-Layer Diagnostic Evaluation (Vertical Accordion) */}
         <div className="section-card layers-card">
           <div className="card-header-flex">
@@ -818,6 +825,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
           </div>
         )}
+        </div>
 
         {/* ATHER INCIDENT — a persistent record, independent of the CURRENT
             live station status above (Phase 22/23): a station can be back

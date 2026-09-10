@@ -4274,6 +4274,15 @@ body {
   overflow-x: hidden;
 }
 
+/* Keeps the maplibregl.Map instance alive across every workspace switch
+   (Phase 9 of the map-state-persistence fix) — hidden via display:none
+   rather than unmounted, so center/zoom/bearing/pitch are never lost. */
+.map-workspace-keepalive {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
 /* Shared full-page workspace scaffold — Overview / Anomalies / Sensor
    Health / Station Intelligence / Test Lab (page mode). The floating top
    nav overlaps the top ~74px of the content area, so every scrollable
@@ -4694,11 +4703,12 @@ body {
   position: relative;
   height: 100%;
   overflow-y: auto;
-  max-width: 900px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 74px 24px 40px;
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
 }
 
 .station-page-backbar {
@@ -4823,4 +4833,20 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 .incident-detail-meta-row .metric-val { margin-top: 3px; }
+
+/* Station Intelligence 2-column structural grid (Phase 11/13/20/42 of the
+   map-state + station-density fix) — used for [visual | observations] and
+   [diagnostics | root cause & action] pairs instead of one long vertical
+   stack of cards. Both children keep their own .section-card styling;
+   this only controls their side-by-side placement. */
+.station-grid-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 380px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 820px) {
+  .station-grid-row { grid-template-columns: 1fr; }
+}
+.station-grid-row > .section-card { margin: 0; height: 100%; }
 

@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TopNav } from './components/TopNav';
 import { StationPanel } from './panels/StationPanel';
 import { TestLabModal } from './components/TestLabModal';
 import { NetworkOverview } from './components/NetworkOverview';
 import { MapWorkspace } from './workspaces/MapWorkspace';
+import { AtherMapHandle, MapViewState } from './map/AtherMap';
 import { AnomaliesWorkspace } from './workspaces/AnomaliesWorkspace';
 import { SensorHealthWorkspace } from './workspaces/SensorHealthWorkspace';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
@@ -40,6 +41,16 @@ export const App: React.FC = () => {
     pressure: false,
     humidity: false
   });
+
+  // Map view-state persistence (Phase 2-4 of the map/station refinement):
+  // the map itself is never unmounted (see the always-mounted wrapper
+  // below), so center/zoom/bearing/pitch survive workspace switches on
+  // their own. The one remaining gap is the existing "fly to selected
+  // station" behavior, which would otherwise silently change the view the
+  // user returns to. mapRef gives imperative access to capture the view
+  // right before a station is selected, and to restore it on "Back to Map".
+  const mapRef = useRef<AtherMapHandle>(null);
+  const savedMapViewRef = useRef<MapViewState | null>(null);
 
   // Fetch initial stations and summary — shared across every workspace.
   useEffect(() => {
@@ -81,6 +92,14 @@ export const App: React.FC = () => {
   // opens the Station Intelligence workspace — never another floating card
   // stacked on top of whatever workspace was active (Phase 7).
   const handleSelectStation = async (id: string) => {
+    // Capture the map's CURRENT view before anything (React state changes,
+    // the existing fly-to-station effect) can move it — this is what gets
+    // restored on "Back to Map", regardless of how the station was
+    // selected (map click, search, an anomaly/health card) or whether the
+    // map was even the visible workspace at the time (Phase 3/31).
+    const captured = mapRef.current?.getViewState();
+    if (captured) savedMapViewRef.current = captured;
+
     try {
       const stn = await fetchStationDetails(id);
       setSelectedStation(stn);
@@ -91,6 +110,13 @@ export const App: React.FC = () => {
   };
 
   const handleBackToMap = () => {
+    // Single-use: once restored, clear it so a later "Back to Map" call
+    // (e.g. from Test Lab, with no station selection in between) doesn't
+    // re-apply a now-stale view over whatever the user has since done.
+    if (savedMapViewRef.current) {
+      mapRef.current?.restoreViewState(savedMapViewRef.current);
+      savedMapViewRef.current = null;
+    }
     setWorkspace('map');
   };
 
@@ -128,20 +154,20 @@ export const App: React.FC = () => {
       />
 
       <main className="ather-workspace-content">
-        {workspace === 'overview' && (
-          <NetworkOverview
-            variant="page"
-            summary={summary}
-            stationsGeoJSON={stationsGeoJSON}
-            isOpen={true}
-            onToggle={() => {}}
-            onSelectStation={handleSelectStation}
-            onNavigate={handleNavigate}
-          />
-        )}
-
-        {workspace === 'map' && (
+        {/* The map is ALWAYS mounted, never conditionally rendered — hidden
+            via CSS instead of being unmounted (Phase 9 of the map-state-
+            persistence fix). AtherMap.tsx creates its maplibregl.Map
+            instance exactly once (empty effect dependency array); as long
+            as this component tree never unmounts, that instance — and
+            therefore its center/zoom/bearing/pitch — survives every
+            workspace switch with zero state serialization needed. Only
+            React-level state (basemap, activeLayers, filters), which
+            already lives in App.tsx and was never the problem, is passed
+            down as props. */}
+        <div className="map-workspace-keepalive" style={{ display: workspace === 'map' ? 'block' : 'none' }}>
           <MapWorkspace
+            ref={mapRef}
+            isActive={workspace === 'map'}
             stationsGeoJSON={stationsGeoJSON}
             selectedStationId={selectedStation?.id ?? null}
             onSelectStation={handleSelectStation}
@@ -153,6 +179,18 @@ export const App: React.FC = () => {
             onToggleAnomalyOverlay={() => setShowAnomalyOverlay((v) => !v)}
             statusFilter={statusFilter}
             onSetStatusFilter={setStatusFilter}
+          />
+        </div>
+
+        {workspace === 'overview' && (
+          <NetworkOverview
+            variant="page"
+            summary={summary}
+            stationsGeoJSON={stationsGeoJSON}
+            isOpen={true}
+            onToggle={() => {}}
+            onSelectStation={handleSelectStation}
+            onNavigate={handleNavigate}
           />
         )}
 

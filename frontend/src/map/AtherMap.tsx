@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
@@ -8,6 +8,22 @@ import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHa
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 
+export interface MapViewState {
+  center: [number, number];
+  zoom: number;
+  bearing: number;
+  pitch: number;
+}
+
+export interface AtherMapHandle {
+  /** Current camera view, or null if the map hasn't initialized yet. */
+  getViewState: () => MapViewState | null;
+  /** Immediately jumps to a previously captured view (no animation) — used
+   * to restore exactly what the user was looking at before they navigated
+   * away, undoing any fly-to-station that happened in between. */
+  restoreViewState: (state: MapViewState) => void;
+}
+
 interface AtherMapProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
   selectedStationId: string | null;
@@ -16,17 +32,25 @@ interface AtherMapProps {
   basemap: 'dark' | 'satellite';
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
   showAnomalyOverlay?: boolean;
+  /** Whether the Map workspace is the one currently visible. Used to skip
+   * the fly-to-selected-station animation when nobody can see it (station
+   * selected from another workspace), and to resize the map after it
+   * becomes visible again (its container was display:none, which can leave
+   * MapLibre's canvas at a stale size). Defaults to true so any other
+   * caller of AtherMap keeps prior behavior. */
+  isActive?: boolean;
 }
 
-export const AtherMap: React.FC<AtherMapProps> = ({
+export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
   stationsGeoJSON,
   selectedStationId,
   onSelectStation,
   activeLayers,
   basemap,
   onToggleBasemap,
-  showAnomalyOverlay = true
-}) => {
+  showAnomalyOverlay = true,
+  isActive = true
+}, ref) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
@@ -35,6 +59,34 @@ export const AtherMap: React.FC<AtherMapProps> = ({
   const [isMapReady, setIsMapReady] = React.useState(false);
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
+
+  useImperativeHandle(ref, () => ({
+    getViewState: () => {
+      const map = mapRef.current;
+      if (!map) return null;
+      const c = map.getCenter();
+      return { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+    },
+    restoreViewState: (state: MapViewState) => {
+      mapRef.current?.jumpTo({ center: state.center, zoom: state.zoom, bearing: state.bearing, pitch: state.pitch });
+    }
+  }), []);
+
+  // Always-current, non-reactive read of `isActive` for effects that must
+  // NOT re-run just because visibility toggled (see the fly-to-station
+  // effect below).
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  // Re-measure the map after its container becomes visible again — while
+  // display:none, MapLibre may have last computed a stale/zero canvas size.
+  const wasActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (isActive && !wasActiveRef.current && mapRef.current) {
+      mapRef.current.resize();
+    }
+    wasActiveRef.current = isActive;
+  }, [isActive]);
 
   // 1. Initialize MapLibre with both Dark Canvas and Satellite Imagery Basemaps
   useEffect(() => {
@@ -244,9 +296,16 @@ export const AtherMap: React.FC<AtherMapProps> = ({
     }
   }, [basemap, isMapReady]);
 
-  // 7. Fly to selected station
+  // 7. Fly to selected station — only when the map is actually the visible
+  // workspace at the moment of selection (Phase 9/31 of the map-state-
+  // persistence fix): flying while hidden has no visual purpose and would
+  // silently change the view the user returns to after visiting Station
+  // Intelligence. isActive is read via a ref, NOT a dependency — otherwise
+  // this effect would re-fire (and fly again) every time the user comes
+  // BACK to the map, since selectedStationId is intentionally left set so
+  // the station stays highlighted.
   useEffect(() => {
-    if (!selectedStationId || !mapRef.current || !stationsGeoJSON) return;
+    if (!isActiveRef.current || !selectedStationId || !mapRef.current || !stationsGeoJSON) return;
     const feature = stationsGeoJSON.features.find((f) => f.properties?.id === selectedStationId);
     if (feature && feature.geometry.type === 'Point') {
       const [lon, lat] = feature.geometry.coordinates;
@@ -388,4 +447,4 @@ export const AtherMap: React.FC<AtherMapProps> = ({
       </div>
     </div>
   );
-};
+});

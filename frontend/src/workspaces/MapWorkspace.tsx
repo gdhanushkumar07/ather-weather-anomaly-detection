@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
-import { AtherMap } from '../map/AtherMap';
+import { AtherMap, AtherMapHandle } from '../map/AtherMap';
 import { LayerControls } from '../components/LayerControls';
 import { Station, WeatherLayerType } from '../types/weather';
 
@@ -16,6 +16,10 @@ interface MapWorkspaceProps {
   onToggleAnomalyOverlay: () => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  /** Whether this workspace is the one currently visible — forwarded to
+   * AtherMap so it knows when to skip its fly-to-station animation and
+   * when to re-measure its canvas after becoming visible again. */
+  isActive: boolean;
 }
 
 /**
@@ -25,7 +29,7 @@ interface MapWorkspaceProps {
  * status filter) now lives behind a single compact "Map Options" trigger,
  * closed by default.
  */
-export const MapWorkspace: React.FC<MapWorkspaceProps> = ({
+export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
   stationsGeoJSON,
   selectedStationId,
   onSelectStation,
@@ -36,14 +40,16 @@ export const MapWorkspace: React.FC<MapWorkspaceProps> = ({
   showAnomalyOverlay,
   onToggleAnomalyOverlay,
   statusFilter,
-  onSetStatusFilter
-}) => {
+  onSetStatusFilter,
+  isActive
+}, ref) => {
   const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
   const activeParamCount = ['temperature', 'pressure', 'humidity'].filter((k) => (activeLayers as any)[k]).length;
 
   return (
     <div className="map-workspace">
       <AtherMap
+        ref={ref}
         stationsGeoJSON={stationsGeoJSON}
         selectedStationId={selectedStationId}
         onSelectStation={onSelectStation}
@@ -51,6 +57,7 @@ export const MapWorkspace: React.FC<MapWorkspaceProps> = ({
         basemap={basemap}
         onToggleBasemap={onToggleBasemap}
         showAnomalyOverlay={showAnomalyOverlay}
+        isActive={isActive}
       />
 
       {/* Small, always-visible trigger — everything else is on-demand. */}
@@ -78,4 +85,4 @@ export const MapWorkspace: React.FC<MapWorkspaceProps> = ({
       />
     </div>
   );
-};
+});

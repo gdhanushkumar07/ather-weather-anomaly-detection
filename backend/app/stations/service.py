@@ -15,6 +15,15 @@ from datetime import datetime, timezone
 from ..anomaly.detector import detector
 from schema import station_dict_to_reading, ObservationSource, Freshness
 from config import CONFIG
+from ..incidents import service as incident_service
+
+
+def _enum_val(x: Any) -> Optional[str]:
+    """Unwraps a str-Enum to its plain string value without relying on
+    str-Enum's version-inconsistent __str__ behavior."""
+    if x is None:
+        return None
+    return x.value if hasattr(x, "value") else str(x)
 
 # Open-Meteo's `current` block updates on an hourly model cadence. 90 minutes
 # gives a conservative buffer above that cadence before calling data STALE.
@@ -96,6 +105,7 @@ class StationService:
             else:
                 s["status"] = status
                 s["anomaly"] = anomaly
+                self._sync_incident(s)
 
         # 3. Ingest and normalize Indian AWS stations from WeatherUnionInfra.csv
         self._load_weather_union_csv()
@@ -215,6 +225,11 @@ class StationService:
                 status, anomaly = detector.evaluate_station(stn_dict)
                 stn_dict["status"] = status
                 stn_dict["anomaly"] = anomaly
+                # NOTE: this dataset is NWP-referenced (see dataSource above),
+                # so _sync_incident's own gate will correctly no-op here —
+                # called anyway so this stays correct if the source ever
+                # becomes real AWS telemetry (Phase 3: never incident from NWP).
+                self._sync_incident(stn_dict)
 
             self._stations[locality_id] = stn_dict
             new_readings.append(station_dict_to_reading(stn_dict))
@@ -349,6 +364,76 @@ class StationService:
 
         return stn
 
+    def _build_incident_snapshot(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> Optional[Dict[str, Any]]:
+        """
+        Builds the normalized evaluation snapshot handed to
+        incident_service.upsert_from_evaluation(). Every field is read
+        directly from the real AnomalyAlert already produced by the 5-layer
+        engine for this station (detector.get_station_alert) — this never
+        computes or fabricates a separate anomaly judgement (Phase 2/3 of
+        the incident-workflow spec: reuse the existing ATHER fusion rules,
+        do not invent a parallel threshold system).
+        """
+        stn_id = stn.get("id")
+        if not stn_id:
+            return None
+        alert = detector.get_station_alert(stn_id)
+        if alert is None:
+            return None
+
+        is_offline = stn.get("status") == "OFFLINE"
+        status = "OFFLINE" if is_offline else alert.status
+        if status not in ("WARNING", "ANOMALY"):
+            return None  # Phase 3: no incident for NORMAL/OFFLINE/insufficient-evidence-only results
+
+        canonical = alert.to_canonical_dict() or {}
+        obs = canonical.get("observation", {})
+        legacy_anomaly = stn.get("anomaly") or {}
+
+        return {
+            "station_id": stn_id,
+            "station_name": stn.get("name"),
+            "town": stn.get("town"),
+            "region": stn.get("region"),
+            "country": stn.get("country"),
+            "parameter": legacy_anomaly.get("parameter", "Sensor Array"),
+            "observed_value": legacy_anomaly.get("observed"),
+            "expected_min": legacy_anomaly.get("expectedMin"),
+            "expected_max": legacy_anomaly.get("expectedMax"),
+            "unit": legacy_anomaly.get("unit", ""),
+            "status": status,
+            "severity": canonical.get("overall", {}).get("severity"),
+            "anomaly_score": round(alert.severity_score, 3),
+            "confidence": round(alert.confidence_score, 3),
+            "root_cause": _enum_val(alert.root_cause),
+            "root_cause_confidence": _enum_val(alert.diagnosis_confidence),
+            "recommended_action": alert.operator_action,
+            "evidence": alert.reasons or [],
+            "diagnostic_layers": canonical.get("layers"),
+            "fusion_result": {
+                "status": status,
+                "score": round(alert.severity_score, 3),
+                "confidence": round(alert.confidence_score, 3),
+                "explanation": alert.explanation,
+            },
+            "observation_timestamp": obs.get("observation_timestamp") or obs.get("timestamp"),
+            "obs_source": _enum_val(obs.get("source")),
+            "freshness": _enum_val(obs.get("freshness")),
+            "source": source,
+        }
+
+    def _sync_incident(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> None:
+        """Best-effort incident upsert — never lets an incident-persistence
+        problem break station evaluation/ingestion (Phase 20: incident
+        creation is additive to the existing pipeline, not a precondition
+        for it)."""
+        try:
+            snapshot = self._build_incident_snapshot(stn, source=source)
+            if snapshot:
+                incident_service.upsert_from_evaluation(snapshot)
+        except Exception as e:
+            print(f"Incident sync failed for {stn.get('id')}: {e}")
+
     def get_station_anomaly(self, station_id: str) -> Optional[Dict[str, Any]]:
         """
         Returns canonical §16 analysis assessment for a specific station,
@@ -362,6 +447,8 @@ class StationService:
         alert = detector.get_station_alert(resolved_id)
         if not alert:
             status, anomaly_dict = detector.evaluate_station(stn)
+            stn["status"] = status
+            stn["anomaly"] = anomaly_dict
             alert = detector.get_station_alert(resolved_id)
 
         if not alert:
@@ -439,6 +526,12 @@ class StationService:
             res["overall"]["severity"] = "NONE"
         if is_offline and "diagnosis" in res:
             res["diagnosis"]["status"] = "OFFLINE"
+
+        # Phase 20/27: this is the on-demand "view station" evaluation path —
+        # the richest evidence snapshot available (full L1-L5 canonical
+        # cards), so it is also an incident sync point.
+        if not is_offline:
+            self._sync_incident(stn)
 
         return res
 
@@ -591,6 +684,12 @@ class StationService:
         detector.update_spatial_pool([station_dict_to_reading(stn)])
 
         self._stations[station_id] = stn
+
+        # Phase 20: incident creation belongs in the backend pipeline, not
+        # the frontend — this is the genuine "new live AWS observation
+        # arrived" event for pushed telemetry (WeeWX/WOW-BE/native ingest).
+        self._sync_incident(stn)
+
         return stn
 
 # Singleton instance

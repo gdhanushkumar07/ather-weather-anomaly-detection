@@ -8,7 +8,7 @@ import { AnomaliesWorkspace } from './workspaces/AnomaliesWorkspace';
 import { SensorHealthWorkspace } from './workspaces/SensorHealthWorkspace';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
 import { Workspace } from './types/workspace';
-import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary } from './services/api';
+import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary, fetchActiveIncidentCounts } from './services/api';
 
 /**
  * ATHER application shell (UI architecture restructure).
@@ -25,6 +25,10 @@ export const App: React.FC = () => {
   const [stationsGeoJSON, setStationsGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [summary, setSummary] = useState<AnomaliesSummary | null>(null);
+  // Real, persisted incident counts (Phase 24: "ANOMALIES 190" must be
+  // audited — this is unique ACTIVE INCIDENTS, distinct from summary's raw
+  // per-station status counts, and labeled accordingly wherever it is shown).
+  const [activeIncidentCounts, setActiveIncidentCounts] = useState<Record<string, number> | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
   const [showAnomalyOverlay, setShowAnomalyOverlay] = useState(true);
@@ -41,7 +45,17 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadStations();
     loadSummary();
+    loadActiveIncidentCounts();
   }, [statusFilter]);
+
+  const loadActiveIncidentCounts = async () => {
+    try {
+      const counts = await fetchActiveIncidentCounts();
+      setActiveIncidentCounts(counts);
+    } catch (err) {
+      console.error('Error loading active incident counts', err);
+    }
+  };
 
   const loadStations = async () => {
     try {
@@ -107,6 +121,7 @@ export const App: React.FC = () => {
     <div className="ather-app">
       <TopNav
         summary={summary}
+        activeIncidentCounts={activeIncidentCounts}
         onSelectStation={handleSelectStation}
         activeWorkspace={workspace}
         onNavigate={handleNavigate}
@@ -157,7 +172,7 @@ export const App: React.FC = () => {
         )}
 
         {workspace === 'anomalies' && (
-          <AnomaliesWorkspace summary={summary} onViewStation={handleSelectStation} />
+          <AnomaliesWorkspace summary={summary} activeIncidentCounts={activeIncidentCounts} onViewStation={handleSelectStation} />
         )}
 
         {workspace === 'health' && (

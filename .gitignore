@@ -10,3 +10,8 @@ build/
 !.env.example
 __pycache__/
 *.pyc
+
+# ATHER incident persistence — runtime state, not source (SQLite + WAL sidecars)
+data/incidents.db
+data/incidents.db-wal
+data/incidents.db-shm

@@ -169,6 +169,31 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
 
     canonical = alert.canonical_result or alert.to_canonical_dict()
 
+    # Phase 29/36 of the incident-workflow spec: a simulation may OPTIONALLY
+    # show what an incident WOULD look like, purely for display — it is
+    # never written through incident_service.upsert_from_evaluation, never
+    # touches the real incidents.db, and is unambiguously tagged so the UI
+    # can never confuse it with a real operational incident.
+    simulated_incident = None
+    if alert.status in ("WARNING", "ANOMALY"):
+        overall_severity = canonical.get("overall", {}).get("severity", "WARNING")
+        simulated_incident = {
+            "incident_id": f"SIM-INC-{sim_station_id}",
+            "is_simulated": True,
+            "source": "TEST_SIMULATION",
+            "status": "TEST ONLY",
+            "station_id": sim_station_id,
+            "parameter": scenario.name,
+            "severity": {"HIGH": "CRITICAL", "WARNING": "WARNING", "LOW": "INFO"}.get(overall_severity, "WARNING"),
+            "observed_value": alert.raw_values.get("temperature_c"),
+            "anomaly_score": round(alert.severity_score, 3),
+            "confidence": round(alert.confidence_score, 3),
+            "root_cause": alert.root_cause.value,
+            "evidence": alert.reasons,
+            "recommended_action": alert.operator_action,
+            "note": "SIMULATED INCIDENT — Test Lab preview only. Not persisted, not counted in real operational incident totals.",
+        }
+
     return {
         "simulation": True,
         "station": {
@@ -211,6 +236,7 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
         "recommended_action": alert.operator_action,
         "insight": canonical.get("insights", []),
         "weather_analysis": canonical.get("weather_analysis", {}),
+        "simulated_incident": simulated_incident,
         "test_result": {
             "expected_bucket": expected_bucket,
             "actual_bucket": actual_bucket,

@@ -1,27 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import { X, Copy, CheckCheck, ShieldAlert } from 'lucide-react';
-import { fetchEscalationPreview, markEscalated } from '../services/api';
+import { fetchEscalationPreview, escalateIncident } from '../services/api';
 
 interface EscalationPreviewModalProps {
-  stationId: string;
+  incidentId: string;
   onClose: () => void;
   onEscalated?: () => void;
 }
 
-export const EscalationPreviewModal: React.FC<EscalationPreviewModalProps> = ({ stationId, onClose, onEscalated }) => {
+export const EscalationPreviewModal: React.FC<EscalationPreviewModalProps> = ({ incidentId, onClose, onEscalated }) => {
   const [preview, setPreview] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [marking, setMarking] = useState(false);
 
   useEffect(() => {
-    fetchEscalationPreview(stationId).then(setPreview).catch((e) => setError(e.message));
-  }, [stationId]);
+    fetchEscalationPreview(incidentId).then(setPreview).catch((e) => setError(e.message));
+  }, [incidentId]);
 
   const alertText = preview
     ? `ESCALATION PREVIEW\n\n` +
       `Recipient: ${preview.recipient}\n` +
       `Subject: ${preview.subject}\n\n` +
+      `Incident: ${preview.incident_id}\n` +
       `Station: ${preview.station_id} (${preview.station_name || ''})\n` +
       `Location: ${preview.location}\n` +
       `Affected Parameter: ${preview.affected_parameter}\n` +
@@ -47,7 +48,7 @@ export const EscalationPreviewModal: React.FC<EscalationPreviewModalProps> = ({ 
   const handleMarkEscalated = async () => {
     setMarking(true);
     try {
-      await markEscalated(stationId);
+      await escalateIncident(incidentId);
       onEscalated?.();
       onClose();
     } catch (e: any) {
@@ -74,6 +75,7 @@ export const EscalationPreviewModal: React.FC<EscalationPreviewModalProps> = ({ 
         {error && <div className="test-lab-error">{error}</div>}
         {preview && (
           <div className="escalation-preview-body">
+            <Row label="Incident" value={preview.incident_id} />
             <Row label="Recipient" value={preview.recipient} />
             <Row label="Subject" value={preview.subject} />
             <Row label="Station" value={`${preview.station_id} — ${preview.station_name || ''}`} />

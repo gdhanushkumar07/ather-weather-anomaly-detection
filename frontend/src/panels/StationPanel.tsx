@@ -32,11 +32,25 @@ import {
 } from '../types/weather';
 import {
   fetchStationObservations, fetchCurrentWeather, fetchStationAnomaly,
-  fetchIncident, acknowledgeIncident, investigateIncident, resolveIncident, dismissIncident
+  fetchStationIncidents, acknowledgeIncident, investigateIncident, resolveIncident, dismissIncident
 } from '../services/api';
 import { EscalationPreviewModal } from '../components/EscalationPreviewModal';
+import { ResolveIncidentModal } from '../components/ResolveIncidentModal';
+import { DismissIncidentModal } from '../components/DismissIncidentModal';
 import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
-import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft } from 'lucide-react';
+import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft, XCircle } from 'lucide-react';
+
+// Mirrors app/incidents/service.py::VALID_TRANSITIONS — used only to decide
+// which action buttons are enabled; the backend is the actual authority
+// and will reject anything invalid regardless (Phase 34/44).
+const INCIDENT_VALID_TRANSITIONS: Record<string, string[]> = {
+  NEW: ['ACKNOWLEDGED', 'DISMISSED'],
+  ACKNOWLEDGED: ['INVESTIGATING', 'DISMISSED'],
+  INVESTIGATING: ['ESCALATED', 'RESOLVED', 'DISMISSED'],
+  ESCALATED: ['RESOLVED', 'DISMISSED'],
+  RESOLVED: [],
+  DISMISSED: [],
+};
 
 interface StationPanelProps {
   station: Station | null;
@@ -64,10 +78,12 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
   // Toggle for Open-Meteo comparison view
   const [showModelComparison, setShowModelComparison] = useState<boolean>(false);
 
-  // ATHER Incident workflow (Phase 13-15)
+  // ATHER Incident workflow — persistent, incident-ID keyed (production-grade)
   const [incident, setIncident] = useState<any | null>(null);
   const [isIncidentBusy, setIsIncidentBusy] = useState(false);
   const [showEscalationPreview, setShowEscalationPreview] = useState(false);
+  const [showResolveModal, setShowResolveModal] = useState(false);
+  const [showDismissModal, setShowDismissModal] = useState(false);
 
   // 5-Layer accordion progressive disclosure (Phase 12)
   const [expandedLayers, setExpandedLayers] = useState<Record<string, boolean>>({});
@@ -134,31 +150,65 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
           setIsLoadingAnomaly(false);
         });
 
-      // 4. Fetch/create incident record only when actionable (Phase 13-15) —
-      // never fabricated for a NORMAL/OFFLINE station.
+      // 4. Fetch persisted incident history for this station (Phase 21-23):
+      // incidents are created automatically by the backend pipeline, never
+      // by the frontend — this only reads state. An incident stays visible
+      // here even after the station's CURRENT observation returns to
+      // NORMAL (Phase 22/23: current station state and incident state are
+      // never conflated). We surface the most recently updated OPEN
+      // incident if one exists, otherwise the most recent incident overall
+      // so history remains visible.
       setIncident(null);
-      if (station.status === 'ANOMALY' || station.status === 'WARNING') {
-        fetchIncident(station.id).then(setIncident).catch((err) => console.error('Failed to fetch incident', err));
-      }
+      fetchStationIncidents(station.id)
+        .then(({ incidents }) => {
+          if (!incidents || incidents.length === 0) return;
+          const open = incidents.find((i: any) => i.status !== 'RESOLVED' && i.status !== 'DISMISSED');
+          setIncident(open || incidents[0]);
+        })
+        .catch((err) => console.error('Failed to fetch station incidents', err));
     }
   }, [station?.id, station?.latitude, station?.longitude, station?.status]);
 
   const refreshIncident = (stationId: string) => {
-    fetchIncident(stationId).then(setIncident).catch((err) => console.error('Failed to refresh incident', err));
+    fetchStationIncidents(stationId)
+      .then(({ incidents }) => {
+        if (!incidents || incidents.length === 0) return;
+        const open = incidents.find((i: any) => i.status !== 'RESOLVED' && i.status !== 'DISMISSED');
+        setIncident(open || incidents[0]);
+      })
+      .catch((err) => console.error('Failed to refresh incident', err));
   };
 
-  const handleIncidentAction = async (action: 'acknowledge' | 'investigate' | 'resolve' | 'dismiss') => {
-    if (!cachedStation) return;
+  const handleIncidentAction = async (action: 'acknowledge' | 'investigate') => {
+    if (!incident) return;
     setIsIncidentBusy(true);
     try {
-      const fn = { acknowledge: acknowledgeIncident, investigate: investigateIncident, resolve: resolveIncident, dismiss: dismissIncident }[action];
-      const updated = await fn(cachedStation.id);
+      const fn = { acknowledge: acknowledgeIncident, investigate: investigateIncident }[action];
+      const updated = await fn(incident.incident_id);
       setIncident(updated);
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Incident action '${action}' failed`, err);
+      alert(err.message || `Failed to ${action} incident.`);
     } finally {
       setIsIncidentBusy(false);
     }
+  };
+
+  const handleResolveIncident = async (notes: string, resolutionType: string) => {
+    if (!incident) return;
+    const updated = await resolveIncident(incident.incident_id, notes, resolutionType);
+    setIncident(updated);
+  };
+
+  const handleDismissIncident = async (reason: string) => {
+    if (!incident) return;
+    const updated = await dismissIncident(incident.incident_id, reason);
+    setIncident(updated);
+  };
+
+  const incidentAllowedNext = (target: string): boolean => {
+    if (!incident) return false;
+    return INCIDENT_VALID_TRANSITIONS[incident.status]?.includes(target) ?? false;
   };
 
   const displayStation = station || cachedStation;
@@ -701,7 +751,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             <div className="anomaly-intelligence-details">
               <div className="anomaly-headline">
                 <span className="anomaly-param-tag">
-                  {incident?.latest_snapshot?.parameter || 'Temperature'} Anomaly
+                  {currentStation.anomaly?.parameter || 'Temperature'} Anomaly
                 </span>
                 <span className="anomaly-stn-tag">Station ID: {currentStation.id}</span>
               </div>
@@ -710,17 +760,13 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
                 <div className="anomaly-metric-box">
                   <span className="anomaly-box-lbl">Observed:</span>
                   <span className="anomaly-box-val alert">
-                    {incident?.latest_snapshot?.observed !== undefined
-                      ? `${incident.latest_snapshot.observed} ${incident.latest_snapshot.unit || ''}`
-                      : obsTemp !== null && obsTemp !== undefined ? `${obsTemp.toFixed(1)} °C` : '--'}
+                    {obsTemp !== null && obsTemp !== undefined ? `${obsTemp.toFixed(1)} °C` : '--'}
                   </span>
                 </div>
                 <div className="anomaly-metric-box">
                   <span className="anomaly-box-lbl">Expected:</span>
                   <span className="anomaly-box-val">
-                    {incident?.latest_snapshot?.expected_min !== undefined
-                      ? `${incident.latest_snapshot.expected_min}–${incident.latest_snapshot.expected_max} ${incident.latest_snapshot.unit || ''}`
-                      : currentWeather ? `${currentWeather.temperature.toFixed(1)} °C (NWP)` : 'Mesh Baseline'}
+                    {currentWeather ? `${currentWeather.temperature.toFixed(1)} °C (NWP)` : 'Mesh Baseline'}
                   </span>
                 </div>
                 <div className="anomaly-metric-box">
@@ -736,7 +782,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               <div className="anomaly-root-cause-row">
                 <span className="root-cause-lbl">Root Cause:</span>
                 <strong className="root-cause-val">
-                  {String(canonicalDiag?.primary || canonical?.root_cause || incident?.latest_snapshot?.root_cause || 'Likely Sensor Fault').replace(/_/g, ' ')}
+                  {String(canonicalDiag?.primary || canonical?.root_cause || 'Likely Sensor Fault').replace(/_/g, ' ')}
                 </strong>
               </div>
             </div>
@@ -758,71 +804,147 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               </div>
             )}
 
-            {/* Phase 15 & 16: WHAT SHOULD HAPPEN NEXT? & INCIDENT WORKFLOW */}
+            {/* Phase 15: WHAT SHOULD HAPPEN NEXT? */}
             <div className="action-workflow-section">
               <div className="action-header">
                 <span>RECOMMENDED ACTION</span>
               </div>
               <p className="action-text">
                 {canonicalDiag?.operator_action ||
-                  incident?.latest_snapshot?.recommended_action ||
                   (isAnomaly
                     ? 'Inspect temperature sensor calibration and cross-check neighboring stations.'
                     : 'Continue routine telemetry monitoring.')}
               </p>
-
-              {/* Workflow Stepper */}
-              <div className="incident-workflow-stepper">
-                <span className="step-pill done">DIAGNOSIS</span>
-                <span className="step-arrow">→</span>
-                <span className="step-pill done">ROOT CAUSE</span>
-                <span className="step-arrow">→</span>
-                <span className="step-pill active">RECOMMENDED ACTION</span>
-                <span className="step-arrow">→</span>
-                <span className="step-pill pending">INCIDENT</span>
-              </div>
-
-              {incident && incident.state !== 'RESOLVED' && incident.state !== 'DISMISSED' && (
-                <div className="incident-actions-row">
-                  <button
-                    className="incident-action-btn"
-                    disabled={isIncidentBusy || incident.state !== 'NEW'}
-                    onClick={() => handleIncidentAction('acknowledge')}
-                  >
-                    <UserCheck className="w-3 h-3" /> ACKNOWLEDGE
-                  </button>
-                  <button
-                    className="incident-action-btn"
-                    disabled={isIncidentBusy || incident.state === 'INVESTIGATING'}
-                    onClick={() => handleIncidentAction('investigate')}
-                  >
-                    <InvestigateIcon className="w-3 h-3" /> INVESTIGATE
-                  </button>
-                  <button
-                    className="incident-action-btn escalate"
-                    disabled={isIncidentBusy}
-                    onClick={() => setShowEscalationPreview(true)}
-                  >
-                    <Siren className="w-3 h-3" /> ESCALATE
-                  </button>
-                  <button
-                    className="incident-action-btn resolve"
-                    disabled={isIncidentBusy}
-                    onClick={() => handleIncidentAction('resolve')}
-                  >
-                    RESOLVE
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
 
-        {showEscalationPreview && cachedStation && (
+        {/* ATHER INCIDENT — a persistent record, independent of the CURRENT
+            live station status above (Phase 22/23): a station can be back
+            to NORMAL right now while its incident is still open. */}
+        {incident && (
+          <div className="section-card incident-workflow-card">
+            <div className="card-header-flex">
+              <div className="card-title-group">
+                <IncidentIcon className="w-3.5 h-3.5 text-red-400" />
+                <span className="card-section-title">INCIDENT · {incident.incident_id}</span>
+              </div>
+              <span className={`incident-state-pill ${incident.status}`}>{incident.status}</span>
+            </div>
+
+            <div className="anomaly-metrics-grid">
+              <div className="anomaly-metric-box">
+                <span className="anomaly-box-lbl">Parameter:</span>
+                <span className="anomaly-box-val">{incident.parameter}</span>
+              </div>
+              <div className="anomaly-metric-box">
+                <span className="anomaly-box-lbl">Observed:</span>
+                <span className="anomaly-box-val alert">{incident.observed_value} {incident.unit}</span>
+              </div>
+              <div className="anomaly-metric-box">
+                <span className="anomaly-box-lbl">Expected:</span>
+                <span className="anomaly-box-val">
+                  {incident.expected_min !== null && incident.expected_min !== undefined
+                    ? `${incident.expected_min}–${incident.expected_max} ${incident.unit || ''}` : 'N/A'}
+                </span>
+              </div>
+              <div className="anomaly-metric-box">
+                <span className="anomaly-box-lbl">Confidence:</span>
+                <span className="anomaly-box-val">{Math.round((incident.confidence || 0) * 100)}%</span>
+              </div>
+            </div>
+
+            <div className="anomaly-root-cause-row">
+              <span className="root-cause-lbl">Root Cause:</span>
+              <strong className="root-cause-val">{String(incident.root_cause || '').replace(/_/g, ' ')}</strong>
+            </div>
+
+            {incident.evidence?.length > 0 && (
+              <ul className="why-flagged-list" style={{ marginTop: 6 }}>
+                {incident.evidence.slice(0, 4).map((e: string, i: number) => (
+                  <li key={i} className="why-flagged-item"><Check className="w-3.5 h-3.5 text-red-400 shrink-0" /><span>{e}</span></li>
+                ))}
+              </ul>
+            )}
+
+            <div className="action-header" style={{ marginTop: 10 }}><span>RECOMMENDED ACTION</span></div>
+            <p className="action-text">{incident.recommended_action}</p>
+
+            {/* Phase 14: Incident Timeline */}
+            {incident.timeline?.length > 0 && (
+              <div className="incident-timeline">
+                {incident.timeline.map((ev: any, i: number) => (
+                  <div key={i} className="incident-timeline-row">
+                    <span className="incident-timeline-time">{new Date(ev.at).toLocaleString()}</span>
+                    <span className="incident-timeline-event">{ev.event.replace(/_/g, ' ')}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {incident.status !== 'RESOLVED' && incident.status !== 'DISMISSED' && (
+              <div className="incident-actions-row">
+                <button
+                  className="incident-action-btn"
+                  disabled={isIncidentBusy || !incidentAllowedNext('ACKNOWLEDGED')}
+                  onClick={() => handleIncidentAction('acknowledge')}
+                >
+                  <UserCheck className="w-3 h-3" /> ACKNOWLEDGE
+                </button>
+                <button
+                  className="incident-action-btn"
+                  disabled={isIncidentBusy || !incidentAllowedNext('INVESTIGATING')}
+                  onClick={() => handleIncidentAction('investigate')}
+                >
+                  <InvestigateIcon className="w-3 h-3" /> INVESTIGATE
+                </button>
+                <button
+                  className="incident-action-btn escalate"
+                  disabled={isIncidentBusy || !incidentAllowedNext('ESCALATED')}
+                  onClick={() => setShowEscalationPreview(true)}
+                >
+                  <Siren className="w-3 h-3" /> ESCALATE
+                </button>
+                <button
+                  className="incident-action-btn resolve"
+                  disabled={isIncidentBusy || !incidentAllowedNext('RESOLVED')}
+                  onClick={() => setShowResolveModal(true)}
+                >
+                  RESOLVE
+                </button>
+                <button
+                  className="incident-action-btn"
+                  disabled={isIncidentBusy || !incidentAllowedNext('DISMISSED')}
+                  onClick={() => setShowDismissModal(true)}
+                >
+                  <XCircle className="w-3 h-3" /> DISMISS
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {showEscalationPreview && incident && (
           <EscalationPreviewModal
-            stationId={cachedStation.id}
+            incidentId={incident.incident_id}
             onClose={() => setShowEscalationPreview(false)}
-            onEscalated={() => refreshIncident(cachedStation.id)}
+            onEscalated={() => cachedStation && refreshIncident(cachedStation.id)}
+          />
+        )}
+
+        {showResolveModal && incident && (
+          <ResolveIncidentModal
+            incidentId={incident.incident_id}
+            onClose={() => setShowResolveModal(false)}
+            onResolve={handleResolveIncident}
+          />
+        )}
+
+        {showDismissModal && incident && (
+          <DismissIncidentModal
+            incidentId={incident.incident_id}
+            onClose={() => setShowDismissModal(false)}
+            onDismiss={handleDismissIncident}
           />
         )}
 

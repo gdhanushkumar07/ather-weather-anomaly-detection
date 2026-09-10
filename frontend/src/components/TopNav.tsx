@@ -6,6 +6,11 @@ import { Workspace } from '../types/workspace';
 
 interface TopNavProps {
   summary: AnomaliesSummary | null;
+  /** Real, persisted ACTIVE INCIDENT counts (Phase 24) — distinct from
+   * `summary`'s raw per-station status counts. Used for the Anomalies nav
+   * badge specifically, since that badge represents "incidents needing
+   * attention", not "how many stations are currently anomalous". */
+  activeIncidentCounts?: Record<string, number> | null;
   onSelectStation: (stationId: string) => void;
   activeWorkspace: Workspace;
   onNavigate: (workspace: Workspace) => void;
@@ -21,6 +26,7 @@ const WORKSPACE_TABS: { id: Workspace; label: string; icon: React.ComponentType<
 
 export const TopNav: React.FC<TopNavProps> = ({
   summary,
+  activeIncidentCounts,
   onSelectStation,
   activeWorkspace,
   onNavigate
@@ -135,8 +141,10 @@ export const TopNav: React.FC<TopNavProps> = ({
           >
             <Icon className="w-3.5 h-3.5" />
             <span>{label}</span>
-            {id === 'anomalies' && summary?.anomalyCount ? (
-              <span className="nav-badge-count anomaly">{summary.anomalyCount}</span>
+            {id === 'anomalies' && activeIncidentCounts?.active ? (
+              <span className="nav-badge-count anomaly" title="Active incidents (persisted, not raw station status counts)">
+                {activeIncidentCounts.active}
+              </span>
             ) : null}
             {id === 'health' && summary?.warningCount ? (
               <span className="nav-badge-count warning">{summary.warningCount}</span>

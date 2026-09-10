@@ -97,40 +97,61 @@ export async function runSimulation(scenarioId: string, baseStationId?: string |
   return res.json();
 }
 
-// ── ATHER Incident Workflow ──────────────────────────────────────────────
+// ── ATHER Incident Workflow (persistent, incident-ID keyed) ──────────────
+// Backend is authoritative for status/severity/confidence/evidence — these
+// functions only render and request state changes (Phase 44).
 
-export async function fetchIncidents(state?: string): Promise<{ incidents: any[] }> {
-  const query = state ? `?state=${encodeURIComponent(state)}` : '';
-  const res = await fetch(`${API_BASE}/incidents${query}`);
+export async function fetchIncidents(status?: string | null, stationId?: string): Promise<{ incidents: any[] }> {
+  const query = new URLSearchParams();
+  if (status) query.set('status', status);
+  if (stationId) query.set('station_id', stationId);
+  const qs = query.toString();
+  const res = await fetch(`${API_BASE}/incidents${qs ? `?${qs}` : ''}`);
   if (!res.ok) throw new Error(`Failed to fetch incidents: ${res.statusText}`);
   return res.json();
 }
 
-export async function fetchIncident(stationId: string) {
-  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incident`);
-  if (!res.ok) throw new Error(`Failed to fetch incident for ${stationId}: ${res.statusText}`);
+export async function fetchActiveIncidentCounts(): Promise<Record<string, number>> {
+  const res = await fetch(`${API_BASE}/incidents/active-counts`);
+  if (!res.ok) throw new Error(`Failed to fetch active incident counts: ${res.statusText}`);
   return res.json();
 }
 
-async function postIncidentAction(stationId: string, action: string) {
-  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incident/${action}`, { method: 'POST' });
-  if (!res.ok) throw new Error(`Incident action '${action}' failed: ${res.statusText}`);
+export async function fetchIncidentDetail(incidentId: string) {
+  const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}`);
+  if (!res.ok) throw new Error(`Failed to fetch incident ${incidentId}: ${res.statusText}`);
   return res.json();
 }
 
-export const acknowledgeIncident = (stationId: string) => postIncidentAction(stationId, 'acknowledge');
-export const investigateIncident = (stationId: string) => postIncidentAction(stationId, 'investigate');
-export const resolveIncident = (stationId: string) => postIncidentAction(stationId, 'resolve');
-export const dismissIncident = (stationId: string) => postIncidentAction(stationId, 'dismiss');
-
-export async function fetchEscalationPreview(stationId: string) {
-  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/escalation-preview`);
-  if (!res.ok) throw new Error(`Failed to fetch escalation preview for ${stationId}: ${res.statusText}`);
+export async function fetchStationIncidents(stationId: string): Promise<{ incidents: any[] }> {
+  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/incidents`);
+  if (!res.ok) throw new Error(`Failed to fetch incidents for ${stationId}: ${res.statusText}`);
   return res.json();
 }
 
-export async function markEscalated(stationId: string) {
-  const res = await fetch(`${API_BASE}/stations/${encodeURIComponent(stationId)}/escalation-preview/mark-escalated`, { method: 'POST' });
-  if (!res.ok) throw new Error(`Failed to mark escalated for ${stationId}: ${res.statusText}`);
+async function postIncidentAction(incidentId: string, action: string, body?: Record<string, any>) {
+  const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Incident action '${action}' failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+
+export const acknowledgeIncident = (incidentId: string, actor = 'operator') => postIncidentAction(incidentId, 'acknowledge', { actor });
+export const investigateIncident = (incidentId: string, actor = 'operator') => postIncidentAction(incidentId, 'investigate', { actor });
+export const escalateIncident = (incidentId: string, actor = 'operator') => postIncidentAction(incidentId, 'escalate', { actor });
+export const resolveIncident = (incidentId: string, resolutionNotes: string, resolutionType: string, actor = 'operator') =>
+  postIncidentAction(incidentId, 'resolve', { actor, resolution_notes: resolutionNotes, resolution_type: resolutionType });
+export const dismissIncident = (incidentId: string, dismissalReason: string, actor = 'operator') =>
+  postIncidentAction(incidentId, 'dismiss', { actor, dismissal_reason: dismissalReason });
+
+export async function fetchEscalationPreview(incidentId: string) {
+  const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/escalation-preview`);
+  if (!res.ok) throw new Error(`Failed to fetch escalation preview for ${incidentId}: ${res.statusText}`);
   return res.json();
 }

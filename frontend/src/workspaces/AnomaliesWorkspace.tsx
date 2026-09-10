@@ -1,84 +1,66 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldAlert, Info, Loader2 } from 'lucide-react';
-import { AnomaliesSummary, Station } from '../types/weather';
+import { AnomaliesSummary } from '../types/weather';
 import { fetchIncidents } from '../services/api';
 import { AnomalyCard } from '../components/AnomalyCard';
+import { IncidentDetail } from '../components/IncidentDetail';
 
 interface AnomaliesWorkspaceProps {
   summary: AnomaliesSummary | null;
+  activeIncidentCounts: Record<string, number> | null;
   onViewStation: (stationId: string) => void;
 }
 
-type Tab = 'ACTIVE' | 'RESOLVED' | 'ALL';
+// UI tab label -> backend `status` filter. "ACTIVE" surfaces brand-new,
+// not-yet-touched incidents (backend status NEW) — Phase 11.
+const TABS: { label: string; status: string | null }[] = [
+  { label: 'ACTIVE', status: 'NEW' },
+  { label: 'ACKNOWLEDGED', status: 'ACKNOWLEDGED' },
+  { label: 'INVESTIGATING', status: 'INVESTIGATING' },
+  { label: 'ESCALATED', status: 'ESCALATED' },
+  { label: 'RESOLVED', status: 'RESOLVED' },
+  { label: 'ALL', status: null },
+];
 
 /**
- * ATHER ANOMALIES — dedicated operational workspace (UI architecture
- * restructure, Phase 12). Active tab uses the same real-time summary the
- * rest of the app already fetches (no duplicate data logic, no N+1 station
- * calls). Resolved/All read the incident ledger's tracked records, which is
- * honestly limited to incidents someone has actually opened — see the empty
- * state text.
+ * ATHER ANOMALIES — persistent incident workspace (Phase 11-13). Reads
+ * real, backend-persisted incidents (created automatically by the anomaly
+ * pipeline — see app/stations/service.py._sync_incident) rather than
+ * ephemeral per-request detection output. Master-detail: selecting an
+ * incident opens its detail in place, without leaving this workspace or
+ * stacking another panel on the map (Phase 37).
  */
-export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary, onViewStation }) => {
-  const [tab, setTab] = useState<Tab>('ACTIVE');
-  const [resolvedIncidents, setResolvedIncidents] = useState<any[] | null>(null);
-  const [allIncidents, setAllIncidents] = useState<any[] | null>(null);
+export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary, activeIncidentCounts, onViewStation }) => {
+  const [tabIndex, setTabIndex] = useState(0);
+  const [incidents, setIncidents] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (tab === 'RESOLVED' && resolvedIncidents === null) {
-      setIsLoading(true);
-      fetchIncidents('RESOLVED').then((r) => setResolvedIncidents(r.incidents)).finally(() => setIsLoading(false));
-    }
-    if (tab === 'ALL' && allIncidents === null) {
-      setIsLoading(true);
-      fetchIncidents().then((r) => setAllIncidents(r.incidents)).finally(() => setIsLoading(false));
-    }
-  }, [tab, resolvedIncidents, allIncidents]);
+  const tab = TABS[tabIndex];
 
-  const activeAnomalies: Station[] = summary?.activeAnomalies ?? [];
-
-  const renderActiveCard = (stn: Station) => {
-    const a = stn.anomaly;
-    const isCritical = a?.severity === 'HIGH';
-    return (
-      <AnomalyCard
-        key={stn.id}
-        accent={isCritical ? 'critical' : 'warning'}
-        pillLabel={isCritical ? 'CRITICAL' : 'WARNING'}
-        stationId={stn.id}
-        title={`${a?.parameter || 'Telemetry'} anomaly`}
-        location={`${stn.name} · ${stn.town}`}
-        onView={() => onViewStation(stn.id)}
-        metrics={[
-          { label: 'OBSERVED', value: `${a?.observed ?? '--'} ${a?.unit ?? ''}` },
-          { label: 'CONFIDENCE', value: a?.confidence !== undefined ? `${Math.round(a.confidence * 100)}%` : '--' },
-          { label: 'ROOT CAUSE', value: a?.rootCause ? a.rootCause.replace(/_/g, ' ') : '--' },
-        ]}
-      />
-    );
+  const load = () => {
+    setIsLoading(true);
+    setError(null);
+    fetchIncidents(tab.status)
+      .then((r) => setIncidents(r.incidents))
+      .catch((e) => setError(e.message))
+      .finally(() => setIsLoading(false));
   };
 
-  const renderIncidentCard = (inc: any) => {
-    const snap = inc.latest_snapshot || {};
-    const isCritical = snap.severity === 'HIGH';
+  useEffect(() => { load(); }, [tabIndex]);
+
+  if (selectedIncidentId) {
     return (
-      <AnomalyCard
-        key={inc.incident_id}
-        accent={isCritical ? 'critical' : 'warning'}
-        pillLabel={inc.state}
-        stationId={inc.station_id}
-        title={`${snap.parameter || 'Telemetry'} anomaly`}
-        location={`${snap.station_name} · ${snap.town}`}
-        onView={() => onViewStation(inc.station_id)}
-        metrics={[
-          { label: 'OBSERVED', value: `${snap.observed ?? '--'} ${snap.unit ?? ''}` },
-          { label: 'SEVERITY', value: snap.severity ?? '--' },
-          { label: 'ROOT CAUSE', value: snap.root_cause ? String(snap.root_cause).replace(/_/g, ' ') : '--' },
-        ]}
-      />
+      <div className="anomalies-workspace">
+        <IncidentDetail
+          incidentId={selectedIncidentId}
+          onBack={() => { setSelectedIncidentId(null); load(); }}
+          onViewStation={onViewStation}
+        />
+      </div>
     );
-  };
+  }
 
   return (
     <div className="anomalies-workspace">
@@ -93,50 +75,45 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
       </div>
 
       <div className="anomalies-tabs-row">
-        {(['ACTIVE', 'RESOLVED', 'ALL'] as Tab[]).map((t) => (
-          <button key={t} className={`anomalies-tab-btn ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>
-            {t}
-            {t === 'ACTIVE' && activeAnomalies.length > 0 && <span className="nav-badge-count anomaly">{activeAnomalies.length}</span>}
+        {TABS.map((t, i) => (
+          <button key={t.label} className={`anomalies-tab-btn ${tabIndex === i ? 'active' : ''}`} onClick={() => setTabIndex(i)}>
+            {t.label}
+            {t.label === 'ACTIVE' && activeIncidentCounts?.new ? <span className="nav-badge-count anomaly">{activeIncidentCounts.new}</span> : null}
           </button>
         ))}
       </div>
 
       <div className="anomalies-list">
-        {tab === 'ACTIVE' && (
-          activeAnomalies.length === 0 ? (
-            <div className="anomalies-empty-state">
-              <Info className="w-4 h-4 text-slate-400" />
-              <span>No active anomalies. All reporting stations are within nominal limits.</span>
-            </div>
-          ) : (
-            activeAnomalies.map(renderActiveCard)
-          )
-        )}
-
-        {tab === 'RESOLVED' && (
-          isLoading ? (
-            <div className="anomalies-empty-state"><Loader2 className="w-4 h-4 animate-spin" /><span>Loading resolved incidents...</span></div>
-          ) : !resolvedIncidents || resolvedIncidents.length === 0 ? (
-            <div className="anomalies-empty-state">
-              <Info className="w-4 h-4 text-slate-400" />
-              <span>No resolved incidents tracked yet. Only incidents an operator has opened and resolved from Station Intelligence appear here.</span>
-            </div>
-          ) : (
-            resolvedIncidents.map(renderIncidentCard)
-          )
-        )}
-
-        {tab === 'ALL' && (
-          isLoading ? (
-            <div className="anomalies-empty-state"><Loader2 className="w-4 h-4 animate-spin" /><span>Loading incidents...</span></div>
-          ) : !allIncidents || allIncidents.length === 0 ? (
-            <div className="anomalies-empty-state">
-              <Info className="w-4 h-4 text-slate-400" />
-              <span>No incidents tracked yet.</span>
-            </div>
-          ) : (
-            allIncidents.map(renderIncidentCard)
-          )
+        {isLoading ? (
+          <div className="anomalies-empty-state"><Loader2 className="w-4 h-4 animate-spin" /><span>Loading incidents...</span></div>
+        ) : error ? (
+          <div className="anomalies-empty-state"><Info className="w-4 h-4 text-slate-400" /><span>{error}</span></div>
+        ) : !incidents || incidents.length === 0 ? (
+          <div className="anomalies-empty-state">
+            <Info className="w-4 h-4 text-slate-400" />
+            <span>
+              {tab.label === 'ACTIVE'
+                ? 'No new incidents. All reporting stations are within nominal limits.'
+                : `No ${tab.label.toLowerCase()} incidents.`}
+            </span>
+          </div>
+        ) : (
+          incidents.map((inc) => (
+            <AnomalyCard
+              key={inc.incident_id}
+              accent={inc.severity === 'CRITICAL' ? 'critical' : inc.severity === 'INFO' ? 'neutral' : 'warning'}
+              pillLabel={inc.status}
+              stationId={inc.station_id}
+              title={`${inc.parameter} anomaly`}
+              location={`${inc.station_name || ''} · ${inc.town || ''}`}
+              onView={() => setSelectedIncidentId(inc.incident_id)}
+              metrics={[
+                { label: 'OBSERVED', value: `${inc.observed_value ?? '--'} ${inc.unit ?? ''}` },
+                { label: 'CONFIDENCE', value: inc.confidence !== undefined ? `${Math.round(inc.confidence * 100)}%` : '--' },
+                { label: 'ROOT CAUSE', value: inc.root_cause ? String(inc.root_cause).replace(/_/g, ' ') : '--' },
+              ]}
+            />
+          ))
         )}
       </div>
     </div>

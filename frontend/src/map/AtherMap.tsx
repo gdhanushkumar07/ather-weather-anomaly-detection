@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { Plus, Minus, Globe, Satellite, Moon, Maximize } from 'lucide-react';
+import { Plus, Minus, Globe, Satellite, Moon, Maximize, ChevronLeft, ChevronRight, ShieldAlert, Crosshair } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField, setAnomalyOverlayVisibility } from './StationLayer';
+import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField, setAnomalyOverlayVisibility, startAnomalyPulse, collectIncidentTargets } from './StationLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 
@@ -190,6 +190,50 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     if (!map || !isMapReady || !stationsGeoJSON) return;
     setupStationLayers(map, stationsGeoJSON, (id) => onSelectStationRef.current(id));
   }, [stationsGeoJSON, isMapReady]);
+
+  // 2a. Drive the alert-halo animation. The layer has always been called
+  // "pulse" but nothing ever animated it — this is the missing loop.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+    const stop = startAnomalyPulse(map);
+    return stop;
+  }, [isMapReady]);
+
+  // 2b. Incident targets for the "jump to next incident" control. Clustering
+  // makes one bad station inside a 900-station cluster unreachable by
+  // panning, so navigation has to be data-driven, not spatial.
+  const incidentTargets = React.useMemo(
+    () => collectIncidentTargets(stationsGeoJSON),
+    [stationsGeoJSON]
+  );
+  const [incidentIndex, setIncidentIndex] = React.useState(0);
+
+  useEffect(() => { setIncidentIndex(0); }, [incidentTargets.length]);
+
+  const goToIncident = React.useCallback((delta: number) => {
+    const map = mapRef.current;
+    if (!map || incidentTargets.length === 0) return;
+    const next = (incidentIndex + delta + incidentTargets.length) % incidentTargets.length;
+    setIncidentIndex(next);
+    const target = incidentTargets[next];
+    map.flyTo({ center: target.center, zoom: Math.max(map.getZoom(), 8.5), duration: 900 });
+  }, [incidentTargets, incidentIndex]);
+
+  // Keyboard: "n" / "p" step through incidents without leaving the map.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      if (!isActiveRef.current) return;
+      if (e.key === 'n') { e.preventDefault(); goToIncident(1); }
+      if (e.key === 'p') { e.preventDefault(); goToIncident(-1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [goToIncident]);
+
+  const currentIncident = incidentTargets[incidentIndex] ?? null;
 
   // 3. Station layer visibility toggle
   useEffect(() => {
@@ -404,6 +448,61 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
           <div className="legend-provenance-note">
             Colored by each station's own reported value. Stations with active telemetry show AWS In-Situ;
             others show NWP model reference — see the station panel for exact provenance.
+          </div>
+        </div>
+      )}
+
+      {/* Incident Navigator — steps through anomalous, then warning, stations
+          in severity order. Exists because clustering hides individual bad
+          stations: at world zoom a single ANOMALY inside a 900-station
+          cluster is otherwise unreachable without knowing where to look. */}
+      {incidentTargets.length > 0 && (
+        <div className="incident-navigator" role="group" aria-label="Incident navigator">
+          <div className="inav-icon">
+            <ShieldAlert className="w-3.5 h-3.5" />
+          </div>
+
+          <div className="inav-body">
+            <div className="inav-meta">
+              <span className="inav-count">
+                {incidentIndex + 1} / {incidentTargets.length}
+              </span>
+              {currentIncident && (
+                <span className={`inav-status ${currentIncident.status.toLowerCase()}`}>
+                  {currentIncident.status}
+                </span>
+              )}
+            </div>
+            <div className="inav-name" title={currentIncident?.name}>
+              {currentIncident?.name ?? 'No active incidents'}
+            </div>
+          </div>
+
+          <div className="inav-actions">
+            <button
+              className="inav-btn"
+              onClick={() => goToIncident(-1)}
+              title="Previous incident (p)"
+              aria-label="Previous incident"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              className="inav-btn"
+              onClick={() => goToIncident(1)}
+              title="Next incident (n)"
+              aria-label="Next incident"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              className="inav-btn primary"
+              onClick={() => currentIncident && onSelectStationRef.current(currentIncident.id)}
+              title="Open this station"
+              aria-label="Open this station"
+            >
+              <Crosshair className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       )}

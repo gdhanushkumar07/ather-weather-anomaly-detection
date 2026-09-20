@@ -138,6 +138,16 @@ body {
   gap: 10px;
   z-index: 30;
   pointer-events: none;
+  /* The capsules previously had no shrink allowance, so below ~1500px the
+     flex row overflowed its container and the right-hand live-stats capsule
+     was clipped off the viewport edge. Nothing in this row may now refuse
+     to shrink. */
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ather-navbar-wrapper > * {
+  min-width: 0;
 }
 
 .nav-capsule {
@@ -4850,3 +4860,273 @@ body {
 }
 .station-grid-row > .section-card { margin: 0; height: 100%; }
 
+
+/* ============================================================================
+   UI PASS — header resilience, cluster triage popup, incident navigator
+   ========================================================================= */
+
+/* --- Header: status hierarchy -------------------------------------------
+   Every KPI in the live strip previously rendered at identical weight, so
+   "1388 Normal" competed visually with "190 Anomaly". Nobody monitors for
+   normal — the quiet states are demoted and the alarming ones promoted. */
+.live-stats-capsule .stat-pill-item.normal {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.live-stats-capsule .stat-pill-item.warning {
+  color: var(--status-warning-text);
+}
+
+.live-stats-capsule .stat-pill-item.anomaly {
+  color: var(--status-anomaly-text);
+  font-weight: 700;
+  background: var(--status-anomaly-bg);
+  border: 1px solid var(--status-anomaly-border);
+}
+
+.live-stats-capsule .stat-pill-item.anomaly:hover {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+}
+
+/* --- Header: graceful degradation instead of clipping -------------------- */
+@media (max-width: 1440px) {
+  .ather-navbar-wrapper .brand-tag,
+  .ather-navbar-wrapper .brand-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 1280px) {
+  .live-stats-capsule .stat-pill-item.normal {
+    display: none;
+  }
+  .workspace-tab-btn span {
+    display: none;
+  }
+  .workspace-tab-btn {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .search-capsule {
+    flex: 0 1 190px;
+  }
+  .live-stats-capsule .stat-pill-item.total .stat-label {
+    display: none;
+  }
+}
+
+/* --- Cluster hover triage popup ----------------------------------------- */
+.ather-cluster-popup .maplibregl-popup-content {
+  background: var(--bg-surface-elevated);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 10px 12px;
+  min-width: 158px;
+}
+
+.ather-cluster-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+.ather-cluster-popup .cp-head {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.ather-cluster-popup .cp-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.7rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.ather-cluster-popup .cp-label {
+  flex: 1;
+}
+
+.ather-cluster-popup .cp-val {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ather-cluster-popup .cp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ather-cluster-popup .cp-dot.anomaly { background: var(--status-anomaly); }
+.ather-cluster-popup .cp-dot.warning { background: var(--status-warning); }
+.ather-cluster-popup .cp-dot.normal  { background: var(--status-normal); }
+.ather-cluster-popup .cp-dot.offline { background: #64748b; }
+
+.ather-cluster-popup .cp-hint {
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* --- Incident Navigator -------------------------------------------------- */
+.incident-navigator {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 22;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(460px, 82vw);
+  padding: 7px 8px 7px 10px;
+  background: var(--bg-surface-elevated);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--status-anomaly-border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-lg);
+}
+
+.incident-navigator .inav-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--status-anomaly-bg);
+  color: var(--status-anomaly-text);
+}
+
+.incident-navigator .inav-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.incident-navigator .inav-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.incident-navigator .inav-count {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+.incident-navigator .inav-status {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.incident-navigator .inav-status.anomaly {
+  background: var(--status-anomaly-bg);
+  color: var(--status-anomaly-text);
+}
+
+.incident-navigator .inav-status.warning {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
+.incident-navigator .inav-name {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.incident-navigator .inav-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.incident-navigator .inav-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.incident-navigator .inav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-focus);
+}
+
+.incident-navigator .inav-btn.primary {
+  background: var(--brand-cyan-light);
+  color: var(--brand-cyan);
+  border-color: var(--border-focus);
+}
+
+/* --- Map controls: stop colliding with tile attribution ------------------ */
+.floating-map-controls {
+  bottom: 44px;
+}
+
+@media (max-width: 900px) {
+  .incident-navigator {
+    bottom: 84px;
+  }
+}
+
+/* --- Motion preference --------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .brand-dot-pulse,
+  .live-dot-pulse {
+    animation: none !important;
+  }
+}
+
+/* --- Data freshness indicator -------------------------------------------- */
+.live-stats-capsule .data-age {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.live-pill.stale {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+
+.live-pill.stale .live-dot-pulse {
+  background: var(--status-warning);
+  animation: none;
+}

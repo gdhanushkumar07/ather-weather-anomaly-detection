@@ -60,6 +60,9 @@ export const App: React.FC = () => {
   // per-station status counts, and labeled accordingly wherever it is shown).
   const [activeIncidentCounts, setActiveIncidentCounts] = useState<Record<string, number> | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  // Epoch ms of the last successful summary refresh — surfaced in the nav so
+  // the LIVE badge is backed by an actual, visible data age.
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
   const [showAnomalyOverlay, setShowAnomalyOverlay] = useState(true);
 
@@ -141,6 +144,7 @@ export const App: React.FC = () => {
     try {
       const sum = await fetchAnomaliesSummary();
       setSummary(sum);
+      setLastUpdatedAt(Date.now());
     } catch (err) {
       console.error('Error loading summary', err);
     }
@@ -216,6 +220,7 @@ export const App: React.FC = () => {
             onSelectStation={handleSelectStation}
             activeWorkspace={workspace}
             onNavigate={handleNavigate}
+            lastUpdatedAt={lastUpdatedAt}
           />
 
           <main className="ather-workspace-content">

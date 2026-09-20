@@ -14,6 +14,19 @@ interface TopNavProps {
   onSelectStation: (stationId: string) => void;
   activeWorkspace: Workspace;
   onNavigate: (workspace: Workspace) => void;
+  /** Epoch ms of the last successful telemetry refresh. A LIVE badge that
+   * never changes is the first thing an operator stops trusting, so the
+   * badge now carries the actual age of the data behind it. */
+  lastUpdatedAt?: number | null;
+}
+
+function formatAge(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
 }
 
 const WORKSPACE_TABS: { id: Workspace; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -29,7 +42,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   activeIncidentCounts,
   onSelectStation,
   activeWorkspace,
-  onNavigate
+  onNavigate,
+  lastUpdatedAt = null
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -53,6 +67,15 @@ export const TopNav: React.FC<TopNavProps> = ({
     }, 150);
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Re-render the data-age label once a second so it stays honest.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const isStale = lastUpdatedAt != null && now - lastUpdatedAt > 120_000;
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -162,10 +185,23 @@ export const TopNav: React.FC<TopNavProps> = ({
           regardless of workspace. Clicking a count navigates to the workspace
           where that state is actually managed. */}
       <div className="nav-capsule live-stats-capsule">
-        <div className="live-pill">
+        <div
+          className={`live-pill ${isStale ? 'stale' : ''}`}
+          title={
+            lastUpdatedAt
+              ? `Last successful telemetry refresh: ${new Date(lastUpdatedAt).toLocaleTimeString()}`
+              : 'Waiting for first telemetry refresh'
+          }
+        >
           <span className="live-dot-pulse" />
-          <span>LIVE</span>
+          <span>{isStale ? 'STALE' : 'LIVE'}</span>
         </div>
+
+        {lastUpdatedAt != null && (
+          <span className="data-age" aria-live="polite">
+            {formatAge(now - lastUpdatedAt)}
+          </span>
+        )}
 
         <div className="stat-pill-item total" onClick={() => onNavigate('map')} title="Open Map">
           <span className="stat-label">Stations:</span>

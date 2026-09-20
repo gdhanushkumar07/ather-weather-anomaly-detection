@@ -67,7 +67,12 @@ export const TopNav: React.FC<TopNavProps> = ({
   return (
     <header className="ather-navbar-wrapper">
       {/* Brand Capsule */}
-      <div className="nav-capsule brand-capsule">
+      <div
+        className="nav-capsule brand-capsule"
+        onClick={() => onNavigate('home')}
+        style={{ cursor: 'pointer' }}
+        title="Return to ATHER Homepage"
+      >
         <div className="brand-logo">
           <div className="brand-icon-wrapper">
             <span className="brand-dot-pulse" />

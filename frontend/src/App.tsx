@@ -10,18 +10,47 @@ import { SensorHealthWorkspace } from './workspaces/SensorHealthWorkspace';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
 import { Workspace } from './types/workspace';
 import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary, fetchActiveIncidentCounts } from './services/api';
+import { HomePage } from './pages/HomePage';
+
+/**
+ * Maps browser path to Workspace
+ */
+function getWorkspaceFromPath(): Workspace {
+  const path = window.location.pathname.toLowerCase();
+  if (path === '/map' || path === '/dashboard') return 'map';
+  if (path === '/overview') return 'overview';
+  if (path === '/anomalies' || path === '/incidents') return 'anomalies';
+  if (path === '/health') return 'health';
+  if (path === '/testlab' || path === '/test-lab') return 'testlab';
+  if (path === '/station') return 'station';
+  // Default root '/' is the marketing & product homepage
+  return 'home';
+}
+
+function getPathForWorkspace(ws: Workspace): string {
+  switch (ws) {
+    case 'home': return '/';
+    case 'map': return '/map';
+    case 'overview': return '/overview';
+    case 'anomalies': return '/anomalies';
+    case 'health': return '/health';
+    case 'testlab': return '/test-lab';
+    case 'station': return '/station';
+    default: return '/';
+  }
+}
 
 /**
  * ATHER application shell (UI architecture restructure).
  *
- * Exactly ONE workspace is the main content area at a time — Overview, Map,
+ * Exactly ONE workspace is the main content area at a time — Home, Overview, Map,
  * Station Intelligence, Anomalies, Sensor Health, or Test Lab. All shared
  * state (stations, summary, selection, map layer state) lives here, once,
  * and is passed down — no workspace recomputes or refetches what another
  * workspace already has (Phase 31: single source of truth).
  */
 export const App: React.FC = () => {
-  const [workspace, setWorkspace] = useState<Workspace>('map');
+  const [workspace, setWorkspace] = useState<Workspace>(getWorkspaceFromPath);
 
   const [stationsGeoJSON, setStationsGeoJSON] = useState<GeoJSON.FeatureCollection | null>(null);
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
@@ -41,6 +70,35 @@ export const App: React.FC = () => {
     pressure: false,
     humidity: false
   });
+
+  // Synchronize browser history with workspace
+  useEffect(() => {
+    const onPopState = () => {
+      setWorkspace(getWorkspaceFromPath());
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  // Set body class for scrolling behavior
+  useEffect(() => {
+    if (workspace === 'home') {
+      document.body.classList.add('home-active');
+    } else {
+      document.body.classList.remove('home-active');
+    }
+  }, [workspace]);
+
+  const changeWorkspace = (target: Workspace) => {
+    const path = getPathForWorkspace(target);
+    if (window.location.pathname !== path) {
+      window.history.pushState({ workspace: target }, '', path);
+    }
+    setWorkspace(target);
+    if (target === 'home') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // Map view-state persistence (Phase 2-4 of the map/station refinement):
   // the map itself is never unmounted (see the always-mounted wrapper
@@ -103,7 +161,7 @@ export const App: React.FC = () => {
     try {
       const stn = await fetchStationDetails(id);
       setSelectedStation(stn);
-      setWorkspace('station');
+      changeWorkspace('station');
     } catch (err) {
       console.error('Error selecting station', err);
     }
@@ -117,11 +175,11 @@ export const App: React.FC = () => {
       mapRef.current?.restoreViewState(savedMapViewRef.current);
       savedMapViewRef.current = null;
     }
-    setWorkspace('map');
+    changeWorkspace('map');
   };
 
   const handleNavigate = (target: Workspace) => {
-    setWorkspace(target);
+    changeWorkspace(target);
   };
 
   // Temperature / Pressure / Relative Humidity are mutually exclusive — the
@@ -144,43 +202,50 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="ather-app">
-      <TopNav
-        summary={summary}
-        activeIncidentCounts={activeIncidentCounts}
-        onSelectStation={handleSelectStation}
-        activeWorkspace={workspace}
-        onNavigate={handleNavigate}
-      />
-
-      <main className="ather-workspace-content">
-        {/* The map is ALWAYS mounted, never conditionally rendered — hidden
-            via CSS instead of being unmounted (Phase 9 of the map-state-
-            persistence fix). AtherMap.tsx creates its maplibregl.Map
-            instance exactly once (empty effect dependency array); as long
-            as this component tree never unmounts, that instance — and
-            therefore its center/zoom/bearing/pitch — survives every
-            workspace switch with zero state serialization needed. Only
-            React-level state (basemap, activeLayers, filters), which
-            already lives in App.tsx and was never the problem, is passed
-            down as props. */}
-        <div className="map-workspace-keepalive" style={{ display: workspace === 'map' ? 'block' : 'none' }}>
-          <MapWorkspace
-            ref={mapRef}
-            isActive={workspace === 'map'}
-            stationsGeoJSON={stationsGeoJSON}
-            selectedStationId={selectedStation?.id ?? null}
+    <div className={`ather-app ${workspace === 'home' ? 'workspace-home-active' : ''}`}>
+      {workspace === 'home' ? (
+        <HomePage
+          summary={summary}
+          onLaunchPlatform={(target) => changeWorkspace(target || 'map')}
+        />
+      ) : (
+        <>
+          <TopNav
+            summary={summary}
+            activeIncidentCounts={activeIncidentCounts}
             onSelectStation={handleSelectStation}
-            activeLayers={activeLayers}
-            onToggleLayer={handleToggleLayer}
-            basemap={basemap}
-            onToggleBasemap={setBasemap}
-            showAnomalyOverlay={showAnomalyOverlay}
-            onToggleAnomalyOverlay={() => setShowAnomalyOverlay((v) => !v)}
-            statusFilter={statusFilter}
-            onSetStatusFilter={setStatusFilter}
+            activeWorkspace={workspace}
+            onNavigate={handleNavigate}
           />
-        </div>
+
+          <main className="ather-workspace-content">
+            {/* The map is ALWAYS mounted, never conditionally rendered — hidden
+                via CSS instead of being unmounted (Phase 9 of the map-state-
+                persistence fix). AtherMap.tsx creates its maplibregl.Map
+                instance exactly once (empty effect dependency array); as long
+                as this component tree never unmounts, that instance — and
+                therefore its center/zoom/bearing/pitch — survives every
+                workspace switch with zero state serialization needed. Only
+                React-level state (basemap, activeLayers, filters), which
+                already lives in App.tsx and was never the problem, is passed
+                down as props. */}
+            <div className="map-workspace-keepalive" style={{ display: workspace === 'map' ? 'block' : 'none' }}>
+              <MapWorkspace
+                ref={mapRef}
+                isActive={workspace === 'map'}
+                stationsGeoJSON={stationsGeoJSON}
+                selectedStationId={selectedStation?.id ?? null}
+                onSelectStation={handleSelectStation}
+                activeLayers={activeLayers}
+                onToggleLayer={handleToggleLayer}
+                basemap={basemap}
+                onToggleBasemap={setBasemap}
+                showAnomalyOverlay={showAnomalyOverlay}
+                onToggleAnomalyOverlay={() => setShowAnomalyOverlay((v) => !v)}
+                statusFilter={statusFilter}
+                onSetStatusFilter={setStatusFilter}
+              />
+            </div>
 
         {workspace === 'overview' && (
           <NetworkOverview
@@ -230,6 +295,8 @@ export const App: React.FC = () => {
           />
         )}
       </main>
-    </div>
-  );
+    </>
+  )}
+</div>
+);
 };

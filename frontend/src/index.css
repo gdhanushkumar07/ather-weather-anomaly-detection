@@ -75,12 +75,17 @@ body {
   font-family: var(--font-sans);
   background-color: var(--bg-app);
   color: var(--text-primary);
-  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* App Shell - Fullscreen 100vh / 100vw Map First */
+body.home-active {
+  background-color: #F7F6F1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* App Shell - Fullscreen 100vh / 100vw for operational workspaces */
 .ather-app {
   display: flex;
   flex-direction: column;
@@ -89,6 +94,14 @@ body {
   position: relative;
   background-color: var(--bg-app);
   overflow: hidden;
+}
+
+.ather-app.workspace-home-active {
+  height: auto;
+  min-height: 100vh;
+  width: 100%;
+  overflow: visible;
+  background-color: #F7F6F1;
 }
 
 /* Map Viewport */

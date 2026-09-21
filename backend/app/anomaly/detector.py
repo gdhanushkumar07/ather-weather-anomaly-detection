@@ -239,7 +239,8 @@ class AnomalyDetector:
             is_anomaly=is_anomaly,
             affected_channel=affected[0] if affected else None,
             spatial_consensus=spatial_consensus,
-            temporal_fallback=temporal_fallback
+            temporal_fallback=temporal_fallback,
+            pinn_expected=detail_l1.get("expected_value")
         )
 
         # ── 10. Meteorological Weather Analysis (Section 14) ──

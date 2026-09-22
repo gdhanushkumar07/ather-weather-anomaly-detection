@@ -59,6 +59,30 @@ class DriftThresholds:
     pressure_tolerance_hpa: float = 0.5
 
 @dataclass
+class PINNThresholds:
+    enabled: bool = True
+    lambda_physics: float = 0.3  # weight of physics loss vs data loss during training
+
+    # Kept in sync with PhysicsThresholds so the PINN's training-time physics
+    # loss and its inference-time consistency check agree with the rule layer.
+    hypsometric_tolerance_pct: float = 8.0
+    dew_point_margin_c: float = 0.5
+
+    # Consistency-check tolerances (inference time). This check only runs on
+    # readings that already passed every hard veto/threshold in
+    # PhysicsValidationLayer, so these are deliberately generous — it is a
+    # secondary, corroborating signal, not a primary detector.
+    temp_consistency_tolerance_c: float = 3.5
+    pressure_consistency_tolerance_pct: float = 6.0
+    humidity_consistency_tolerance_pct: float = 12.0
+
+    # Soft score ramps from 0 at score_ramp_start_z (multiples of tolerance)
+    # up to max_score_contribution at score_ramp_saturate_z.
+    score_ramp_start_z: float = 2.0
+    score_ramp_saturate_z: float = 5.0
+    max_score_contribution: float = 0.55
+
+@dataclass
 class FusionThresholds:
     target_false_alarm_rate: float = 0.001  # MAPIE conformal significance level alpha
     physics_veto_weight: float = 1.0
@@ -71,6 +95,7 @@ class AtherConfig:
     spatial: SpatialThresholds = field(default_factory=SpatialThresholds)
     drift: DriftThresholds = field(default_factory=DriftThresholds)
     fusion: FusionThresholds = field(default_factory=FusionThresholds)
+    pinn: PINNThresholds = field(default_factory=PINNThresholds)
 
     # Default AWS Station metadata
     default_station_id: str = "ATHER_AWS_01"

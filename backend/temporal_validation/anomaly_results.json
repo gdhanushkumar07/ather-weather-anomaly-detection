@@ -1,0 +1,262 @@
+{
+  "temperature_spike": {
+    "anomaly_type": "temperature_spike",
+    "onset_step": 300,
+    "duration_steps": 1,
+    "rule_max_score": 1.0,
+    "lstm_max_score": 1.0,
+    "recent_peak_max_score": 1.0,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 0,
+    "detection_delay_minutes": 0,
+    "detected": true,
+    "recovery_step_offset": 7,
+    "recovery_minutes": 70,
+    "classification": "both_contribute",
+    "sample_reason_at_max": "Abrupt temperature change: 12.2\u00b0C in 600s (max expected 3.5\u00b0C); temperature_c statistical outlier: current=38.65, rolling median=22.93, modified Z=13.3 (threshold 3.5); Temperature anomaly with elevated temporal prediction residual",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 38.65,
+      "predicted_temperature_c": 26.48,
+      "temperature_residual": 12.172
+    }
+  },
+  "temperature_drop": {
+    "anomaly_type": "temperature_drop",
+    "onset_step": 300,
+    "duration_steps": 1,
+    "rule_max_score": 1.0,
+    "lstm_max_score": 1.0,
+    "recent_peak_max_score": 1.0,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 0,
+    "detection_delay_minutes": 0,
+    "detected": true,
+    "recovery_step_offset": 7,
+    "recovery_minutes": 70,
+    "classification": "both_contribute",
+    "sample_reason_at_max": "Abrupt temperature change: 11.8\u00b0C in 600s (max expected 3.5\u00b0C); temperature_c statistical outlier: current=14.65, rolling median=22.88, modified Z=7.4 (threshold 3.5); Temperature anomaly with elevated temporal prediction residual",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 14.65,
+      "predicted_temperature_c": 26.48,
+      "temperature_residual": -11.828
+    }
+  },
+  "frozen_temperature": {
+    "anomaly_type": "frozen_temperature",
+    "onset_step": 300,
+    "duration_steps": 14,
+    "rule_max_score": 0.95,
+    "lstm_max_score": 0.0717,
+    "recent_peak_max_score": 0.0799,
+    "integrated_max_score": 0.95,
+    "first_detection_step_offset": 10,
+    "detection_delay_minutes": 100,
+    "detected": true,
+    "recovery_step_offset": 6,
+    "recovery_minutes": 60,
+    "classification": "rule_dominated",
+    "sample_reason_at_max": "Frozen temperature sensor: constant 26.46\u00b0C across 12 consecutive readings",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 26.46,
+      "predicted_temperature_c": 26.54,
+      "temperature_residual": -0.072
+    }
+  },
+  "frozen_humidity": {
+    "anomaly_type": "frozen_humidity",
+    "onset_step": 300,
+    "duration_steps": 14,
+    "rule_max_score": 0.95,
+    "lstm_max_score": 0.0861,
+    "recent_peak_max_score": 0.0861,
+    "integrated_max_score": 0.95,
+    "first_detection_step_offset": 10,
+    "detection_delay_minutes": 100,
+    "detected": true,
+    "recovery_step_offset": 35,
+    "recovery_minutes": 350,
+    "classification": "rule_dominated",
+    "sample_reason_at_max": "Frozen humidity sensor: constant 59.45% across 12 readings",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 27.27,
+      "predicted_temperature_c": 27.27,
+      "temperature_residual": 0.005
+    }
+  },
+  "pressure_offset": {
+    "anomaly_type": "pressure_offset",
+    "onset_step": 300,
+    "duration_steps": 40,
+    "rule_max_score": 1.0,
+    "lstm_max_score": 1.0,
+    "recent_peak_max_score": 1.0,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 0,
+    "detection_delay_minutes": 0,
+    "detected": true,
+    "recovery_step_offset": 38,
+    "recovery_minutes": 380,
+    "classification": "both_contribute",
+    "sample_reason_at_max": "Abrupt pressure change: 5.9 hPa in 600s; pressure_hpa statistical outlier: current=1018.00, rolling median=1012.00, modified Z=117.6 (threshold 3.5); Pressure anomaly with elevated temporal prediction residual",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 27.93,
+      "predicted_temperature_c": 27.95,
+      "temperature_residual": -0.024
+    }
+  },
+  "humidity_offset": {
+    "anomaly_type": "humidity_offset",
+    "onset_step": 300,
+    "duration_steps": 40,
+    "rule_max_score": 1.0,
+    "lstm_max_score": 1.0,
+    "recent_peak_max_score": 1.0,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 0,
+    "detection_delay_minutes": 0,
+    "detected": true,
+    "recovery_step_offset": 6,
+    "recovery_minutes": 60,
+    "classification": "both_contribute",
+    "sample_reason_at_max": "humidity_pct statistical outlier: current=74.12, rolling median=57.57, modified Z=4.8 (threshold 3.5); Humidity anomaly with elevated temporal prediction residual",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 27.93,
+      "predicted_temperature_c": 28.0,
+      "temperature_residual": -0.073
+    }
+  },
+  "temperature_drift": {
+    "anomaly_type": "temperature_drift",
+    "onset_step": 300,
+    "duration_steps": 25,
+    "rule_max_score": 1.0,
+    "lstm_max_score": 0.2856,
+    "recent_peak_max_score": 0.2856,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 2,
+    "detection_delay_minutes": 20,
+    "detected": true,
+    "recovery_step_offset": 8,
+    "recovery_minutes": 80,
+    "classification": "rule_dominated",
+    "sample_reason_at_max": "temperature_c statistical outlier: current=29.27, rolling median=22.93, modified Z=4.9 (threshold 3.5)",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 32.17,
+      "predicted_temperature_c": 31.79,
+      "temperature_residual": 0.384
+    }
+  },
+  "noise_burst": {
+    "anomaly_type": "noise_burst",
+    "onset_step": 300,
+    "duration_steps": 3,
+    "rule_max_score": 0.6603,
+    "lstm_max_score": 1.0,
+    "recent_peak_max_score": 1.0,
+    "integrated_max_score": 1.0,
+    "first_detection_step_offset": 0,
+    "detection_delay_minutes": 0,
+    "detected": true,
+    "recovery_step_offset": 6,
+    "recovery_minutes": 60,
+    "classification": "lstm_dominated",
+    "sample_reason_at_max": "Abrupt temperature change: 4.2\u00b0C in 600s (max expected 3.5\u00b0C); Temperature anomaly with elevated temporal prediction residual",
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 23.37,
+      "predicted_temperature_c": 23.65,
+      "temperature_residual": -0.275
+    }
+  },
+  "missing_observation": {
+    "anomaly_type": "missing_observation",
+    "onset_step": 300,
+    "duration_steps": 3,
+    "rule_max_score": 0.0,
+    "lstm_max_score": null,
+    "recent_peak_max_score": null,
+    "integrated_max_score": 0.0855,
+    "first_detection_step_offset": null,
+    "detection_delay_minutes": null,
+    "detected": false,
+    "recovery_step_offset": 0,
+    "recovery_minutes": 0,
+    "classification": "insufficient_evidence",
+    "sample_reason_at_max": null,
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": null,
+      "predicted_temperature_c": null,
+      "temperature_residual": null
+    }
+  },
+  "stale_packet": {
+    "anomaly_type": "stale_packet",
+    "onset_step": 300,
+    "duration_steps": 8,
+    "rule_max_score": 0.0,
+    "lstm_max_score": 0.0812,
+    "recent_peak_max_score": 0.0812,
+    "integrated_max_score": 0.0812,
+    "first_detection_step_offset": null,
+    "detection_delay_minutes": null,
+    "detected": false,
+    "recovery_step_offset": 0,
+    "recovery_minutes": 0,
+    "classification": "insufficient_evidence",
+    "sample_reason_at_max": null,
+    "normal_period_prediction_sample": {
+      "actual_temperature_c": 26.82,
+      "predicted_temperature_c": 27.17,
+      "temperature_residual": -0.351
+    },
+    "event_period_prediction_sample": {
+      "actual_temperature_c": 26.46,
+      "predicted_temperature_c": 26.54,
+      "temperature_residual": -0.076
+    }
+  }
+}

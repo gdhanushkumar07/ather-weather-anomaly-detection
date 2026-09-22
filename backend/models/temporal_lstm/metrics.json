@@ -1,0 +1,97 @@
+{
+  "seed": 42,
+  "device": "cpu",
+  "training_time_seconds": 192.98,
+  "epochs_run": 18,
+  "best_epoch": 13,
+  "best_val_loss_scaled_mse": 0.004400977989037832,
+  "train_loss_per_epoch": [
+    0.10518993421029003,
+    0.005246216147428467,
+    0.004428765226510309,
+    0.0039978817829655275,
+    0.003748625802792727,
+    0.0035560061418939202,
+    0.0034715576013106676,
+    0.0033543413830181908,
+    0.0032839130902928967,
+    0.003267943498693288,
+    0.0032322075952672296,
+    0.003211467109236216,
+    0.003202708215112724,
+    0.0031724389145771663,
+    0.003171328516263101,
+    0.003186574848220935,
+    0.0031710562399692005,
+    0.003153665089565847
+  ],
+  "val_loss_per_epoch": [
+    0.01616575715235538,
+    0.01254224908331202,
+    0.011194480607562044,
+    0.009582944305751611,
+    0.008040474511476027,
+    0.007413953863153303,
+    0.0064329417136118365,
+    0.005741293743873636,
+    0.00539254585246521,
+    0.00544709305451424,
+    0.004717554111999494,
+    0.004473053978549109,
+    0.004400977989037832,
+    0.004528062466738952,
+    0.004669600682402099,
+    0.004550634578422264,
+    0.0044993418851798335,
+    0.004524073400017288
+  ],
+  "dataset": {
+    "train_windows": 50400,
+    "val_windows": 10800,
+    "test_windows": 10800,
+    "train_stations": 350,
+    "val_stations": 75,
+    "test_stations": 75,
+    "quality_report": {
+      "required_columns_present": true,
+      "timestamps_parse_correctly": true,
+      "sampling_interval_ok": true,
+      "duplicate_rows": 0,
+      "missing_values": 0,
+      "station_split_overlap": 0,
+      "stations_per_split": {
+        "test": 75,
+        "train": 350,
+        "val": 75
+      }
+    }
+  },
+  "test_metrics_physical_units": {
+    "temperature_c": {
+      "mae": 0.27126026153564453,
+      "rmse": 0.340032160282135,
+      "mean_residual": -0.028134694322943687,
+      "std_residual": 0.3388662040233612,
+      "n_samples": 10800
+    },
+    "pressure_hpa": {
+      "mae": 0.09217344969511032,
+      "rmse": 0.11655896157026291,
+      "mean_residual": -0.004843094386160374,
+      "std_residual": 0.11645831167697906,
+      "n_samples": 10800
+    },
+    "relative_humidity_pct": {
+      "mae": 1.4007929563522339,
+      "rmse": 1.7705268859863281,
+      "mean_residual": 0.13609842956066132,
+      "std_residual": 1.765288233757019,
+      "n_samples": 10800
+    }
+  },
+  "limitations": [
+    "Trained and evaluated entirely on Stage 1's SYNTHETIC normal dataset.",
+    "Does not measure real-world AWS anomaly-detection accuracy, production readiness, real IMD performance, or sensor-failure-prediction accuracy.",
+    "No anomalies exist in this dataset \u2014 these are next-step PREDICTION metrics on normal data only, not detection metrics."
+  ]
+}

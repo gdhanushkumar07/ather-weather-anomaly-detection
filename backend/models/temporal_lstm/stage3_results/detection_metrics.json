@@ -1,0 +1,35 @@
+{
+  "candidate_thresholds": {
+    "p95_equivalent_score": 0.4275140671815228,
+    "p99_equivalent_score": 1.0
+  },
+  "overall": {
+    "p95_threshold": {
+      "threshold_value": 0.4275140671815228,
+      "tp": 32742,
+      "fp": 86192,
+      "tn": 264461,
+      "fn": 87442,
+      "precision": 0.2752955420653472,
+      "recall": 0.27243227051853824,
+      "f1": 0.27385642235214414,
+      "false_positive_rate": 0.2458042566297736,
+      "true_positive_rate": 0.27243227051853824,
+      "n_samples": 470837
+    },
+    "p99_threshold": {
+      "threshold_value": 1.0,
+      "tp": 5113,
+      "fp": 9739,
+      "tn": 340914,
+      "fn": 115071,
+      "precision": 0.3442633988688392,
+      "recall": 0.04254310057911203,
+      "f1": 0.07572795402707426,
+      "false_positive_rate": 0.02777389613093286,
+      "true_positive_rate": 0.04254310057911203,
+      "n_samples": 470837
+    }
+  },
+  "disclaimer": "Experimental Stage 3 calibration results on SYNTHETIC injected anomalies \u2014 not production performance."
+}

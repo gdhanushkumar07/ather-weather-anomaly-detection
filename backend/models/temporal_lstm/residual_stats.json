@@ -1,0 +1,23 @@
+{
+  "residual_percentiles_abs": {
+    "temperature_c": {
+      "p50": 0.2283926010131836,
+      "p90": 0.5562745332717896,
+      "p95": 0.660527229309082,
+      "p99": 0.8825604319572449
+    },
+    "pressure_hpa": {
+      "p50": 0.0767822265625,
+      "p90": 0.1903076171875,
+      "p95": 0.22925108671188354,
+      "p99": 0.3082329034805298
+    },
+    "relative_humidity_pct": {
+      "p50": 1.1702613830566406,
+      "p90": 2.9207587242126465,
+      "p95": 3.5065627098083496,
+      "p99": 4.665996551513672
+    }
+  },
+  "note": "Absolute-residual percentiles on the held-out TEST split, in physical units. Reserved for FUTURE anomaly-score calibration (Stage 3+) \u2014 NOT converted into a threshold in Stage 2."
+}

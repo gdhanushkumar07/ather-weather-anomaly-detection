@@ -1,0 +1,60 @@
+{
+  "stage6_bug_regression": {
+    "bug1_rollback_resets_history": {
+      "len_before": 144,
+      "len_after": 1,
+      "reset_confirmed": true
+    },
+    "bug2_no_false_spike_from_rollback": {
+      "temp_spike_detail_present": false,
+      "false_positive_confirmed_absent": true
+    },
+    "duplicate_timestamp_resets": {
+      "len_after": 1,
+      "reset_confirmed": true
+    },
+    "bug3_gap_reading_does_not_use_stale_history": {
+      "lstm_available_on_triggering_reading": false,
+      "skip_reason": "insufficient_valid_history",
+      "correctly_unavailable": true
+    },
+    "out_of_order_reading_resets": {
+      "len_after": 1,
+      "reset_confirmed": true
+    },
+    "gap_boundary_just_below": {
+      "delta_minutes": 14.0,
+      "len_before": 144,
+      "len_after": 144,
+      "reset": false
+    },
+    "gap_boundary_exactly_at": {
+      "delta_minutes": 15.0,
+      "len_before": 144,
+      "len_after": 144,
+      "reset": false
+    },
+    "gap_boundary_just_above": {
+      "delta_minutes": 16.0,
+      "len_before": 144,
+      "len_after": 1,
+      "reset": true
+    }
+  },
+  "output_contract": {
+    "nan_or_inf_found": false,
+    "score_out_of_bounds_found": false,
+    "channel_score_out_of_bounds_found": false,
+    "return_tuple_length": 4,
+    "return_types_correct": true,
+    "lstm_detail_present_when_available": true,
+    "lstm_correctly_skipped_during_warmup": true
+  },
+  "performance": {
+    "n_calls": 150,
+    "avg_latency_ms": 2.063,
+    "stage5_stage6_baseline_ms": 2.0,
+    "regression_pct": 3.1,
+    "meaningful_regression": false
+  }
+}

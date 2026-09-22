@@ -1,0 +1,30 @@
+{
+  "very_slow_drift_0.05C_60steps": {
+    "total_drift_c": 3.0,
+    "onset_score": 0.12,
+    "mid_score": 0.069,
+    "end_score": 0.128,
+    "max_score_during_drift": 0.85,
+    "detected_gt_0.70": "True",
+    "steps_to_recovery": 6
+  },
+  "moderate_drift_0.3C_25steps": {
+    "total_drift_c": 7.5,
+    "onset_score": 0.174,
+    "mid_score": 1.0,
+    "end_score": 1.0,
+    "max_score_during_drift": 1.0,
+    "detected_gt_0.70": true,
+    "steps_to_recovery": 7
+  },
+  "fast_drift_0.8C_15steps": {
+    "total_drift_c": 12.0,
+    "onset_score": 0.392,
+    "mid_score": 1.0,
+    "end_score": 1.0,
+    "max_score_during_drift": 1.0,
+    "detected_gt_0.70": true,
+    "steps_to_recovery": 8
+  },
+  "normal_diurnal_control_fp_rate": 0.0
+}

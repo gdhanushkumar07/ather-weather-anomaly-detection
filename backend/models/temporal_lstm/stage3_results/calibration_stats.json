@@ -1,0 +1,32 @@
+{
+  "normal_validation_residual_percentiles": {
+    "temperature_c": {
+      "p50": 0.23768724789523787,
+      "p90": 0.6032152207578657,
+      "p95": 0.746133214604866,
+      "p99": 1.5957084944966742,
+      "mean": 0.30277468998458734,
+      "std": 0.28860924037286,
+      "n_samples": 64800
+    },
+    "pressure_hpa": {
+      "p50": 0.07797649613246449,
+      "p90": 0.20051859944610437,
+      "p95": 0.2528226246861436,
+      "p99": 1.6437039250695258,
+      "mean": 0.11789724967209442,
+      "std": 0.2286381135666268,
+      "n_samples": 64800
+    },
+    "relative_humidity_pct": {
+      "p50": 1.161177273336996,
+      "p90": 3.0729131975288673,
+      "p95": 3.7399868009246093,
+      "p99": 5.656858320034544,
+      "mean": 1.4665592428457765,
+      "std": 1.2291838533609567,
+      "n_samples": 64800
+    }
+  },
+  "stage2_test_residual_comparison_note": "Compare against backend/models/temporal_lstm/residual_stats.json (Stage 2 TEST-split residuals) \u2014 expected to differ from these NORMAL-VALIDATION-split figures, not be identical."
+}

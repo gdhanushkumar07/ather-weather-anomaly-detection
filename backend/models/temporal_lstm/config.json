@@ -1,0 +1,40 @@
+{
+  "dataset_dir": "/Users/saicharan/Desktop/sih win/ather-weather-anomaly-detection-backup/backend/data/temporal",
+  "dataset_filename": "synthetic_temporal_normal.csv",
+  "expected_sampling_interval_minutes": 10,
+  "sequence_length": 144,
+  "stride": 6,
+  "feature_columns": [
+    "temperature_c",
+    "pressure_hpa",
+    "relative_humidity_pct",
+    "hour_sin",
+    "hour_cos"
+  ],
+  "target_columns": [
+    "temperature_c",
+    "pressure_hpa",
+    "relative_humidity_pct"
+  ],
+  "scale_columns": [
+    "temperature_c",
+    "pressure_hpa",
+    "relative_humidity_pct"
+  ],
+  "hidden_size": 64,
+  "num_layers": 1,
+  "output_size": 3,
+  "batch_size": 128,
+  "learning_rate": 0.001,
+  "max_epochs": 40,
+  "patience": 5,
+  "seed": 42,
+  "output_dir": "/Users/saicharan/Desktop/sih win/ather-weather-anomaly-detection-backup/backend/models/temporal_lstm",
+  "model_filename": "model.pt",
+  "scaler_filename": "scaler.pkl",
+  "config_filename": "config.json",
+  "metrics_filename": "metrics.json",
+  "residual_stats_filename": "residual_stats.json",
+  "loss_plot_filename": "training_loss.png",
+  "prediction_plot_filename": "example_predictions.png"
+}

@@ -1,0 +1,9 @@
+{
+  "evidence_sources": [
+    "Stage 5 normal-traffic calibration (75 stations)",
+    "Stage 6 5-day/5-station long-running stream",
+    "Stage 6 test_F double-transient decay measurement"
+  ],
+  "conclusion": "The 6-step/60-minute recent-peak window correctly preserves useful evidence (onset detection, persistence through frozen/stale adaptation) without causing indefinite false persistence: in the 5-day long-run test, false-positive rate outside every injected event's window was 0.0% for all 5 stations, and every event correctly recovered within 5-8 steps (50-80 minutes) after its own end. The window WAS a major amplifier of normal-traffic scores before Stage 5's calibration factor (measured: instantaneous pct>0.5 = 14.5% vs recent-peak pct>0.5 = 54.1%), but Stage 5's fix addresses the SCALE of that amplification, and Stage 6's long-run test confirms the window LENGTH itself is not independently causing incorrect persistence once the scale is corrected. No window-size change is justified by Stage 6 evidence.",
+  "window_size_changed": false
+}

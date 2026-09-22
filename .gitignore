@@ -19,3 +19,22 @@ data/incidents.db-shm
 # Runtime caches
 *.cache.json
 .weather_cache.json
+
+# Generated synthetic temporal dataset (Stage 1) — reproducible from
+# temporal_dataset/ + data/stations.json + a fixed seed, not source.
+backend/data/temporal/
+
+# Stage 2 LSTM binary artifacts — reproducible via `python3 -m
+# temporal_lstm.train` from Stage 1's dataset + a fixed seed, not source.
+# config.json/metrics.json/residual_stats.json/*.png ARE kept tracked
+# (small, and useful for reviewing results without retraining).
+backend/models/temporal_lstm/model.pt
+backend/models/temporal_lstm/scaler.pkl
+
+# Stage 3 injected-anomaly dataset + per-timestep residual predictions —
+# large (100s of MB), fully reproducible via `python3 -m
+# temporal_anomalies.evaluate` from Stage 1 data + the frozen Stage 2
+# model + a fixed seed. Metrics/config/analysis JSON and plots ARE kept
+# tracked (small, and the actual Stage 3 result to review).
+backend/models/temporal_lstm/stage3_results/injected_sequences_local.csv
+backend/models/temporal_lstm/stage3_results/residual_predictions.csv

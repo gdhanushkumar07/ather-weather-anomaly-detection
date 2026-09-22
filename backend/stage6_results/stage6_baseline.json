@@ -1,0 +1,9 @@
+{
+  "source": "Stage 5 final state (before any Stage 6 code changes), re-verified identical after Stage 6 fixes since Stage 1 synthetic data never exercises the timestamp edge cases fixed",
+  "normal_score_median": 0.3536,
+  "normal_score_p95": 0.9192,
+  "pct_normal_gt_0_70": 9.6,
+  "reason_string_rate_pct": 21.18,
+  "lstm_availability_pct": 85.7,
+  "per_reading_latency_ms_with_lstm": 2.0
+}

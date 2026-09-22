@@ -1,0 +1,209 @@
+{
+  "temperature_spike": {
+    "n_cases": 750,
+    "n_affected_timesteps": 750,
+    "n_scoreable_timesteps": 38053,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.07515783144603667,
+      "recall": 1.0,
+      "f1": 0.1398079970174294,
+      "false_positive_rate": 0.24740637482240035
+    },
+    "threshold_p99": {
+      "precision": 0.31901318587834965,
+      "recall": 1.0,
+      "f1": 0.48371493066752663,
+      "false_positive_rate": 0.04291880009650698
+    },
+    "max_residual_median": 11.380015327840109,
+    "max_residual_p95": 14.486514103230377,
+    "max_residual_p99": 15.046245578908334
+  },
+  "temperature_drop": {
+    "n_cases": 750,
+    "n_affected_timesteps": 750,
+    "n_scoreable_timesteps": 38014,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.07601864990877762,
+      "recall": 1.0,
+      "f1": 0.14129615674453655,
+      "false_positive_rate": 0.24463288965221125
+    },
+    "threshold_p99": {
+      "precision": 0.3218884120171674,
+      "recall": 1.0,
+      "f1": 0.487012987012987,
+      "false_positive_rate": 0.04240017174753113
+    },
+    "max_residual_median": 11.588622718478831,
+    "max_residual_p95": 14.676082674398865,
+    "max_residual_p99": 15.144938535141495
+  },
+  "frozen_temperature": {
+    "n_cases": 750,
+    "n_affected_timesteps": 13368,
+    "n_scoreable_timesteps": 50702,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.22159498207885306,
+      "recall": 0.18499401555954517,
+      "f1": 0.2016470971950424,
+      "false_positive_rate": 0.23268334494026893
+    },
+    "threshold_p99": {
+      "precision": 0.04287515762925599,
+      "recall": 0.0025433871932974265,
+      "f1": 0.004801920768307323,
+      "false_positive_rate": 0.020329994107248086
+    },
+    "max_residual_median": 0.2941800808676067,
+    "max_residual_p95": 0.47213542300803496,
+    "max_residual_p99": 0.5492894322982877
+  },
+  "frozen_humidity": {
+    "n_cases": 750,
+    "n_affected_timesteps": 13600,
+    "n_scoreable_timesteps": 50955,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.07257112184648416,
+      "recall": 0.049705882352941176,
+      "f1": 0.059000654593061315,
+      "false_positive_rate": 0.23126756792932673
+    },
+    "threshold_p99": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.015205461116316423
+    },
+    "max_residual_median": 1.0935359571000376,
+    "max_residual_p95": 1.7977145607279816,
+    "max_residual_p99": 2.3036746321652894
+  },
+  "temperature_drift": {
+    "n_cases": 750,
+    "n_affected_timesteps": 18660,
+    "n_scoreable_timesteps": 55999,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.4236090522778931,
+      "recall": 0.4594319399785638,
+      "f1": 0.4407938711501877,
+      "false_positive_rate": 0.312407938080827
+    },
+    "threshold_p99": {
+      "precision": 0.09563511525257479,
+      "recall": 0.01045016077170418,
+      "f1": 0.018841489927049614,
+      "false_positive_rate": 0.04938536115053965
+    },
+    "max_residual_median": 1.1067800079272914,
+    "max_residual_p95": 1.5723342089434886,
+    "max_residual_p99": 1.9770431898075673
+  },
+  "pressure_offset": {
+    "n_cases": 750,
+    "n_affected_timesteps": 33821,
+    "n_scoreable_timesteps": 71164,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.49398709677419356,
+      "recall": 0.2829898583720174,
+      "f1": 0.3598390856455373,
+      "false_positive_rate": 0.262539163966473
+    },
+    "threshold_p99": {
+      "precision": 0.5066707095209217,
+      "recall": 0.04940717305815913,
+      "f1": 0.09003475309140871,
+      "false_positive_rate": 0.04356907586428514
+    },
+    "max_residual_median": 6.85784549830521,
+    "max_residual_p95": 9.624323280615673,
+    "max_residual_p99": 9.931242662335693
+  },
+  "humidity_offset": {
+    "n_cases": 750,
+    "n_affected_timesteps": 33902,
+    "n_scoreable_timesteps": 71333,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.46960333808693816,
+      "recall": 0.26225591410536253,
+      "f1": 0.33655720639727454,
+      "false_positive_rate": 0.2682803024231252
+    },
+    "threshold_p99": {
+      "precision": 0.4896247240618102,
+      "recall": 0.032711934399150495,
+      "f1": 0.06132662371775376,
+      "false_positive_rate": 0.03088349229248484
+    },
+    "max_residual_median": 16.08546865642998,
+    "max_residual_p95": 24.64876664999065,
+    "max_residual_p99": 26.28544038145225
+  },
+  "noise_burst": {
+    "n_cases": 750,
+    "n_affected_timesteps": 1468,
+    "n_scoreable_timesteps": 38720,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.11814723651823675,
+      "recall": 0.7193460490463215,
+      "f1": 0.2029598308668076,
+      "false_positive_rate": 0.2115859551165038
+    },
+    "threshold_p99": {
+      "precision": 0.6630076838638859,
+      "recall": 0.4114441416893733,
+      "f1": 0.5077763766288357,
+      "false_positive_rate": 0.008241168259422314
+    },
+    "max_residual_median": 2.2629421282662534,
+    "max_residual_p95": 25.164272333143792,
+    "max_residual_p99": 36.44886112916801
+  },
+  "missing_observation": {
+    "n_cases": 750,
+    "n_affected_timesteps": 2558,
+    "n_scoreable_timesteps": 14758,
+    "n_unavailable_timesteps": 25058,
+    "threshold_p95": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.2068030898495731
+    },
+    "threshold_p99": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.0023715950670822605
+    }
+  },
+  "stale_packet": {
+    "n_cases": 750,
+    "n_affected_timesteps": 3865,
+    "n_scoreable_timesteps": 41139,
+    "n_unavailable_timesteps": 0,
+    "threshold_p95": {
+      "precision": 0.0002475860361475613,
+      "recall": 0.000517464424320828,
+      "f1": 0.00033492422339445697,
+      "false_positive_rate": 0.2166657723882599
+    },
+    "threshold_p99": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "false_positive_rate": 0.0070290282770832215
+    },
+    "max_residual_median": 0.6054114489532765,
+    "max_residual_p95": 1.45950417487664,
+    "max_residual_p99": 1.9453891139500208
+  }
+}

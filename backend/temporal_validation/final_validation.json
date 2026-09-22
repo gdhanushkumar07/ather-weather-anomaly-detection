@@ -1,0 +1,73 @@
+{
+  "validation_date": "2026-09-21",
+  "scope": "Acceptance test of the FROZEN Stage 1-6 Temporal Intelligence implementation. No production code, frontend, API, or configuration modified.",
+  "test_suite_results": {
+    "stage1_temporal_dataset": "11/11",
+    "stage2_temporal_lstm": "14/14",
+    "stage3_temporal_anomalies": "16/16",
+    "stage4_lstm_integration": "28/28",
+    "stage5_calibration": "21/21",
+    "stage6_robustness": "19/19",
+    "full_repository": "194/195",
+    "known_unrelated_failure": "test_backend.py::test_weather_union_telemetry_ingestion (live Open-Meteo network dependency) -- confirmed still the only failure, not modified",
+    "new_failures": 0
+  },
+  "acceptance_table": [
+    {
+      "category": "1. Normal behavior",
+      "result": "PASS WITH KNOWN LIMITATION",
+      "evidence": "normal_results.json: median=0.354, P95=0.919, P99=1.0, 9.65% >0.70, 21.2% reason-rate, 85.7% LSTM availability -- identical to Stage 5/6's documented figures. New finding: the longest continuous elevated run (864 steps) traces to exactly 2/75 stations, the same boundary-humidity stations flagged in Stage 1.5 as a data-generation artifact, not a code defect.",
+      "notes": "Known, previously documented limitation. Not a new correctness failure."
+    },
+    {
+      "category": "2. Anomaly response",
+      "result": "PASS",
+      "evidence": "anomaly_results.json: 8/10 types detected (score>0.70) with correct rule/LSTM contribution; missing_observation and stale_packet correctly do NOT force a residual-based detection, matching designed behavior from Stage 3/4.",
+      "notes": "No anomaly type regressed relative to Stage 3/5/6 findings."
+    },
+    {
+      "category": "3. LSTM prediction behavior",
+      "result": "PASS",
+      "evidence": "anomaly_results.json per-type normal_period_prediction_sample vs event_period_prediction_sample: predicted temperature tracks actual closely in normal periods (residual near zero) and residual visibly widens during injected events (e.g. temperature_spike, temperature_drift).",
+      "notes": "Synthetic-data engineering validation only; no real-world accuracy claim."
+    },
+    {
+      "category": "4. Rule/LSTM contribution",
+      "result": "PASS",
+      "evidence": "Classification per type in anomaly_results.json: spike/drop/pressure_offset/humidity_offset = both_contribute; frozen_temperature/frozen_humidity/temperature_drift = rule_dominated; noise_burst = lstm_dominated; missing/stale = insufficient_evidence. Matches Stage 3/5's established characterization -- rules remain authoritative for persistent faults, LSTM adds value for sudden/drift deviations.",
+      "notes": "Consistent with frozen system design; no drift from prior stages."
+    },
+    {
+      "category": "5. Recovery",
+      "result": "PASS",
+      "evidence": "recovery_results.json: all detected anomaly types recover (score<0.5 sustained) within 60-380 minutes of event end, scaling sensibly with each event's own duration (e.g. pressure_offset's 400-min-long injected offset recovers in 380min; single-step spike/drop recover in 70min). No indefinite persistence observed.",
+      "notes": "None."
+    },
+    {
+      "category": "6. Timestamp robustness",
+      "result": "PASS",
+      "evidence": "robustness_results.json stage6_bug_regression: all 3 Stage 6 bugs directly re-confirmed fixed (rollback resets history_complete len 144->1; no false temp_spike from rollback; gap-triggering reading correctly reports lstm_available=False instead of using stale history; duplicate and out-of-order readings also correctly reset). Gap-boundary behavior exact: just-below/at threshold=no reset, just-above=reset.",
+      "notes": "All 3 fixes remain intact; also passed via the full test_stage6_* suites (19/19)."
+    },
+    {
+      "category": "7. Long-running stability",
+      "result": "PASS",
+      "evidence": "Reuses Stage 6's 5-day/5-station long-run result (stage6_results/stage6_long_run.json): 0.0% false-positive rate outside every injected event window, clean recovery in 50-80 minutes for every event. Not re-run here (frozen system, no code changed since Stage 6) -- re-verified applicable since evaluate() output is byte-identical on unchanged input.",
+      "notes": "None."
+    },
+    {
+      "category": "8. Output/API correctness",
+      "result": "PASS",
+      "evidence": "robustness_results.json output_contract: evaluate() returns exactly (score, channel_scores, reason, detail); no NaN/Inf found; all scores in [0,1]; lstm detail present exactly when available; LSTM correctly skipped during warm-up.",
+      "notes": "API unchanged, confirmed by direct inspection."
+    },
+    {
+      "category": "9. Performance",
+      "result": "PASS",
+      "evidence": "robustness_results.json performance: 2.063 ms/reading average vs Stage 5/6 baseline of ~2.0ms (3.1% difference, within measurement noise). No meaningful regression.",
+      "notes": "No optimization performed or needed."
+    }
+  ],
+  "final_decision": "Temporal Intelligence is ACCEPTED and FROZEN for Stage 7.",
+  "reasoning": "No new concrete correctness failure was found. All previously documented limitations (9.6% of normal readings >0.70, 21.2% reason-string rate, synthetic-data-only validation) are reproduced exactly and remain accepted, documented limitations rather than blocking defects. The one new observation (2/75 stations with persistently elevated scores) was traced conclusively to an already-documented Stage 1.5 data-generation artifact, not a Temporal Intelligence code defect, and does not warrant a correction."
+}

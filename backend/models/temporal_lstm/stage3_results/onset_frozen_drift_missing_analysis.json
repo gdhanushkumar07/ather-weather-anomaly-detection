@@ -1,0 +1,109 @@
+{
+  "onset_detection_delay": {
+    "frozen_temperature": {
+      "n_cases": 750,
+      "n_detected": 566,
+      "n_missed": 184,
+      "median_delay_steps": 18.0,
+      "median_delay_minutes": 180.0,
+      "p90_delay_steps": 23.0,
+      "p90_delay_minutes": 230.0
+    },
+    "frozen_humidity": {
+      "n_cases": 750,
+      "n_detected": 459,
+      "n_missed": 291,
+      "median_delay_steps": 19.0,
+      "median_delay_minutes": 190.0,
+      "p90_delay_steps": 23.19999999999999,
+      "p90_delay_minutes": 231.9999999999999
+    },
+    "temperature_drift": {
+      "n_cases": 750,
+      "n_detected": 750,
+      "n_missed": 0,
+      "median_delay_steps": 24.0,
+      "median_delay_minutes": 240.0,
+      "p90_delay_steps": 29.0,
+      "p90_delay_minutes": 290.0
+    },
+    "pressure_offset": {
+      "n_cases": 750,
+      "n_detected": 750,
+      "n_missed": 0,
+      "median_delay_steps": 0.0,
+      "median_delay_minutes": 0.0,
+      "p90_delay_steps": 0.0,
+      "p90_delay_minutes": 0.0
+    },
+    "humidity_offset": {
+      "n_cases": 750,
+      "n_detected": 739,
+      "n_missed": 11,
+      "median_delay_steps": 0.0,
+      "median_delay_minutes": 0.0,
+      "p90_delay_steps": 0.0,
+      "p90_delay_minutes": 0.0
+    },
+    "stale_packet": {
+      "n_cases": 750,
+      "n_detected": 190,
+      "n_missed": 560,
+      "median_delay_steps": 7.0,
+      "median_delay_minutes": 70.0,
+      "p90_delay_steps": 8.0,
+      "p90_delay_minutes": 80.0
+    }
+  },
+  "frozen_temperature_analysis": {
+    "n_cases_analyzed": 750,
+    "residual_at_onset": {
+      "median": 0.13793581055689597,
+      "p95": 0.3743732544700563
+    },
+    "residual_max": {
+      "median": 0.2941800808676067,
+      "p95": 0.47213542300803496
+    },
+    "residual_near_end": {
+      "median": 0.1306549953777374,
+      "p95": 0.3126611976209559
+    },
+    "detection_persists_to_end_fraction": 0.004,
+    "interpretation_note": "residual_at_onset vs residual_near_end shows whether the LSTM's prediction 'catches up' to a frozen/stale value over the interval (residual shrinking) rather than staying elevated throughout."
+  },
+  "frozen_humidity_analysis": {
+    "n_cases_analyzed": 750,
+    "residual_at_onset": {
+      "median": 0.47636817953921806,
+      "p95": 1.3413796852096251
+    },
+    "residual_max": {
+      "median": 1.0935359571000376,
+      "p95": 1.7977145607279816
+    },
+    "residual_near_end": {
+      "median": 0.7930682865463083,
+      "p95": 1.581302579291932
+    },
+    "detection_persists_to_end_fraction": 0.0,
+    "interpretation_note": "residual_at_onset vs residual_near_end shows whether the LSTM's prediction 'catches up' to a frozen/stale value over the interval (residual shrinking) rather than staying elevated throughout."
+  },
+  "drift_analysis": {
+    "n_cases": 750,
+    "residual_after_0_steps_median_c": 0.3793255189093587,
+    "residual_after_5_steps_median_c": 0.5451620190111317,
+    "residual_after_10_steps_median_c": 0.4596695619149145,
+    "residual_after_20_steps_median_c": 0.33939048920324666,
+    "residual_max_median_c": 1.1067800079272914,
+    "fraction_cases_threshold_crossed": 0.18933333333333333,
+    "note": "This measures whether accumulated residual identifies gradual drift \u2014 NOT a failure-date or predictive-maintenance claim."
+  },
+  "missing_data_analysis": {
+    "n_cases": 750,
+    "within_injected_window_unavailable_fraction_mean": 1.0,
+    "unavailable_run_length_steps_median": 33.0,
+    "unavailable_run_length_steps_max": 36.0,
+    "finding": "Missing data is a DATA-QUALITY condition, not a prediction-residual anomaly: the LSTM never receives NaN, so no residual is computed for the missing timesteps themselves. Importantly, residual unavailability extends beyond the missing window's own duration, because those NaN rows remain inside the 144-step lookback of every subsequent window until they age out \u2014 see unavailable_run_length_steps_median above. Detecting 'data is missing' should be a separate, simple presence/absence check (already possible from the raw feed) rather than an LSTM-residual-based detection, and is intentionally NOT scored as a residual-detection recall figure in this experiment."
+  }
+}

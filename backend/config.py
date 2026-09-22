@@ -65,12 +65,52 @@ class FusionThresholds:
     ensemble_anomaly_threshold: float = 0.55
 
 @dataclass
+class LSTMTemporalConfig:
+    """
+    Stage 4: configuration for the optional LSTM temporal-prediction
+    evidence source inside TemporalPatternLayer (engine/layer2_temporal.py).
+    This ADDS evidence alongside the existing rule-based temporal checks —
+    it never replaces them (see engine/lstm_temporal.py).
+
+    All paths are relative to the backend/ directory.
+    """
+    enabled: bool = True  # if artifacts fail to load, the layer disables itself regardless of this flag
+    model_dir: str = "models/temporal_lstm"
+    calibration_path: str = "models/temporal_lstm/stage3_results/calibration_stats.json"
+    sequence_length: int = 144            # must match the trained Stage 2 model's window length
+    residual_window: int = 6              # rolling recent-peak window, ~60 min at 10-min cadence
+    reason_report_threshold: float = 0.5  # min channel score to mention LSTM evidence in the reason string
+    max_gap_minutes: float = 15.0         # a joint-valid reading arriving after a bigger gap than this
+                                           # resets the LSTM history buffer — Stage 2 trained on strictly
+                                           # contiguous 10-min steps, so a stretched/discontiguous sequence
+                                           # must not be silently fed to the model as if it were 24h of history
+    combined_score_calibration_factor: float = 1.44
+    # STAGE 5 CALIBRATION (measured, not guessed): each channel's raw
+    # residual is normalized by its OWN Stage 3 per-channel P99 (a ~1%
+    # exceedance target for THAT channel alone). But the final evidence
+    # combines 3 channels via max() AND a 6-step rolling max — combining
+    # several ~1%-tail signals via max() inflates the exceedance rate far
+    # past 1% (measured on 75 real Stage 1 normal-validation stations,
+    # 64,800 observations: without this factor, the combined recent-peak
+    # score exceeded 0.70 on 16.3% of genuinely NORMAL readings — enough to
+    # trip fusion's acute_temporal>=0.70 override on roughly 1 in 6 normal
+    # readings). This factor is the measured P99 of the raw (pre-clip)
+    # channel-max + 6-step-rolling-max score on that same normal traffic,
+    # so post-correction ~99% of normal traffic's combined evidence again
+    # falls at or below 1.0 — restoring the ORIGINAL single-channel P99
+    # design's intended rarity to the actual combined quantity fusion sees.
+    # Provenance: backend/stage5_results/normal_calibration_summary.json
+    # (calibration_factor_derivation). Setting this to 1.0 reproduces exact
+    # pre-Stage-5 (Stage 4) behavior.
+
+@dataclass
 class AtherConfig:
     physics: PhysicsThresholds = field(default_factory=PhysicsThresholds)
     temporal: TemporalThresholds = field(default_factory=TemporalThresholds)
     spatial: SpatialThresholds = field(default_factory=SpatialThresholds)
     drift: DriftThresholds = field(default_factory=DriftThresholds)
     fusion: FusionThresholds = field(default_factory=FusionThresholds)
+    lstm_temporal: LSTMTemporalConfig = field(default_factory=LSTMTemporalConfig)
 
     # Default AWS Station metadata
     default_station_id: str = "ATHER_AWS_01"

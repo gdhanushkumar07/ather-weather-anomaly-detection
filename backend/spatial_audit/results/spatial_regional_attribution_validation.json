@@ -1,0 +1,23 @@
+{
+  "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance. NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. This validates the S3 attribution ENGINE's computation on real magnitudes/geography -- it does NOT and CANNOT validate real-world event-detection accuracy (no independent ground truth exists for these unsynchronized single readings).",
+  "method_disclaimer": "Each city contributes ONE representative reading (its own first row in the file) -- NOT simultaneous cross-city observations. Classifications produced here are NOT claims about real regional weather events.",
+  "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+  "source_file_untouched": true,
+  "extract_seconds": 32.64,
+  "unique_locations_extracted": 175,
+  "evaluation_errors": 0,
+  "non_finite_confidence_detected": 0,
+  "determinism_verified": true,
+  "classification_distribution": {
+    "REGIONAL_EVENT": 5,
+    "ISOLATED_SENSOR_ANOMALY": 31,
+    "UNCERTAIN": 139
+  },
+  "confidence_distribution_all_classifications": {
+    "min": 0.0,
+    "median": 0.0,
+    "max": 0.938,
+    "mean": 0.139
+  },
+  "method": "Runs the REAL production engine.layer4_spatial.SpatialNeighborLayer.evaluate() (S1 KNN + S2 robust stats + S3 attribution, all real production code) for each of the real city locations as a target against the others as its candidate neighbor pool, using the real CONFIG.spatial values."
+}

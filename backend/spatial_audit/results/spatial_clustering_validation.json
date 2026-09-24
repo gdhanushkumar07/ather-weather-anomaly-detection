@@ -1,0 +1,32 @@
+{
+  "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance. NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. NO ground-truth event labels exist for this data -- this script does NOT and CANNOT measure clustering accuracy.",
+  "method_disclaimer": "Each city contributes ONE representative reading (its own first row in the file) -- these are UNSYNCHRONIZED, NOT simultaneous real-world observations. Any cluster reported below is a computability/determinism check of the S4 engine on real magnitudes/geography, NOT a claim that a real, simultaneous regional weather event occurred.",
+  "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+  "source_file_untouched": true,
+  "extract_seconds": 32.65,
+  "evaluate_seconds_all_stations": 0.22,
+  "cluster_seconds": 0.0044,
+  "unique_locations_extracted": 175,
+  "candidates_considered": 41,
+  "cluster_count": 8,
+  "largest_cluster_size": 3,
+  "cluster_sizes": [
+    3,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2
+  ],
+  "unclustered_candidate_count": 24,
+  "non_finite_fingerprint_values_detected": 0,
+  "determinism_verified": true,
+  "parameters": {
+    "eps_km": 125.0,
+    "min_samples": 2,
+    "metric": "haversine_balltree"
+  },
+  "method": "Runs the REAL production pipeline: AnomalyDetector.evaluate_reading() (S1 KNN + S2 robust stats + S3 attribution) for each of the real city locations, then AnomalyDetector.compute_spatial_events() (S4 DBSCAN clustering, real production code) ONCE over the resulting candidate set -- not a reimplemented or simplified clustering pass."
+}

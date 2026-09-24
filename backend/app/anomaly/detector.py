@@ -19,7 +19,10 @@ from engine.layer1_physics import PhysicsValidationLayer
 from engine.layer2_temporal import TemporalPatternLayer
 from engine.layer3_multivariate import MultivariateConsistencyLayer
 from engine.layer4_spatial import SpatialNeighborLayer
+from engine.spatial_neighbors import select_k_nearest_neighbors
 from engine.layer5_drift import SensorDriftHealthLayer
+from engine.spatial_clustering import ClusterCandidate, build_cluster_candidate, cluster_anomalous_stations
+from engine.spatial_event_tracking import SpatialEventTracker
 from fusion.conformal_fusion import ConformalEvidenceFusion
 from root_cause.classifier import RootCauseClassifier, DiagnosisResult
 from root_cause.explainability import ExplanationGenerator
@@ -51,6 +54,24 @@ class AnomalyDetector:
         self._spatial_pool: Dict[str, AWSReading] = {}
         # Station metadata cache (name, etc.)
         self._station_meta: Dict[str, Dict[str, Any]] = {}
+        # S5 — Event Evolution: one explicitly-owned tracker per detector
+        # instance (never a module-level global; see
+        # engine/spatial_event_tracking.py's "STATE MANAGEMENT" section).
+        self._spatial_event_tracker = SpatialEventTracker()
+
+    @staticmethod
+    def _guarded_layer(name: str, call, neutral):
+        """Runs one layer; on any exception returns neutral(detail) where
+        detail marks the layer as unavailable (never a fabricated result)."""
+        try:
+            return call()
+        except Exception as exc:  # noqa: BLE001 -- deliberate: no single layer may abort evaluation
+            return neutral({
+                "layer_unavailable": True,
+                "status": "UNAVAILABLE",
+                "unavailable_layer": name,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
 
     def update_spatial_pool(self, readings: List[AWSReading]):
         """Updates the internal spatial neighbor registry."""
@@ -61,24 +82,31 @@ class AnomalyDetector:
         """Stores station metadata for canonical result enrichment."""
         self._station_meta[station_id] = meta
 
-    def get_neighbors_for_reading(self, reading: AWSReading, max_neighbors: int = 8) -> List[AWSReading]:
-        """Finds nearest neighbor readings within spatial radius."""
+    def get_neighbors_for_reading(
+        self, reading: AWSReading, max_neighbors: Optional[int] = None
+    ) -> List[AWSReading]:
+        """
+        Finds the K nearest valid neighbor readings within the spatial
+        radius, ranked by true great-circle distance (S1 foundation, see
+        engine/spatial_neighbors.py). Deterministic: same pool + same
+        target always yields the same ordered neighbor list, independent
+        of dict-iteration order.
+
+        max_neighbors overrides the configured K (CONFIG.spatial.
+        spatial_k_neighbors) for this call only; omit it to use the
+        configured default (8, unchanged from the previous hardcoded value).
+        """
         if not self._spatial_pool:
             return []
 
-        neighbors = []
-        lat = reading.lat
-        lon = reading.lon
-
-        # Bounding box pre-filter (~3 degrees lat/lon is ~330km)
-        for n in self._spatial_pool.values():
-            if n.station_id == reading.station_id:
-                continue
-            if abs(n.lat - lat) <= 3.0 and abs(n.lon - lon) <= 3.0:
-                neighbors.append(n)
-                if len(neighbors) >= max_neighbors:
-                    break
-        return neighbors
+        k = max_neighbors if max_neighbors is not None else CONFIG.spatial.spatial_k_neighbors
+        selection = select_k_nearest_neighbors(
+            reading,
+            self._spatial_pool.values(),
+            radius_km=CONFIG.spatial.neighbor_distance_km_max,
+            k=k,
+        )
+        return [c.reading for c in selection.neighbors]
 
     def evaluate_station(
         self,
@@ -111,25 +139,40 @@ class AnomalyDetector:
         meta = station_data or self._station_meta.get(stn_id, {})
         stn_name = meta.get("name", f"Station {stn_id}")
 
+        # S7 graceful degradation: every layer call is guarded (see
+        # _guarded_layer). A layer that raises contributes a NEUTRAL score
+        # (0.0, the same value the layers already use for "no evidence"),
+        # no reason text, and an explicit {"layer_unavailable": True}
+        # marker that the canonical card surfaces as status UNAVAILABLE --
+        # missing evidence is exposed, never turned into a fault signal,
+        # and the remaining layers still reach fusion.
         # ── 1. Layer 1: Physics Validation (MetPy & Psychrometric boundaries) ──
-        score_l1, veto_fired, reason_l1, detail_l1 = self.layer1.evaluate(reading)
+        score_l1, veto_fired, reason_l1, detail_l1 = self._guarded_layer(
+            "physics", lambda: self.layer1.evaluate(reading),
+            lambda d: (0.0, False, None, d))
 
         # ── 2. Layer 2: Temporal Pattern (Spikes, Frozen Sensor, Statistical Z-score) ──
-        score_l2, ch_scores_l2, reason_l2, detail_l2 = self.layer2.evaluate(reading)
+        score_l2, ch_scores_l2, reason_l2, detail_l2 = self._guarded_layer(
+            "temporal", lambda: self.layer2.evaluate(reading),
+            lambda d: (0.0, {}, None, d))
 
         # ── 3. Layer 3: Multivariate Consistency (Joint State Manifold) ──
-        score_l3, reason_l3, detail_l3 = self.layer3.evaluate(reading)
+        score_l3, reason_l3, detail_l3 = self._guarded_layer(
+            "multivariate", lambda: self.layer3.evaluate(reading),
+            lambda d: (0.0, None, d))
 
         # ── 4. Layer 4: Spatial Neighbor Consensus (IDW Lapse-rate cross check) ──
         if neighbors is None:
             neighbors = self.get_neighbors_for_reading(reading)
-        score_l4, spatial_consensus, reason_l4, detail_l4 = self.layer4.evaluate(reading, neighbors)
+        score_l4, spatial_consensus, reason_l4, detail_l4 = self._guarded_layer(
+            "spatial", lambda: self.layer4.evaluate(reading, neighbors),
+            lambda d: (0.0, {"temperature_c": None, "pressure_hpa": None, "humidity_pct": None}, None, d))
 
         # ── 5. Layer 5: Sensor Drift & Health Tracking (CUSUM & Days to failure) ──
         recent_is_anomaly = bool(veto_fired or score_l1 > 0.7 or score_l2 > 0.7)
-        score_l5, health_score, days_to_failure, reason_l5, detail_l5 = self.layer5.evaluate(
-            reading, recent_is_anomaly=recent_is_anomaly
-        )
+        score_l5, health_score, days_to_failure, reason_l5, detail_l5 = self._guarded_layer(
+            "drift", lambda: self.layer5.evaluate(reading, recent_is_anomaly=recent_is_anomaly),
+            lambda d: (0.0, 100.0, None, None, d))
         # Default to True (assume physical) unless the source is AFFIRMATIVELY
         # known to be a model reference — an UNKNOWN/untagged source (legacy
         # callers, tests) must not be treated as non-physical by default.
@@ -176,11 +219,17 @@ class AnomalyDetector:
             "physics": len(detail_l1.get("channels_evaluated", [])) / 3.0,
             "temporal": 1.0 if detail_l2.get("history_points", 0) >= 3 else 0.2,
             "multivariate": detail_l3.get("valid_channel_count", 0) / 3.0,
-            "spatial": min(1.0, detail_l4.get("neighbor_count", 0) / 4.0),
+            # S7 BUGFIX: layer4_spatial.py has always set
+            # "total_neighbors_in_radius" (never "neighbor_count"), so this
+            # used to always evaluate to 0 -- forcing fusion's
+            # "spatial_score > 0.1 and spatial_neighbor_count < 3 -> x0.85
+            # confidence" scarcity penalty to fire on every station with any
+            # spatial signal, regardless of real neighbor availability.
+            "spatial": min(1.0, detail_l4.get("total_neighbors_in_radius", 0) / 4.0),
             "drift": min(1.0, detail_l5.get("samples_tracked", 0) / 20.0),
         }
 
-        spatial_neighbor_count = detail_l4.get("neighbor_count", 0)
+        spatial_neighbor_count = detail_l4.get("total_neighbors_in_radius", 0)
         temporal_history_count = detail_l2.get("history_points", 0)
 
         # ── 6. Conformal Evidence Fusion (v2: quality-aware, no artificial floor) ──
@@ -234,9 +283,18 @@ class AnomalyDetector:
             "pressure_hpa": reading.pressure_hpa,
             "humidity_pct": reading.humidity_pct
         }
+        # S7: an estimated/trusted value is only produced when the diagnosis
+        # does not believe the observation is genuine. A GENUINE_EXTREME_WEATHER
+        # / POSSIBLE_WEATHER_CHANGE observation is left as-is (replacing a
+        # real regional reading with a neighbor consensus would fabricate
+        # data). The raw observation is always preserved separately in
+        # raw_values regardless.
+        observation_believed_genuine = diagnosis_res.fault_type in (
+            FaultType.GENUINE_EXTREME_WEATHER, FaultType.POSSIBLE_WEATHER_CHANGE
+        )
         corrected = self.imputer.correct_reading(
             reading=reading,
-            is_anomaly=is_anomaly,
+            is_anomaly=is_anomaly and not observation_believed_genuine,
             affected_channel=affected[0] if affected else None,
             spatial_consensus=spatial_consensus,
             temporal_fallback=temporal_fallback
@@ -322,7 +380,10 @@ class AnomalyDetector:
                 "evidence": diagnosis_res.evidence,
                 "alternatives": diagnosis_res.alternatives,
                 "affected_channels": affected,
-                "operator_action": diagnosis_res.operator_action
+                "operator_action": diagnosis_res.operator_action,
+                # S7: S3/S6 spatial corroboration state (additive; None when
+                # not applicable). Evidence states, not probabilities.
+                "spatial_corroboration": diagnosis_res.spatial_corroboration,
             },
             "weather_analysis": weather_analysis,
             "insights": insights,
@@ -357,7 +418,7 @@ class AnomalyDetector:
             sensor_health_index=health_score,
             estimated_days_to_failure=days_to_failure,
             spatial_neighbor_count=spatial_neighbor_count,
-            spatial_neighbor_range_km=detail_l4.get("min_distance_km"),
+            spatial_neighbor_range_km=(detail_l4.get("distance_range_km") or {}).get("min"),
             temporal_history_points=temporal_history_count,
             data_quality_summary=data_quality_dict,
             operator_action=diagnosis_res.operator_action,
@@ -375,6 +436,93 @@ class AnomalyDetector:
     def get_station_canonical(self, station_id: str) -> Optional[Dict[str, Any]]:
         """Returns cached Canonical AnalysisResult for station."""
         return self._canonical_cache.get(station_id)
+
+    def compute_spatial_events(
+        self, station_ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        S4 — Spatial Clustering & Event Fingerprinting (regional batch
+        operation; see engine/spatial_clustering.py's module docstring for
+        the full architecture rationale).
+
+        Deliberately NOT called from evaluate_reading()/evaluate_station():
+        clustering needs to see the CURRENT set of already-anomalous
+        stations together, which is a property of the whole pool at a
+        point in time, not of any single station's own evaluation. Running
+        it inside each station's evaluate() would mean re-clustering the
+        same small candidate set once per station in the pool (wasteful,
+        and not how the problem is shaped) -- so it is exposed here as an
+        explicit, on-demand call instead.
+
+        Uses ONLY already-cached results (self._alerts_cache /
+        self._spatial_pool, populated by evaluate_reading() calls that
+        already happened) -- this method never re-runs Spatial evaluation
+        for any station itself, only reads what was already computed.
+
+        station_ids: restrict to a subset of currently-known stations
+        (default: every station with a cached alert). Stations with no
+        cached alert, or whose spatial detail shows no applicable channel
+        (i.e. no meaningful deviation was found -- see
+        engine.spatial_clustering.build_cluster_candidate), are excluded
+        from clustering entirely; normal/quiet stations never become
+        cluster candidates.
+        """
+        candidates: List[ClusterCandidate] = []
+        ids = station_ids if station_ids is not None else list(self._alerts_cache.keys())
+
+        for sid in ids:
+            alert = self._alerts_cache.get(sid)
+            reading = self._spatial_pool.get(sid)
+            if alert is None or reading is None:
+                continue
+            spatial_detail = alert.layer_details.get("spatial", {})
+            regional_attribution = spatial_detail.get("regional_attribution")
+            if not regional_attribution:
+                continue
+            candidate = build_cluster_candidate(
+                station_id=sid,
+                latitude=reading.lat,
+                longitude=reading.lon,
+                regional_attribution=regional_attribution,
+                timestamp=alert.timestamp.isoformat() if alert.timestamp else None,
+            )
+            if candidate is not None:
+                candidates.append(candidate)
+
+        result = cluster_anomalous_stations(candidates)
+        return result.to_dict()
+
+    def update_spatial_event_tracking(
+        self,
+        station_ids: Optional[List[str]] = None,
+        timestamp: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        """
+        S5 — Event Evolution (regional batch operation; see
+        engine/spatial_event_tracking.py's module docstring for the full
+        association/matching/gap-policy rationale).
+
+        Calls compute_spatial_events() (S4) ONCE to get the current
+        snapshot, then feeds it into this detector's OWN
+        SpatialEventTracker instance. Like compute_spatial_events(),
+        deliberately NOT called from evaluate_reading()/evaluate_station()
+        -- event tracking is a property of successive REGIONAL snapshots,
+        not of any single station's own evaluation.
+
+        timestamp: the observation time this snapshot represents. Defaults
+        to now(UTC) only when the caller does not supply one (matching the
+        existing codebase's own default-timestamp convention, e.g.
+        AWSReading.timestamp) -- tests should always pass an explicit
+        timestamp for determinism.
+        """
+        events_result = self.compute_spatial_events(station_ids=station_ids)
+        ts = timestamp if timestamp is not None else datetime.now(timezone.utc)
+        return self._spatial_event_tracker.update(events_result, ts)
+
+    def reset_spatial_event_tracking(self) -> None:
+        """Clears all S5 tracked event state (fresh event numbering, no
+        remembered previous snapshot). Does not affect S1-S4 caches."""
+        self._spatial_event_tracker.reset()
 
     # ─────────────────────────────────────────────────────────────────
     # Private Helpers for §14, §15, §16, §21
@@ -415,11 +563,15 @@ class AnomalyDetector:
             "measurement. The pattern below describes model-output behavior, not "
             "sensor health."
         )
+        # S7: the spatial-corroboration note (appended last) talks about an
+        # "isolated sensor anomaly", which must not be claimed for a model
+        # reference -- drop it here; spatial_corroboration stays None.
+        base_evidence = diagnosis_res.evidence[:-1] if diagnosis_res.spatial_corroboration else diagnosis_res.evidence
         return DiagnosisResult(
             fault_type=FaultType.MODEL_REFERENCE_INCONSISTENCY,
             confidence=diagnosis_res.confidence,
             primary_signal=note,
-            evidence=[note] + diagnosis_res.evidence,
+            evidence=[note] + base_evidence,
             alternatives=diagnosis_res.alternatives + [
                 "Model grid-cell artifact or forecast update discontinuity"
             ],
@@ -497,19 +649,27 @@ class AnomalyDetector:
 
         # Spatial consistency evidence
         spatial_detail = layer_details.get("spatial", {})
-        neighbor_count = spatial_detail.get("neighbor_count", 0)
+        # S7 BUGFIX: use the keys layer4_spatial.py actually sets
+        # (total_neighbors_in_radius, nested distance_range_km,
+        # channel_results[ch] with target_value/consensus_value/deviation/
+        # usable_neighbors). channel_results[ch] can also be a short
+        # status-only dict (target invalid / too few valid neighbors), so
+        # the full-evaluation fields are only used when present.
+        neighbor_count = spatial_detail.get("total_neighbors_in_radius", 0)
         if neighbor_count >= 2:
-            dist_min = spatial_detail.get("min_distance_km", 0.0)
-            dist_max = spatial_detail.get("max_distance_km", 0.0)
-            deviations = spatial_detail.get("deviations", {})
-            if "temperature_c" in deviations:
-                dev = deviations["temperature_c"]
+            dist_range = spatial_detail.get("distance_range_km") or {}
+            dist_min = dist_range.get("min") or 0.0
+            dist_max = dist_range.get("max") or 0.0
+            deviations = spatial_detail.get("channel_results", {})
+            dev = deviations.get("temperature_c") or {}
+            if "deviation" in dev and "consensus_value" in dev:
+                signed_dev = dev["target_value"] - dev["consensus_value"]
                 evidence.append(
-                    f"Regional temperature comparison: {dev['dev_c']:+.1f}°C deviation from "
-                    f"{dev['neighbors_used']} neighbors within {dist_min:.0f}–{dist_max:.0f} km "
-                    f"(target {dev['target_c']:.1f}°C vs regional consensus {dev['consensus_c']:.1f}°C)"
+                    f"Regional temperature comparison: {signed_dev:+.1f}°C deviation from "
+                    f"{dev['usable_neighbors']} neighbors within {dist_min:.0f}–{dist_max:.0f} km "
+                    f"(target {dev['target_value']:.1f}°C vs regional consensus {dev['consensus_value']:.1f}°C)"
                 )
-                if abs(dev['dev_c']) > 5.0:
+                if abs(signed_dev) > 5.0:
                     summary_parts.append("Localized thermal discrepancy relative to regional mesh")
                 else:
                     summary_parts.append("Consistent with regional temperature field")
@@ -592,11 +752,13 @@ class AnomalyDetector:
 
         # Spatial corroboration insight
         spatial_detail = layer_details.get("spatial", {})
-        if spatial_detail.get("neighbor_count", 0) >= 2:
+        # S7 BUGFIX: real keys are total_neighbors_in_radius / distance_range_km{min,max}.
+        if spatial_detail.get("total_neighbors_in_radius", 0) >= 2:
+            _dist_range = spatial_detail.get("distance_range_km") or {}
             insights.append({
                 "what": "Regional spatial peer comparison available.",
-                "why": f"Cross-referenced against {spatial_detail['neighbor_count']} stations.",
-                "evidence": f"Consensus comparison range: {spatial_detail.get('min_distance_km', 0):.0f}–{spatial_detail.get('max_distance_km', 0):.0f} km.",
+                "why": f"Cross-referenced against {spatial_detail['total_neighbors_in_radius']} stations.",
+                "evidence": f"Consensus comparison range: {(_dist_range.get('min') or 0):.0f}–{(_dist_range.get('max') or 0):.0f} km.",
                 "action": "Cross-check station siting and microclimate exposure."
             })
 
@@ -625,7 +787,7 @@ class AnomalyDetector:
         spatial_detail = layer_details.get("spatial", {})
 
         history_pts = temporal_detail.get("history_points", 0)
-        neighbors = spatial_detail.get("neighbor_count", 0)
+        neighbors = spatial_detail.get("total_neighbors_in_radius", 0)  # S7 BUGFIX: real key name
 
         limitations = []
         if zero_sub:
@@ -651,6 +813,29 @@ class AnomalyDetector:
             "historical_points": history_pts,
             "nearby_stations": neighbors,
             "limitations": limitations
+        }
+
+    @staticmethod
+    def _compact_regional_attribution(spatial_detail: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        ra = spatial_detail.get("regional_attribution")
+        if not ra:
+            return None
+        return {
+            "classification": ra.get("classification"),
+            "evidence_strength": ra.get("confidence"),
+            "applicable_channels": ra.get("applicable_channels", []),
+            "explanation": ra.get("explanation"),
+        }
+
+    @staticmethod
+    def _compact_counterfactual(spatial_detail: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        cv = spatial_detail.get("counterfactual_verification")
+        if not cv:
+            return None
+        return {
+            "overall_status": cv.get("overall_status"),
+            "channel_status": {ch: v.get("status") for ch, v in cv.get("channels", {}).items()},
+            "summary": cv.get("summary"),
         }
 
     def _format_canonical_layers(
@@ -739,8 +924,12 @@ class AnomalyDetector:
             l3_reason = f"Joint state manifold ({d3.get('test_performed', 'bivariate')}) consistent"
 
         # 4. Spatial
-        n_cnt = d4.get("neighbor_count", 0)
-        if n_cnt < 2 or d4.get("status") == "INSUFFICIENT_DATA":
+        # S7 BUGFIX: real key is total_neighbors_in_radius; layer4 also reports
+        # its own insufficiency status as "INSUFFICIENT_NEIGHBORS" (not the
+        # "INSUFFICIENT_DATA" string this card originally checked), so both
+        # are honored.
+        n_cnt = d4.get("total_neighbors_in_radius", 0)
+        if n_cnt < 2 or d4.get("status") in ("INSUFFICIENT_DATA", "INSUFFICIENT_NEIGHBORS"):
             l4_status = "INSUFFICIENT_DATA"
             l4_conf = "INSUFFICIENT_DATA"
             l4_reason = f"Insufficient neighboring stations within radius ({n_cnt} found, 2 required)"
@@ -789,7 +978,7 @@ class AnomalyDetector:
                 l5_conf = "HIGH"
                 l5_reason = f"Sensor health index nominal ({health_score:.0f}%)"
 
-        return {
+        cards = {
             "physics": {
                 "name": "Physics Validation",
                 "status": l1_status,
@@ -821,6 +1010,12 @@ class AnomalyDetector:
                 "evidence_quality": l4_conf,
                 "reason": l4_reason,
                 "details": d4,
+                # S7: compact, dashboard-ready views of the S3/S6 evidence
+                # (full detail remains in "details"). These are evidence
+                # states, not calibrated probabilities. None when spatial
+                # evidence is unavailable -- never fabricated.
+                "regional_attribution": self._compact_regional_attribution(d4),
+                "counterfactual_verification": self._compact_counterfactual(d4),
             },
             "sensor_health": {
                 "name": "Sensor Health & Drift",
@@ -831,6 +1026,14 @@ class AnomalyDetector:
                 "details": d5,
             },
         }
+        # S7: a layer that raised is reported as UNAVAILABLE (missing
+        # evidence), never as PASS/ANOMALY.
+        for card in cards.values():
+            if (card.get("details") or {}).get("layer_unavailable"):
+                card["status"] = "UNAVAILABLE"
+                card["evidence_quality"] = "INSUFFICIENT_DATA"
+                card["reason"] = "Layer unavailable for this evaluation; its evidence is excluded, not assumed normal."
+        return cards
 
 
 # Singleton detector instance

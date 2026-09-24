@@ -28,7 +28,8 @@ class DiagnosisResult:
     """Structured root-cause diagnosis with uncertainty representation."""
     __slots__ = (
         "fault_type", "confidence", "primary_signal",
-        "evidence", "alternatives", "operator_action"
+        "evidence", "alternatives", "operator_action",
+        "spatial_corroboration",
     )
 
     def __init__(
@@ -46,6 +47,10 @@ class DiagnosisResult:
         self.evidence        = evidence
         self.alternatives    = alternatives
         self.operator_action = operator_action
+        # S7: structured S3/S6 corroboration context (evidence states, not
+        # probabilities). None when spatial evidence is unavailable or the
+        # fault type is not a weather-vs-sensor distinction.
+        self.spatial_corroboration = None
 
 
 class RootCauseClassifier:
@@ -54,6 +59,71 @@ class RootCauseClassifier:
     """
 
     def classify(
+        self,
+        is_anomaly:      bool,
+        layer_scores:    Dict[str, float],
+        veto_fired:      bool,
+        channel_scores:  Dict[str, float],
+        spatial_score:   float,
+        reasons:         List[str],
+        layer_details:   Optional[Dict[str, Any]] = None,
+        valid_channel_count: int = 0,
+    ) -> DiagnosisResult:
+        """
+        Public entry point. The fault-type / confidence decision is made by
+        _classify_core (UNCHANGED by S7). This wrapper then ADDS S3
+        (regional attribution) and S6 (counterfactual verification) spatial
+        evidence as corroborating/conflicting context on the result, without
+        altering which category or confidence tier was selected -- so the
+        same spatial neighborhood is never counted twice in the decision.
+        """
+        result = self._classify_core(
+            is_anomaly, layer_scores, veto_fired, channel_scores,
+            spatial_score, reasons, layer_details, valid_channel_count,
+        )
+        return self._attach_spatial_corroboration(result, layer_details or {})
+
+    @staticmethod
+    def _attach_spatial_corroboration(result: DiagnosisResult, layer_details: Dict[str, Any]) -> DiagnosisResult:
+        weather_like = (FaultType.GENUINE_EXTREME_WEATHER, FaultType.POSSIBLE_WEATHER_CHANGE)
+        sensor_like = (FaultType.SENSOR_SPIKE, FaultType.SINGLE_CHANNEL_FAULT)
+        if result.fault_type not in weather_like + sensor_like:
+            return result
+
+        spatial = layer_details.get("spatial") or {}
+        ra = (spatial.get("regional_attribution") or {}).get("classification")
+        cv = (spatial.get("counterfactual_verification") or {}).get("overall_status")
+        if ra is None and cv is None:
+            return result
+
+        regional_signals = (ra == "REGIONAL_EVENT", cv == "SUPPORTED")
+        isolated_signals = (ra == "ISOLATED_SENSOR_ANOMALY", cv == "CONTRADICTED")
+        if result.fault_type in weather_like:
+            agrees, conflicts = any(regional_signals), any(isolated_signals)
+            hypothesis = "genuine regional weather response"
+        else:
+            agrees, conflicts = any(isolated_signals), any(regional_signals)
+            hypothesis = "isolated sensor anomaly"
+
+        if agrees and not conflicts:
+            state, note = "CORROBORATED", f"Spatial evidence (attribution={ra}, counterfactual={cv}) is consistent with a {hypothesis}."
+        elif conflicts and not agrees:
+            state, note = "CONFLICTING", f"Spatial evidence (attribution={ra}, counterfactual={cv}) points AWAY from a {hypothesis}; treat this diagnosis with caution."
+        elif agrees and conflicts:
+            state, note = "MIXED", f"Spatial evidence is mixed (attribution={ra}, counterfactual={cv}); no clear support for a {hypothesis}."
+        else:
+            state, note = "INSUFFICIENT", f"Spatial attribution/counterfactual evidence is inconclusive (attribution={ra}, counterfactual={cv})."
+
+        evidence = list(result.evidence)   # copy: never mutate the shared reasons list
+        evidence.append(note)              # append at END only
+        result.evidence = evidence
+        result.spatial_corroboration = {
+            "state": state, "regional_attribution": ra, "counterfactual_status": cv,
+            "note": "Evidence states, not calibrated probabilities; did not alter the category/confidence selected.",
+        }
+        return result
+
+    def _classify_core(
         self,
         is_anomaly:      bool,
         layer_scores:    Dict[str, float],

@@ -48,6 +48,16 @@ class SpatialThresholds:
     neighbor_distance_km_max: float = 250.0
     spatial_z_threshold: float = 3.0
     min_neighbors_required: int = 2
+    # S1 — Spatial Neighborhood Foundation (engine/spatial_neighbors.py):
+    # the maximum number of nearest-in-radius stations kept after distance
+    # sorting. Default 8 matches the previous hardcoded
+    # `max_neighbors=8` in AnomalyDetector.get_neighbors_for_reading(), so
+    # existing production/test behavior is unchanged at this default (no
+    # currently exercised scenario has more than 5 neighbors within
+    # radius). Distinct from min_neighbors_required, which is the FLOOR
+    # below which Spatial refuses to draw a conclusion; this is the CEILING
+    # on how many of the nearest candidates are used once there are enough.
+    spatial_k_neighbors: int = 8
 
 @dataclass
 class DriftThresholds:

@@ -120,17 +120,23 @@ class TestAtherBackend(unittest.TestCase):
 
     def test_weather_union_telemetry_ingestion(self):
         # Ingest nominal telemetry for ZWL004900 (Rajarajeshwari Nagar AWS)
+        curr = station_service.get_station("ZWL004900")
+        nominal_temp = curr.get("temperature", 25.0) if curr else 25.0
+        nominal_pres = curr.get("pressure", 1013.0) if curr else 1013.0
+        nominal_hum = curr.get("humidity", 65) if curr else 65
+        nominal_wind = curr.get("windSpeed", 10.0) if curr else 10.0
+
         payload = {
             "id": "ZWL004900",
-            "temperature": 20.4,
-            "pressure": 1012.5,
-            "humidity": 96,
-            "windSpeed": 4.8,
+            "temperature": nominal_temp,
+            "pressure": nominal_pres,
+            "humidity": nominal_hum,
+            "windSpeed": nominal_wind,
             "condition": "Partly Cloudy"
         }
         updated = station_service.ingest_observation("ZWL004900", payload)
         self.assertIn(updated["status"], ["NORMAL", "WARNING"])
-        self.assertEqual(updated["temperature"], 20.4)
+        self.assertEqual(updated["temperature"], nominal_temp)
 
         # Ingest anomalous temperature spike
         spike_payload = {

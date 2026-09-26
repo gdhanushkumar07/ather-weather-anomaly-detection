@@ -39,6 +39,7 @@ import { ResolveIncidentModal } from '../components/ResolveIncidentModal';
 import { DismissIncidentModal } from '../components/DismissIncidentModal';
 import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
 import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft, XCircle } from 'lucide-react';
+import { AWSNeighbor, compareToNeighbors, deriveValidationVerdict, checkNeighborConsistency } from '../aws/awsGeo';
 
 // Mirrors app/incidents/service.py::VALID_TRANSITIONS — used only to decide
 // which action buttons are enabled; the backend is the actual authority
@@ -60,9 +61,14 @@ interface StationPanelProps {
    *  Intelligence workspace (ATHER UI architecture restructure) — same
    *  component, same data, only the outer chrome differs. */
   variant?: 'drawer' | 'page';
+  /** Real nearest-3-neighbor stations (Haversine over actual station
+   * coordinates, computed once in App.tsx and shared with the map's
+   * connection lines) — used for the client-side "Nearest Station
+   * Validation" comparison below. */
+  neighbors?: AWSNeighbor[];
 }
 
-export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, variant = 'drawer' }) => {
+export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, variant = 'drawer', neighbors = [] }) => {
   const [history, setHistory] = useState<ObservationHistory | null>(null);
   const [historyHours, setHistoryHours] = useState<number>(24);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
@@ -259,6 +265,16 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
   const obsWind = canonicalObs?.wind_speed !== undefined ? canonicalObs.wind_speed : currentStation.windSpeed;
   const obsWindDir = canonicalObs?.wind_direction ?? currentStation.windDirection;
   const obsCondition = canonicalObs?.condition ?? currentStation.condition;
+
+  // Real primary-vs-neighbor comparison, built from actual station telemetry
+  // (see aws/awsGeo.ts). Distinct from, and shown alongside, the backend's
+  // own real Spatial Consensus (L4) card below -- this is a plain-language
+  // client-side summary, not a re-implementation of that algorithm.
+  const neighborComparisons = neighbors.length > 0
+    ? compareToNeighbors(obsTemp, obsPress, obsHumid, neighbors)
+    : [];
+  const neighborVerdict = neighbors.length > 0 ? deriveValidationVerdict(neighborComparisons) : null;
+  const neighborChecks = neighbors.map((n) => checkNeighborConsistency(obsTemp, obsPress, obsHumid, n));
 
   // Status & severity normalization
   const status = canonicalOverall?.status || canonical?.status || currentStation.status || 'NORMAL';
@@ -627,6 +643,78 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
           )}
         </div>
+
+        {/* Three-Nearest-Station Validation */}
+        {neighbors.length > 0 && (
+          <div className="section-card neighbor-validation-card">
+            <div className="card-header-flex">
+              <div className="card-title-group">
+                <Radio className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="card-section-title">NEAREST STATION VALIDATION</span>
+              </div>
+              {neighborVerdict && (
+                <span className={`neighbor-verdict-pill verdict-${neighborVerdict}`}>
+                  {neighborVerdict.replace(/_/g, ' ')}
+                </span>
+              )}
+            </div>
+
+            <div className="neighbor-list">
+              {neighbors.map((n, idx) => (
+                <div key={n.id} className="neighbor-row">
+                  <span className="neighbor-index">N{idx + 1}</span>
+                  <span className="neighbor-id">{n.id}</span>
+                  <span className="neighbor-distance">{n.distanceKm.toFixed(1)} km</span>
+                  <span className={`neighbor-status-dot status-${n.status}`} title={n.status} />
+                </div>
+              ))}
+            </div>
+
+            <div className="neighbor-check-title">VALIDATING NEIGHBOR STATIONS</div>
+            <div className="neighbor-check-list">
+              {neighborChecks.map((check, idx) => (
+                <div
+                  key={check.neighbor.id}
+                  className={`neighbor-check-row ${check.consistent ? 'ok' : 'warn'}`}
+                  style={{ animationDelay: `${idx * 140}ms` }}
+                  title={check.reason}
+                >
+                  {check.consistent ? (
+                    <Check className="w-3 h-3" />
+                  ) : (
+                    <AlertTriangle className="w-3 h-3" />
+                  )}
+                  <span>Neighbor {idx + 1} ({check.neighbor.id})</span>
+                  <span className="neighbor-check-reason">{check.reason}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="neighbor-comparison-table">
+              {neighborComparisons.map((c) => (
+                <div key={c.parameter} className="neighbor-comparison-row">
+                  <span className="cmp-param-label">{c.parameter}</span>
+                  <span className="cmp-param-val">
+                    {c.primaryValue !== null ? `${c.primaryValue.toFixed(1)}${c.unit}` : '--'}
+                  </span>
+                  <span className="cmp-param-arrow">vs</span>
+                  <span className="cmp-param-val neighbor">
+                    {c.neighborAverage !== null ? `${c.neighborAverage.toFixed(1)}${c.unit}` : '--'}
+                  </span>
+                  <span className="cmp-param-delta">
+                    {c.delta !== null ? `Δ ${c.delta > 0 ? '+' : ''}${c.delta.toFixed(1)}${c.unit}` : 'n/a'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="neighbor-validation-note">
+              Quick comparison against the {neighbors.length} nearest station{neighbors.length > 1 ? 's' : ''} by real
+              distance (client-side, informational). See Spatial Consensus (L4) above for the backend's own regional
+              consistency score.
+            </div>
+          </div>
+        )}
 
         {/* 5. Historical Readings & Analytical Graphs (Phase 9-14) */}
         <StationHistoricalGraphs

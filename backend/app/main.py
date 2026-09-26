@@ -16,6 +16,7 @@ from .ingestion.adapter import IngestionAdapter
 from .anomaly.detector import detector
 from .simulation import service as simulation_service
 from .incidents import service as incident_service
+from .layers import lab_service
 
 app = FastAPI(
     title="ATHER Core API",
@@ -223,6 +224,29 @@ def run_simulation(payload: Dict[str, Any]):
     base_station_id = payload.get("base_station_id")
     try:
         return simulation_service.run_simulation(scenario_id, base_station_id=base_station_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER LAYER LAB — Physics (L1) & Multivariate (L3) demonstration.
+# Runs the production layer code on one reading; never touches the live
+# detector's station state (see app/layers/lab_service.py).
+# ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/layers/lab/context")
+def get_layer_lab_context(lat: float, lon: float, timestamp: str):
+    """Regional reference climatology, learned relationship curves and presets for a place and time."""
+    try:
+        return lab_service.context(lat, lon, timestamp)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/layers/lab/analyze")
+def analyze_layer_lab(payload: Dict[str, Any]):
+    """Full Layer 1 physics trace + Layer 3 multivariate trace for one reading."""
+    try:
+        return lab_service.analyze(payload)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

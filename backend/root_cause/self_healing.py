@@ -55,11 +55,18 @@ class SelfHealingImputer:
         is_anomaly: bool,
         affected_channel: Optional[str] = None,
         spatial_consensus: Optional[Dict[str, Optional[float]]] = None,
-        temporal_fallback: Optional[Dict[str, Optional[float]]] = None
+        temporal_fallback: Optional[Dict[str, Optional[float]]] = None,
+        pinn_expected: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Optional[float]]:
         """
         Returns a dict of corrected values for [temperature_c, pressure_hpa, humidity_pct].
         If reading is normal, returns raw values.
+
+        pinn_expected: Layer 1's PINN expected_value dict (see
+        engine/layer1_physics.py PINNPhysicsEngine.evaluate_consistency),
+        used as a physics-informed fallback below spatial consensus and
+        pairwise thermodynamic inversion, ahead of the last-resort temporal
+        carry-forward.
         """
         corrected: Dict[str, Optional[float]] = {
             "temperature_c": reading.temperature_c,
@@ -83,7 +90,11 @@ class SelfHealingImputer:
             if imputed_val is None:
                 imputed_val = self.impute_from_physics(reading, ch)
 
-            # Priority 3: Temporal historical fallback
+            # Priority 3: PINN physics-informed reconstruction
+            if imputed_val is None and pinn_expected is not None and pinn_expected.get(ch) is not None:
+                imputed_val = pinn_expected[ch]
+
+            # Priority 4: Temporal historical fallback
             if imputed_val is None and temporal_fallback is not None and temporal_fallback.get(ch) is not None:
                 imputed_val = temporal_fallback[ch]
 

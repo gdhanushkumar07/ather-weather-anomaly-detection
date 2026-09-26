@@ -1,5 +1,5 @@
 import React from 'react';
-import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Filter } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Filter, Globe } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
@@ -13,6 +13,8 @@ interface LayerControlsProps {
   onToggleAnomalyOverlay: () => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
 }
 
 /**
@@ -33,7 +35,9 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
   showAnomalyOverlay,
   onToggleAnomalyOverlay,
   statusFilter,
-  onSetStatusFilter
+  onSetStatusFilter,
+  isGlobeMode = false,
+  onToggleGlobeMode
 }) => {
   if (!isOpen) return null;
 
@@ -45,6 +49,30 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* 3D Earth Globe Mode Toggle */}
+      {onToggleGlobeMode && (
+        <div className="control-group-card">
+          <div className="control-group-header">
+            <span>PROJECTION VIEW</span>
+          </div>
+          <div
+            className={`aws-station-toggle ${isGlobeMode ? 'active' : ''}`}
+            onClick={onToggleGlobeMode}
+            title="Toggle 3D Interactive Satellite Earth Globe"
+            style={{ borderColor: isGlobeMode ? 'rgba(0,229,255,0.4)' : undefined }}
+          >
+            <div className="aws-toggle-left">
+              <span className={`aws-status-dot ${isGlobeMode ? 'active' : ''}`} />
+              <span className="aws-status-text">3D SATELLITE GLOBE</span>
+            </div>
+            <div className="aws-toggle-right">
+              <span className="aws-state-badge">{isGlobeMode ? '(3D)' : '(2D)'}</span>
+              <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-cyan-400' : ''}`} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Group 1: Map Layers — the three parameter visualizations (mutually exclusive). */}
       <div className="control-group-card">

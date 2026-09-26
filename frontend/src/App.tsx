@@ -11,6 +11,8 @@ import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
 import { Workspace } from './types/workspace';
 import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary, fetchActiveIncidentCounts } from './services/api';
 import { HomePage } from './pages/HomePage';
+import { findNearestStations, AWSNeighbor } from './aws/awsGeo';
+import { LayerLabWorkspace } from './workspaces/LayerLabWorkspace';
 
 /**
  * Maps browser path to Workspace
@@ -22,6 +24,7 @@ function getWorkspaceFromPath(): Workspace {
   if (path === '/anomalies' || path === '/incidents') return 'anomalies';
   if (path === '/health') return 'health';
   if (path === '/testlab' || path === '/test-lab') return 'testlab';
+  if (path === '/layers' || path === '/layer-lab') return 'layers';
   if (path === '/station') return 'station';
   // Default root '/' is the marketing & product homepage
   return 'home';
@@ -35,6 +38,7 @@ function getPathForWorkspace(ws: Workspace): string {
     case 'anomalies': return '/anomalies';
     case 'health': return '/health';
     case 'testlab': return '/test-lab';
+    case 'layers': return '/layer-lab';
     case 'station': return '/station';
     default: return '/';
   }
@@ -61,6 +65,8 @@ export const App: React.FC = () => {
   const [activeIncidentCounts, setActiveIncidentCounts] = useState<Record<string, number> | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
+  const [isGlobeMode, setIsGlobeMode] = useState<boolean>(false);
+  const [neighbors, setNeighbors] = useState<AWSNeighbor[]>([]);
   const [showAnomalyOverlay, setShowAnomalyOverlay] = useState(true);
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
@@ -116,6 +122,25 @@ export const App: React.FC = () => {
     loadSummary();
     loadActiveIncidentCounts();
   }, [statusFilter]);
+
+  // Real nearest-3-neighbor computation (Haversine over actual station
+  // coordinates already in stationsGeoJSON) -- single source of truth,
+  // shared by the map's connection lines and the station panel below.
+  useEffect(() => {
+    if (!selectedStation || !stationsGeoJSON) {
+      setNeighbors([]);
+      return;
+    }
+    setNeighbors(
+      findNearestStations(
+        selectedStation.id,
+        selectedStation.latitude,
+        selectedStation.longitude,
+        stationsGeoJSON.features,
+        3
+      )
+    );
+  }, [selectedStation?.id, selectedStation?.latitude, selectedStation?.longitude, stationsGeoJSON]);
 
   const loadActiveIncidentCounts = async () => {
     try {
@@ -216,6 +241,8 @@ export const App: React.FC = () => {
             onSelectStation={handleSelectStation}
             activeWorkspace={workspace}
             onNavigate={handleNavigate}
+            isGlobeMode={isGlobeMode}
+            onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
           />
 
           <main className="ather-workspace-content">
@@ -244,6 +271,9 @@ export const App: React.FC = () => {
                 onToggleAnomalyOverlay={() => setShowAnomalyOverlay((v) => !v)}
                 statusFilter={statusFilter}
                 onSetStatusFilter={setStatusFilter}
+                isGlobeMode={isGlobeMode}
+                onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
+                neighbors={neighbors}
               />
             </div>
 
@@ -265,6 +295,7 @@ export const App: React.FC = () => {
               variant="page"
               station={selectedStation}
               onClose={handleBackToMap}
+              neighbors={neighbors}
             />
           ) : (
             <div className="workspace-empty-redirect">
@@ -280,6 +311,10 @@ export const App: React.FC = () => {
 
         {workspace === 'health' && (
           <SensorHealthWorkspace summary={summary} onViewStation={handleSelectStation} />
+        )}
+
+        {workspace === 'layers' && (
+          <LayerLabWorkspace stationsGeoJSON={stationsGeoJSON} />
         )}
 
         {workspace === 'testlab' && (
@@ -300,3 +335,5 @@ export const App: React.FC = () => {
 </div>
 );
 };
+export default App;
+

@@ -1,4 +1,5 @@
 import { Station, ObservationHistory, AnomaliesSummary, OpenMeteoWeather } from '../types/weather';
+import type { LabContext, LabAnalysis, LabReadingInput } from '../types/layerLab';
 
 const API_BASE = '/api';
 
@@ -153,5 +154,26 @@ export const dismissIncident = (incidentId: string, dismissalReason: string, act
 export async function fetchEscalationPreview(incidentId: string) {
   const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/escalation-preview`);
   if (!res.ok) throw new Error(`Failed to fetch escalation preview for ${incidentId}: ${res.statusText}`);
+  return res.json();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Layer Lab — Physics (L1) & Multivariate (L3) demonstration
+// ─────────────────────────────────────────────────────────────────
+
+export async function fetchLayerLabContext(lat: number, lon: number, timestamp: string): Promise<LabContext> {
+  const q = new URLSearchParams({ lat: String(lat), lon: String(lon), timestamp });
+  const res = await fetch(`${API_BASE}/layers/lab/context?${q.toString()}`);
+  if (!res.ok) throw new Error(`Layer Lab context failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function analyzeLayerLab(input: LabReadingInput): Promise<LabAnalysis> {
+  const res = await fetch(`${API_BASE}/layers/lab/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(`Layer Lab analysis failed: ${res.statusText}`);
   return res.json();
 }

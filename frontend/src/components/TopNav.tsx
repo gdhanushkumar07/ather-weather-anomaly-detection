@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, Map as MapIcon, ShieldAlert, HeartPulse, FlaskConical, Radio, ArrowUpRight } from 'lucide-react';
+import { Search, Activity, Map as MapIcon, ShieldAlert, HeartPulse, FlaskConical, Radio, ArrowUpRight, Globe, Atom } from 'lucide-react';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
 import { Workspace } from '../types/workspace';
@@ -14,6 +14,8 @@ interface TopNavProps {
   onSelectStation: (stationId: string) => void;
   activeWorkspace: Workspace;
   onNavigate: (workspace: Workspace) => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
 }
 
 const WORKSPACE_TABS: { id: Workspace; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -21,6 +23,7 @@ const WORKSPACE_TABS: { id: Workspace; label: string; icon: React.ComponentType<
   { id: 'map', label: 'Map', icon: MapIcon },
   { id: 'anomalies', label: 'Anomalies', icon: ShieldAlert },
   { id: 'health', label: 'Sensor Health', icon: HeartPulse },
+  { id: 'layers', label: 'Layer Lab', icon: Atom },
   { id: 'testlab', label: 'Test Lab', icon: FlaskConical },
 ];
 
@@ -29,7 +32,9 @@ export const TopNav: React.FC<TopNavProps> = ({
   activeIncidentCounts,
   onSelectStation,
   activeWorkspace,
-  onNavigate
+  onNavigate,
+  isGlobeMode = false,
+  onToggleGlobeMode
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -156,6 +161,18 @@ export const TopNav: React.FC<TopNavProps> = ({
             ) : null}
           </button>
         ))}
+
+        {onToggleGlobeMode && (
+          <button
+            className={`nav-section-btn workspace-tab-btn ${isGlobeMode ? 'active' : ''}`}
+            onClick={onToggleGlobeMode}
+            title={isGlobeMode ? "Exit 3D Globe to Map" : "Open 3D Satellite Globe"}
+            style={{ borderColor: isGlobeMode ? '#00e5ff' : undefined }}
+          >
+            <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-cyan-300 animate-pulse' : 'text-slate-400'}`} />
+            <span style={{ color: isGlobeMode ? '#00e5ff' : undefined }}>3D Globe</span>
+          </button>
+        )}
       </nav>
 
       {/* Live Telemetry KPI Strip — read-only network snapshot, always visible

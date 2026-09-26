@@ -12,5 +12,19 @@ export default defineConfig({
         changeOrigin: true,
       }
     }
+  },
+  // `npm run build && npm run preview` serves the production build with the
+  // same backend proxy (useful for demos: no on-the-fly dependency optimization).
+  preview: {
+    port: 3000,
+    host: true,
+    // Allow access through Tailscale Serve/Funnel (https://<machine>.<tailnet>.ts.net).
+    allowedHosts: ['.ts.net'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      }
+    }
   }
 });

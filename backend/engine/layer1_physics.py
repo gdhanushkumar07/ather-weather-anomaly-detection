@@ -1,5 +1,5 @@
 """
-Layer 1: Physics Validation Engine.
+Layer 1: Physics Intelligence Engine.
 
 CORRECTNESS RULES (v2):
   - NEVER flag a missing or zero-substituted value as a physics veto.
@@ -7,13 +7,38 @@ CORRECTNESS RULES (v2):
   - OUT_OF_RANGE values (e.g. humidity = 105%) ARE flagged — they are real but impossible.
   - Returns structured LayerResult with evidence traceability.
 
-Physics checks performed (on VALID channels only):
-  1. Hard bounds:  temperature, pressure, humidity, wind
-  2. Dew point thermodynamic impossibility (T_dew > T_amb)
-  3. Wet-bulb survivability limit (T_wb > 35°C)
-  4. Hypsometric barometric altitude consistency
+Two complementary sub-systems, both living in this one module:
+
+  A. Physics-based rules (MetPy + closed-form atmospheric equations), with
+     VETO authority — fire on unambiguous, deterministic violations:
+       1. Hard bounds:  temperature, pressure, humidity, wind
+       2. Dew point thermodynamic impossibility (T_dew > T_amb)
+       3. Wet-bulb survivability limit (T_wb > 35°C)
+       4. Hypsometric barometric altitude consistency
+
+  B. Physics-Informed Neural Network (PINN) — a small denoising autoencoder
+     over (temperature, pressure, humidity, altitude), trained offline
+     (see train_pinn.py) with Total Loss = Data Loss + lambda * Physics Loss,
+     where the physics loss penalizes the network's OWN reconstruction for
+     breaking the same laws the rules above enforce (dew point <=
+     temperature, hypsometric pressure-altitude consistency, RH in [0,100]).
+     It only runs on readings that already passed every check in (A), and
+     contributes:
+       - expected_value / physics_residual per channel (comparing the
+         observation to the network's reconstruction) — usable directly for
+         self-healing imputation even when no anomaly is flagged.
+       - a smooth, capped physics_score contribution for combinations that
+         are individually in-range but jointly atypical (a graded signal
+         under the hard-veto thresholds, rather than a binary cutoff).
+
+Output (per evaluate() call, in `detail`): physics_score, physics_reason,
+expected_value, physics_residual — alongside the existing
+channels_evaluated/evidence fields the rest of the engine already relies on.
 """
-from typing import Dict, Optional, Tuple, Any
+import json
+import os
+from typing import Dict, List, Optional, Tuple, Any
+
 import numpy as np
 
 try:
@@ -23,7 +48,14 @@ try:
 except ImportError:
     METPY_AVAILABLE = False
 
-from config import CONFIG, PhysicsThresholds
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+from config import CONFIG, PhysicsThresholds, PINNThresholds
 from schema import AWSReading, DataQuality
 
 
@@ -41,14 +73,277 @@ def _make_result(
     veto: bool,
     reason: Optional[str],
     channels_evaluated: list,
-    evidence: Optional[Dict[str, Any]] = None
+    evidence: Optional[Dict[str, Any]] = None,
+    expected_value: Optional[Dict[str, float]] = None,
+    physics_residual: Optional[Dict[str, float]] = None,
 ) -> Tuple[float, bool, Optional[str], Dict[str, Any]]:
-    """Returns the standardized Layer 1 result tuple."""
+    """
+    Returns the standardized Layer 1 result tuple. `detail` always carries the
+    physics_score/physics_reason/expected_value/physics_residual keys called
+    for by the Layer 1 spec, in addition to the existing channels_evaluated/
+    evidence fields other code already relies on.
+    """
     return score, veto, reason, {
         "channels_evaluated": channels_evaluated,
         "evidence": evidence or {},
+        "physics_score": round(float(score), 3),
+        "physics_reason": reason,
+        "expected_value": expected_value or {},
+        "physics_residual": physics_residual or {},
     }
 
+
+# ═════════════════════════════════════════════════════════════════════════
+# B. Physics-Informed Neural Network
+#
+# Kept inside this module (rather than a separate package) so the whole
+# Layer 1 story — rules + MetPy + PINN — lives in one file. train_pinn.py
+# imports PhysicsInformedNet/magnus_dewpoint_torch/hypsometric_pressure_torch
+# from here to train offline; nothing at runtime needs to know it exists.
+# ═════════════════════════════════════════════════════════════════════════
+
+PINN_CHANNELS: List[str] = ["temperature_c", "pressure_hpa", "humidity_pct"]
+PINN_ARTIFACTS_DIR = os.path.join(os.path.dirname(__file__), "pinn_artifacts")
+PINN_WEIGHTS_PATH = os.path.join(PINN_ARTIFACTS_DIR, "pinn_weights.pt")
+PINN_NORM_STATS_PATH = os.path.join(PINN_ARTIFACTS_DIR, "norm_stats.json")
+
+# Same Magnus-Tetens constants as _fallback_dewpoint() above, so the PINN's
+# physics loss enforces exactly the same dew-point law the rules check.
+_MAGNUS_A = 17.27
+_MAGNUS_B = 237.7
+
+
+if TORCH_AVAILABLE:
+    class PhysicsInformedNet(nn.Module):
+        """
+        Input (7): [T_norm, P_norm, RH_norm, alt_norm, mask_T, mask_P, mask_RH]
+        Output (3): [T_hat_norm, P_hat_norm, RH_hat_norm]
+
+        The 4-unit bottleneck is deliberately undercomplete relative to the
+        7-dim input so the network cannot trivially copy its input through —
+        it must prioritize physically-plausible, densely-populated regions of
+        training data, which is what gives reconstruction error meaning as a
+        joint-plausibility signal.
+        """
+        def __init__(self, hidden: int = 16, bottleneck: int = 4):
+            super().__init__()
+            self.encoder = nn.Sequential(
+                nn.Linear(7, hidden), nn.Tanh(),
+                nn.Linear(hidden, bottleneck), nn.Tanh(),
+            )
+            self.decoder = nn.Sequential(
+                nn.Linear(bottleneck, hidden), nn.Tanh(),
+                nn.Linear(hidden, 3),
+            )
+
+        def forward(self, x):
+            return self.decoder(self.encoder(x))
+
+    def magnus_dewpoint_torch(temp_c: "torch.Tensor", rh_pct: "torch.Tensor") -> "torch.Tensor":
+        """Differentiable Magnus-Tetens dew point, same constants as _fallback_dewpoint()."""
+        safe_rh = torch.clamp(rh_pct, min=0.5, max=100.0)
+        alpha = (_MAGNUS_A * temp_c) / (_MAGNUS_B + temp_c) + torch.log(safe_rh / 100.0)
+        # Guard the denominator away from zero to keep training numerically stable
+        # for wildly out-of-distribution intermediate predictions.
+        denom = torch.clamp(_MAGNUS_A - alpha, min=1e-3)
+        return (_MAGNUS_B * alpha) / denom
+
+    def hypsometric_pressure_torch(temp_c: "torch.Tensor", altitude_m: "torch.Tensor",
+                                    sea_level_hpa: float, lapse_rate: float,
+                                    sea_level_k: float, gravity: float, gas_const: float) -> "torch.Tensor":
+        """Differentiable standard-atmosphere barometric formula, same constants as section 6 above."""
+        exponent = gravity / (gas_const * lapse_rate)
+        base = torch.clamp(1.0 - (lapse_rate * altitude_m) / sea_level_k, min=1e-3)
+        return sea_level_hpa * torch.pow(base, exponent)
+else:
+    PhysicsInformedNet = None  # torch unavailable — PINNPhysicsEngine below stays in fallback mode
+
+
+class PINNPhysicsEngine:
+    """
+    Inference-time wrapper: loads pretrained weights + normalization stats
+    once, then serves reconstruction / consistency-scoring calls used by
+    PhysicsValidationLayer.evaluate(). Never raises — every public method
+    degrades to a "no opinion" return (None / 0.0 score) if torch or the
+    trained artifacts are unavailable (same degrade-gracefully pattern as
+    METPY_AVAILABLE above).
+    """
+
+    def __init__(self, weights_path: str = PINN_WEIGHTS_PATH, norm_path: str = PINN_NORM_STATS_PATH):
+        self.available = False
+        self.model = None
+        self.norm: Optional[Dict[str, Dict[str, float]]] = None
+
+        if not TORCH_AVAILABLE:
+            return
+        if not (os.path.isfile(weights_path) and os.path.isfile(norm_path)):
+            return
+        try:
+            with open(norm_path, "r") as f:
+                self.norm = json.load(f)
+            model = PhysicsInformedNet()
+            state = torch.load(weights_path, map_location="cpu")
+            model.load_state_dict(state)
+            model.eval()
+            self.model = model
+            self.available = True
+        except Exception:
+            self.available = False
+            self.model = None
+            self.norm = None
+
+    def _normalize(self, channel: str, value: float) -> float:
+        stats = self.norm[channel]
+        return (value - stats["mean"]) / max(1e-6, stats["std"])
+
+    def _denormalize(self, channel: str, value: float) -> float:
+        stats = self.norm[channel]
+        return value * stats["std"] + stats["mean"]
+
+    def _forward(
+        self,
+        temperature_c: Optional[float],
+        pressure_hpa: Optional[float],
+        humidity_pct: Optional[float],
+        elevation_m: float,
+    ) -> Optional[Dict[str, float]]:
+        if not self.available:
+            return None
+        try:
+            raw = {"temperature_c": temperature_c, "pressure_hpa": pressure_hpa, "humidity_pct": humidity_pct}
+            feats, masks = [], []
+            for ch in PINN_CHANNELS:
+                v = raw[ch]
+                if v is None:
+                    feats.append(0.0)
+                    masks.append(0.0)
+                else:
+                    feats.append(self._normalize(ch, float(v)))
+                    masks.append(1.0)
+            alt_norm = self._normalize("elevation_m", float(elevation_m) if elevation_m is not None else 0.0)
+
+            x = torch.tensor([feats + [alt_norm] + masks], dtype=torch.float32)
+            with torch.no_grad():
+                out = self.model(x)[0].tolist()
+            return {
+                "temperature_c": self._denormalize("temperature_c", out[0]),
+                "pressure_hpa": self._denormalize("pressure_hpa", out[1]),
+                "humidity_pct": self._denormalize("humidity_pct", out[2]),
+            }
+        except Exception:
+            return None
+
+    def reconstruct_all(
+        self, temperature_c: Optional[float], pressure_hpa: Optional[float],
+        humidity_pct: Optional[float], elevation_m: float,
+    ) -> Optional[Dict[str, float]]:
+        """Reconstructs (T, P, RH) using every channel that is actually present."""
+        return self._forward(temperature_c, pressure_hpa, humidity_pct, elevation_m)
+
+    def leave_one_out_expected(
+        self, temperature_c: Optional[float], pressure_hpa: Optional[float],
+        humidity_pct: Optional[float], elevation_m: float, channel: str,
+    ) -> Optional[float]:
+        """
+        Estimates `channel` using ONLY the other channels + altitude (masks
+        `channel` out even if a value is supplied) — the self-healing
+        "expected value if this sensor were faulty/missing" estimate.
+        """
+        if channel not in PINN_CHANNELS:
+            return None
+        raw = {"temperature_c": temperature_c, "pressure_hpa": pressure_hpa, "humidity_pct": humidity_pct}
+        raw[channel] = None
+        result = self._forward(raw["temperature_c"], raw["pressure_hpa"], raw["humidity_pct"], elevation_m)
+        return result[channel] if result else None
+
+    def evaluate_consistency(
+        self,
+        temperature_c: Optional[float],
+        pressure_hpa: Optional[float],
+        humidity_pct: Optional[float],
+        elevation_m: float,
+        valid_channels: List[str],
+        cfg: PINNThresholds,
+    ) -> Tuple[float, Optional[str], Dict[str, float], Dict[str, float]]:
+        """
+        Compares each VALID channel's observed value to the autoencoder's
+        full reconstruction (all currently-valid channels visible). Returns
+        a conservative, capped soft score — this check runs only on readings
+        that already passed every hard veto/threshold in
+        PhysicsValidationLayer, so it is deliberately a secondary,
+        corroborating signal rather than a primary detector.
+
+        Returns: (score, reason, expected_value_by_channel, residual_by_channel)
+        """
+        empty: Dict[str, float] = {}
+        if not self.available or len(valid_channels) < 2:
+            return 0.0, None, empty, empty
+
+        recon = self.reconstruct_all(temperature_c, pressure_hpa, humidity_pct, elevation_m)
+        if recon is None:
+            return 0.0, None, empty, empty
+
+        raw = {"temperature_c": temperature_c, "pressure_hpa": pressure_hpa, "humidity_pct": humidity_pct}
+        tolerance_abs = {
+            "temperature_c": cfg.temp_consistency_tolerance_c,
+            "humidity_pct": cfg.humidity_consistency_tolerance_pct,
+        }
+
+        expected: Dict[str, float] = {}
+        residual: Dict[str, float] = {}
+        worst_z, worst_channel = 0.0, None
+
+        for ch in valid_channels:
+            observed = raw.get(ch)
+            if observed is None:
+                continue
+            exp_val = recon[ch]
+            expected[ch] = round(float(exp_val), 3)
+            resid = float(observed) - exp_val
+            residual[ch] = round(resid, 3)
+
+            if ch == "pressure_hpa":
+                # Relative tolerance — matches the rule layer's percentage-based
+                # hypsometric check rather than a flat hPa band.
+                tol = max(1e-3, abs(exp_val)) * (cfg.pressure_consistency_tolerance_pct / 100.0)
+            else:
+                tol = tolerance_abs[ch]
+
+            z = abs(resid) / max(1e-6, tol)
+            if z > worst_z:
+                worst_z, worst_channel = z, ch
+
+        if worst_channel is None:
+            return 0.0, None, expected, residual
+
+        ramp_span = max(1e-6, cfg.score_ramp_saturate_z - cfg.score_ramp_start_z)
+        score = float(np.clip((worst_z - cfg.score_ramp_start_z) / ramp_span, 0.0, 1.0)) * cfg.max_score_contribution
+
+        reason = None
+        if score > 0.0:
+            reason = (
+                f"PINN joint-consistency check: {worst_channel} observed "
+                f"{raw[worst_channel]:.2f} deviates {residual[worst_channel]:+.2f} from the "
+                f"autoencoder's physics-regularized reconstruction {expected[worst_channel]:.2f} "
+                f"given the other channels and altitude"
+            )
+        return score, reason, expected, residual
+
+
+# Process-wide singleton — weights are loaded once, not per-reading.
+_pinn_engine_singleton: Optional[PINNPhysicsEngine] = None
+
+
+def get_pinn_engine() -> PINNPhysicsEngine:
+    global _pinn_engine_singleton
+    if _pinn_engine_singleton is None:
+        _pinn_engine_singleton = PINNPhysicsEngine()
+    return _pinn_engine_singleton
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# A. Physics Validation Layer (rules + MetPy) + B. PINN integration
+# ═════════════════════════════════════════════════════════════════════════
 
 class PhysicsValidationLayer:
     """
@@ -62,8 +357,10 @@ class PhysicsValidationLayer:
       - The channel is ZERO_SUBSTITUTED (0.0 treated as missing)
       - The channel is INVALID
     """
-    def __init__(self, config: PhysicsThresholds = CONFIG.physics):
+    def __init__(self, config: PhysicsThresholds = CONFIG.physics, pinn_config: PINNThresholds = CONFIG.pinn):
         self.cfg = config
+        self.pinn_cfg = pinn_config
+        self.pinn = get_pinn_engine()
 
     def evaluate(self, reading: AWSReading) -> Tuple[float, bool, Optional[str], Dict[str, Any]]:
         """
@@ -209,13 +506,38 @@ class PhysicsValidationLayer:
             except Exception:
                 pass
 
+        # ── 7. PINN Joint-Consistency Check (soft, secondary signal) ────────
+        # Only reached once every hard veto/threshold above has already
+        # passed. Supplies expected_value/physics_residual (self-healing
+        # input) unconditionally, and contributes a capped soft score only
+        # for combinations that drift far enough from the autoencoder's
+        # physics-regularized reconstruction to be worth flagging.
+        expected_value: Dict[str, float] = {}
+        physics_residual: Dict[str, float] = {}
+        if self.pinn_cfg.enabled and self.pinn.available:
+            valid_channels = [
+                ch for ch, val in (
+                    ("temperature_c", temp_c), ("pressure_hpa", press_hpa), ("humidity_pct", rh_pct)
+                ) if channel_evaluable(ch) and val is not None
+            ]
+            try:
+                pinn_score, pinn_reason, expected_value, physics_residual = self.pinn.evaluate_consistency(
+                    temp_c, press_hpa, rh_pct, elev_m, valid_channels, self.pinn_cfg
+                )
+                if pinn_score > 0.0:
+                    scores_and_reasons.append((pinn_score, pinn_reason))
+            except Exception:
+                pass
+
         # ── Aggregate soft violations ──────────────────────────────────────
         if scores_and_reasons:
             max_score  = max(s for s, _ in scores_and_reasons)
             max_reason = max(scores_and_reasons, key=lambda x: x[0])[1]
             return _make_result(
                 max_score, False, max_reason, channels_evaluated,
-                {"soft_violations": [r for _, r in scores_and_reasons]}
+                {"soft_violations": [r for _, r in scores_and_reasons]},
+                expected_value=expected_value,
+                physics_residual=physics_residual,
             )
 
         # All checks passed or skipped due to missing data
@@ -225,4 +547,117 @@ class PhysicsValidationLayer:
         ]
         skipped_note = f" Skipped channels (missing data): {skipped}" if skipped else ""
         return _make_result(0.0, False, None, channels_evaluated,
-                            {"note": f"All physics checks passed.{skipped_note}"})
+                            {"note": f"All physics checks passed.{skipped_note}"},
+                            expected_value=expected_value,
+                            physics_residual=physics_residual)
+
+    def explain(self, reading: AWSReading) -> Dict[str, Any]:
+        """
+        Read-only, non-short-circuiting trace of EVERY physics check for one
+        reading — for demonstration/UI. evaluate() stops at the first veto;
+        this reports each check's inputs, limit and outcome side by side, using
+        the same thresholds (self.cfg / self.pinn_cfg) and formulas. The
+        authoritative verdict is evaluate()'s, included as `verdict`.
+        Never used by the detection pipeline.
+        """
+        score, veto, reason, detail = self.evaluate(reading)
+        cfg, pcfg = self.cfg, self.pinn_cfg
+        t, p, rh = reading.temperature_c, reading.pressure_hpa, reading.humidity_pct
+        elev = reading.elevation_m if reading.elevation_m is not None else 0.0
+        ok = lambda ch: reading.data_quality.get(ch) in (DataQuality.VALID, DataQuality.OUT_OF_RANGE)
+        checks: List[Dict[str, Any]] = []
+
+        def add(cid, name, principle, status, **values):
+            checks.append({"id": cid, "name": name, "principle": principle, "status": status, **values})
+
+        for cid, ch, v, lo, hi, unit, label in (
+            ("humidity_range", "humidity_pct", rh, cfg.humidity_min_pct, cfg.humidity_max_pct, "%", "Relative humidity"),
+            ("temperature_range", "temperature_c", t, cfg.temp_min_c, cfg.temp_max_c, "°C", "Air temperature"),
+            ("pressure_range", "pressure_hpa", p, cfg.pressure_min_hpa, cfg.pressure_max_hpa, "hPa", "Barometric pressure"),
+        ):
+            if not ok(ch) or v is None:
+                add(cid, f"{label} within physical bounds", "Hard sensor/terrestrial limits", "skipped",
+                    note="channel missing or invalid")
+            else:
+                add(cid, f"{label} within physical bounds", "Hard sensor/terrestrial limits",
+                    "pass" if lo <= v <= hi else "veto", value=v, lower=lo, upper=hi, unit=unit)
+
+        dew = None
+        bounds_failed = any(c["status"] == "veto" for c in checks)
+        if bounds_failed:
+            for cid, name in (("dew_point", "Dew point cannot exceed air temperature"),
+                              ("wet_bulb", "Wet-bulb temperature within survivability limit")):
+                add(cid, name, "Psychrometric check", "skipped",
+                    note="not meaningful — an input already violates its physical bounds")
+        elif ok("temperature_c") and ok("humidity_pct") and t is not None and rh is not None:
+            safe_rh = max(0.5, min(100.0, rh))
+            try:
+                dew = (mpcalc.dewpoint_from_relative_humidity(t * metpy_units.degC, safe_rh * metpy_units.percent)
+                       .to("degC").magnitude if METPY_AVAILABLE else _fallback_dewpoint(t, safe_rh))
+            except Exception:
+                dew = _fallback_dewpoint(t, safe_rh)
+            dew = float(reading.dew_point_c) if reading.dew_point_c is not None else float(dew)
+            add("dew_point", "Dew point cannot exceed air temperature", "Psychrometrics: Td ≤ T (saturation limit)",
+                "pass" if dew <= t + cfg.dew_point_margin_c else "veto",
+                value=round(dew, 2), limit=round(t + cfg.dew_point_margin_c, 2), unit="°C")
+        else:
+            add("dew_point", "Dew point cannot exceed air temperature", "Psychrometrics: Td ≤ T", "skipped",
+                note="needs valid temperature and humidity")
+
+        if bounds_failed:
+            pass
+        elif dew is not None and dew > t + cfg.dew_point_margin_c:
+            add("wet_bulb", "Wet-bulb temperature within survivability limit", "Wet-bulb ≤ 35 °C", "skipped",
+                note="not meaningful — the dew point is already physically impossible")
+        elif dew is not None and p is not None and ok("pressure_hpa") and METPY_AVAILABLE:
+            try:
+                wb = float(mpcalc.wet_bulb_temperature(p * metpy_units.hPa, t * metpy_units.degC,
+                                                       dew * metpy_units.degC).to("degC").magnitude)
+                add("wet_bulb", "Wet-bulb temperature within survivability limit",
+                    "Wet-bulb ≤ 35 °C (human/physical survivability ceiling)",
+                    "pass" if wb <= cfg.max_wet_bulb_c else "veto", value=round(wb, 2), limit=cfg.max_wet_bulb_c, unit="°C")
+            except Exception:
+                add("wet_bulb", "Wet-bulb temperature within survivability limit", "Wet-bulb ≤ 35 °C", "skipped",
+                    note="wet-bulb computation failed")
+        else:
+            add("wet_bulb", "Wet-bulb temperature within survivability limit", "Wet-bulb ≤ 35 °C", "skipped",
+                note="needs valid T, RH, P (and MetPy)")
+
+        if ok("pressure_hpa") and p is not None and elev > 50:
+            expected = cfg.sea_level_pressure_hpa * ((1.0 - (cfg.temp_lapse_rate * elev) / cfg.sea_level_temp_k)
+                                                     ** (cfg.gravity / (cfg.gas_constant * cfg.temp_lapse_rate)))
+            dev = abs(p - expected) / expected * 100.0
+            add("hypsometric", "Pressure consistent with station altitude",
+                "Hypsometric equation (standard atmosphere)",
+                "pass" if dev <= cfg.max_pressure_altitude_error_pct else "warn",
+                value=round(p, 1), expected=round(expected, 1), deviation_pct=round(dev, 2),
+                tolerance_pct=cfg.max_pressure_altitude_error_pct, elevation_m=elev, unit="hPa")
+        else:
+            add("hypsometric", "Pressure consistent with station altitude", "Hypsometric equation", "skipped",
+                note="station elevation ≤ 50 m or pressure missing — altitude check not informative")
+
+        pinn = {"available": bool(pcfg.enabled and self.pinn.available)}
+        if pinn["available"] and not veto:
+            valid = [ch for ch, v in (("temperature_c", t), ("pressure_hpa", p), ("humidity_pct", rh))
+                     if ok(ch) and v is not None]
+            ps, pr, exp_v, resid = self.pinn.evaluate_consistency(t, p, rh, elev, valid, pcfg)
+            tol = {"temperature_c": pcfg.temp_consistency_tolerance_c,
+                   "humidity_pct": pcfg.humidity_consistency_tolerance_pct}
+            channels = []
+            for ch, e in exp_v.items():
+                obs = {"temperature_c": t, "pressure_hpa": p, "humidity_pct": rh}[ch]
+                tl = abs(e) * pcfg.pressure_consistency_tolerance_pct / 100.0 if ch == "pressure_hpa" else tol[ch]
+                channels.append({"channel": ch, "observed": obs, "expected": e, "residual": resid.get(ch),
+                                 "tolerance": round(tl, 3), "z": round(abs(resid.get(ch, 0.0)) / max(tl, 1e-6), 2)})
+            pinn.update({"score": round(ps, 3), "reason": pr, "channels": channels,
+                         "flag_starts_at_z": pcfg.score_ramp_start_z, "saturates_at_z": pcfg.score_ramp_saturate_z,
+                         "max_score": pcfg.max_score_contribution})
+            add("pinn", "PINN joint physics consistency",
+                "Physics-informed autoencoder: reconstruction vs observation",
+                "pass" if ps == 0.0 else "warn", value=round(ps, 3))
+        else:
+            add("pinn", "PINN joint physics consistency", "Physics-informed autoencoder", "skipped",
+                note="PINN not trained" if not pinn["available"] else "not run after a hard veto")
+
+        return {"verdict": {"score": round(float(score), 3), "veto": bool(veto), "reason": reason},
+                "checks": checks, "pinn": pinn, "elevation_m": elev}

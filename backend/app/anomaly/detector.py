@@ -118,7 +118,10 @@ class AnomalyDetector:
         score_l2, ch_scores_l2, reason_l2, detail_l2 = self.layer2.evaluate(reading)
 
         # ── 3. Layer 3: Multivariate Consistency (Joint State Manifold) ──
-        score_l3, reason_l3, detail_l3 = self.layer3.evaluate(reading)
+        # Readings Layer 1/2 already find suspicious are scored but never
+        # learned as "normal" by Layer 3's station models.
+        upstream_suspect = bool(veto_fired or score_l1 > 0.7 or score_l2 > 0.7)
+        score_l3, reason_l3, detail_l3 = self.layer3.evaluate(reading, upstream_suspect=upstream_suspect)
 
         # ── 4. Layer 4: Spatial Neighbor Consensus (IDW Lapse-rate cross check) ──
         if neighbors is None:
@@ -239,7 +242,8 @@ class AnomalyDetector:
             is_anomaly=is_anomaly,
             affected_channel=affected[0] if affected else None,
             spatial_consensus=spatial_consensus,
-            temporal_fallback=temporal_fallback
+            temporal_fallback=temporal_fallback,
+            pinn_expected=detail_l1.get("expected_value")
         )
 
         # ── 10. Meteorological Weather Analysis (Section 14) ──

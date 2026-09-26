@@ -3,6 +3,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { AtherMap, AtherMapHandle } from '../map/AtherMap';
 import { LayerControls } from '../components/LayerControls';
 import { Station, WeatherLayerType } from '../types/weather';
+import { AWSNeighbor } from '../aws/awsGeo';
 
 interface MapWorkspaceProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
@@ -16,6 +17,9 @@ interface MapWorkspaceProps {
   onToggleAnomalyOverlay: () => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  isGlobeMode: boolean;
+  onToggleGlobeMode: () => void;
+  neighbors: AWSNeighbor[];
   /** Whether this workspace is the one currently visible — forwarded to
    * AtherMap so it knows when to skip its fly-to-station animation and
    * when to re-measure its canvas after becoming visible again. */
@@ -41,6 +45,9 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
   onToggleAnomalyOverlay,
   statusFilter,
   onSetStatusFilter,
+  isGlobeMode,
+  onToggleGlobeMode,
+  neighbors,
   isActive
 }, ref) => {
   const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
@@ -58,6 +65,9 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
         onToggleBasemap={onToggleBasemap}
         showAnomalyOverlay={showAnomalyOverlay}
         isActive={isActive}
+        isGlobeMode={isGlobeMode}
+        onToggleGlobeMode={onToggleGlobeMode}
+        neighbors={neighbors}
       />
 
       {/* Small, always-visible trigger — everything else is on-demand. */}
@@ -82,6 +92,8 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
         onToggleAnomalyOverlay={onToggleAnomalyOverlay}
         statusFilter={statusFilter}
         onSetStatusFilter={onSetStatusFilter}
+        isGlobeMode={isGlobeMode}
+        onToggleGlobeMode={onToggleGlobeMode}
       />
     </div>
   );

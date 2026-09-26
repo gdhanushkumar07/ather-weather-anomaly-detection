@@ -5,4 +5,4 @@
  * 'map', 'overview', 'anomalies', 'health', 'testlab' are operational workspaces.
  * 'station' is the deep diagnostic view for a selected station.
  */
-export type Workspace = 'home' | 'overview' | 'map' | 'station' | 'anomalies' | 'health' | 'testlab';
+export type Workspace = 'home' | 'overview' | 'map' | 'station' | 'anomalies' | 'health' | 'testlab' | 'layers';

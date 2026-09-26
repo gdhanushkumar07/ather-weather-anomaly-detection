@@ -19,6 +19,15 @@ CLASSIFICATION HIERARCHY:
   7. NOISE_BURST            — statistical outlier alone, no spike
   8. SINGLE_CHANNEL_FAULT   — spatial high + physics valid (isolated spatial outlier)
   9. COMMUNICATION_OUTAGE   — all channels null/stale (handled upstream, not here)
+
+PHASE 4 (evidence-aware attribution): the classifier consumes the fusion context
+(layer availability / evidence sufficiency, the persistent-degradation state) and
+the Spatial attribution / counterfactual ("do nearby stations support this
+reading?"). Regional support downgrades a sensor-fault call to LOW and lets a
+weather-like reading be recognised even when Spatial's distance-weighted score
+alone is ambiguous; a NORMAL result reached from little evidence carries a low
+confidence tier; persistent-degradation evidence is a maintenance WARNING
+(CALIBRATION_DRIFT, low/medium certainty), never an acute anomaly.
 """
 from typing import Dict, List, Optional, Any
 from schema import FaultType, DiagnosisConfidence
@@ -28,7 +37,8 @@ class DiagnosisResult:
     """Structured root-cause diagnosis with uncertainty representation."""
     __slots__ = (
         "fault_type", "confidence", "primary_signal",
-        "evidence", "alternatives", "operator_action"
+        "evidence", "alternatives", "operator_action",
+        "spatial_corroboration",
     )
 
     def __init__(
@@ -46,6 +56,10 @@ class DiagnosisResult:
         self.evidence        = evidence
         self.alternatives    = alternatives
         self.operator_action = operator_action
+        # S7: structured S3/S6 corroboration context (evidence states, not
+        # probabilities). None when spatial evidence is unavailable or the
+        # fault type is not a weather-vs-sensor distinction.
+        self.spatial_corroboration = None
 
 
 class RootCauseClassifier:
@@ -65,16 +79,129 @@ class RootCauseClassifier:
         valid_channel_count: int = 0,
     ) -> DiagnosisResult:
         """
+        Public entry point. The fault-type / confidence decision is made by
+        _classify_core (UNCHANGED by S7). This wrapper then ADDS S3
+        (regional attribution) and S6 (counterfactual verification) spatial
+        evidence as corroborating/conflicting context on the result, without
+        altering which category or confidence tier was selected -- so the
+        same spatial neighborhood is never counted twice in the decision.
+        """
+        result = self._classify_core(
+            is_anomaly, layer_scores, veto_fired, channel_scores,
+            spatial_score, reasons, layer_details, valid_channel_count,
+        )
+        return self._attach_spatial_corroboration(result, layer_details or {})
+
+    @staticmethod
+    def _normal_confidence_tier(sufficiency: Optional[float]) -> DiagnosisConfidence:
+        """How sure a NORMAL call is, from how much evidence actually assessed the
+        observation. None (a caller that supplies no fusion context) keeps the
+        legacy HIGH."""
+        if sufficiency is None:
+            return DiagnosisConfidence.HIGH
+        if sufficiency >= 0.75:
+            return DiagnosisConfidence.HIGH
+        if sufficiency >= 0.50:
+            return DiagnosisConfidence.MEDIUM
+        if sufficiency >= 0.30:
+            return DiagnosisConfidence.LOW
+        return DiagnosisConfidence.INSUFFICIENT_DATA
+
+    @staticmethod
+    def _attach_spatial_corroboration(result: DiagnosisResult, layer_details: Dict[str, Any]) -> DiagnosisResult:
+        weather_like = (FaultType.GENUINE_EXTREME_WEATHER, FaultType.POSSIBLE_WEATHER_CHANGE)
+        sensor_like = (FaultType.SENSOR_SPIKE, FaultType.SINGLE_CHANNEL_FAULT)
+        if result.fault_type not in weather_like + sensor_like:
+            return result
+
+        spatial = layer_details.get("spatial") or {}
+        ra = (spatial.get("regional_attribution") or {}).get("classification")
+        cv = (spatial.get("counterfactual_verification") or {}).get("overall_status")
+        if ra is None and cv is None:
+            return result
+
+        regional_signals = (ra == "REGIONAL_EVENT", cv == "SUPPORTED")
+        isolated_signals = (ra == "ISOLATED_SENSOR_ANOMALY", cv == "CONTRADICTED")
+        if result.fault_type in weather_like:
+            agrees, conflicts = any(regional_signals), any(isolated_signals)
+            hypothesis = "genuine regional weather response"
+        else:
+            agrees, conflicts = any(isolated_signals), any(regional_signals)
+            hypothesis = "isolated sensor anomaly"
+
+        if agrees and not conflicts:
+            state, note = "CORROBORATED", f"Spatial evidence (attribution={ra}, counterfactual={cv}) is consistent with a {hypothesis}."
+        elif conflicts and not agrees:
+            state, note = "CONFLICTING", f"Spatial evidence (attribution={ra}, counterfactual={cv}) points AWAY from a {hypothesis}; treat this diagnosis with caution."
+        elif agrees and conflicts:
+            state, note = "MIXED", f"Spatial evidence is mixed (attribution={ra}, counterfactual={cv}); no clear support for a {hypothesis}."
+        else:
+            state, note = "INSUFFICIENT", f"Spatial attribution/counterfactual evidence is inconclusive (attribution={ra}, counterfactual={cv})."
+
+        evidence = list(result.evidence)   # copy: never mutate the shared reasons list
+        evidence.append(note)              # append at END only
+        result.evidence = evidence
+        result.spatial_corroboration = {
+            "state": state, "regional_attribution": ra, "counterfactual_status": cv,
+            "note": "Evidence states, not calibrated probabilities. The category/confidence above already account for this evidence (Phase 4); this block only reports how it lines up.",
+        }
+        return result
+
+    def _classify_core(
+        self,
+        is_anomaly:      bool,
+        layer_scores:    Dict[str, float],
+        veto_fired:      bool,
+        channel_scores:  Dict[str, float],
+        spatial_score:   float,
+        reasons:         List[str],
+        layer_details:   Optional[Dict[str, Any]] = None,
+        valid_channel_count: int = 0,
+    ) -> DiagnosisResult:
+        """
         Classifies anomaly into a fault type with structured evidence.
         """
         layer_details = layer_details or {}
 
+        fusion_ctx     = layer_details.get("fusion") or {}
+        persistent     = fusion_ctx.get("persistent_degradation") or {}
+        pd_state       = persistent.get("state")
+        sufficiency    = fusion_ctx.get("evidence_sufficiency")
+        spatial_detail = layer_details.get("spatial") or {}
+        ra = (spatial_detail.get("regional_attribution") or {}).get("classification")
+        cf = (spatial_detail.get("counterfactual_verification") or {}).get("overall_status")
+        regional_support  = (ra == "REGIONAL_EVENT") or (cf == "SUPPORTED")
+        isolated_evidence = (ra == "ISOLATED_SENSOR_ANOMALY") or (cf == "CONTRADICTED")
+
         if not is_anomaly:
+            if pd_state in ("CORROBORATED_BY_SPATIAL", "UNCORROBORATED"):
+                corroborated = pd_state == "CORROBORATED_BY_SPATIAL"
+                return DiagnosisResult(
+                    fault_type      = FaultType.CALIBRATION_DRIFT,
+                    confidence      = DiagnosisConfidence.MEDIUM if corroborated else DiagnosisConfidence.LOW,
+                    primary_signal  = "Sustained change in the sensor's own behavior (possible calibration drift)",
+                    evidence        = list(reasons) + [persistent.get("note", "")],
+                    alternatives    = [
+                        "Natural weather variation (drift is measured against the sensor's own recent baseline)",
+                        "A real regional change that neighbors cannot resolve",
+                    ],
+                    operator_action = (
+                        "Sensor-health evidence for a maintenance investigation, not an acute anomaly. Compare "
+                        "against a secondary reference or nearby stations before acting."
+                    ),
+                )
+            tier = self._normal_confidence_tier(sufficiency)
+            n_avail = fusion_ctx.get("available_layer_count")
+            if sufficiency is not None and sufficiency < 0.75:
+                signal = (f"No anomaly detected by the available evidence "
+                          f"({n_avail} of 4 evidence layers could assess this observation)")
+            else:
+                signal = "All layers within normal parameters"
             return DiagnosisResult(
                 fault_type      = FaultType.NORMAL,
-                confidence      = DiagnosisConfidence.HIGH,
-                primary_signal  = "All layers within normal parameters",
-                evidence        = [],
+                confidence      = tier,
+                primary_signal  = signal,
+                evidence        = [persistent["note"]] if persistent else [],
                 alternatives    = [],
                 operator_action = "No action required. Continue monitoring.",
             )
@@ -99,8 +226,9 @@ class RootCauseClassifier:
 
         # ── 2. Insufficient evidence check ───────────────────────────────
         # Only one layer triggered with a low score — not enough for a reliable diagnosis
-        meaningful = sum(1 for v in layer_scores.values() if v > 0.20)
-        if meaningful <= 1 and max(layer_scores.values(), default=0.0) < 0.60:
+        anomaly_scores = [v for k, v in layer_scores.items() if k != "drift"]
+        meaningful = sum(1 for v in anomaly_scores if v > 0.20)
+        if meaningful <= 1 and max(anomaly_scores, default=0.0) < 0.60:
             return DiagnosisResult(
                 fault_type      = FaultType.INSUFFICIENT_EVIDENCE,
                 confidence      = DiagnosisConfidence.INSUFFICIENT_DATA,
@@ -133,8 +261,8 @@ class RootCauseClassifier:
                 or layer_details["spatial"].get("total_neighbors_in_radius", 0)
             )
 
-        if temporal_score > 0.60 and spatial_score < 0.30 and n_neighbors >= 2:
-            if n_neighbors >= 4:
+        if temporal_score > 0.60 and n_neighbors >= 2 and (spatial_score < 0.30 or regional_support):
+            if n_neighbors >= 4 and spatial_score < 0.30 and not isolated_evidence:
                 # Strong corroboration from many neighbors
                 return DiagnosisResult(
                     fault_type      = FaultType.GENUINE_EXTREME_WEATHER,
@@ -166,10 +294,11 @@ class RootCauseClassifier:
         # ── 5. Sensor spike (temporal high + spatial HIGH → station isolated) ──
         if "abrupt" in reasons_text or "spike" in reasons_text:
             if spatial_score >= 0.50:
-                # Isolated station spike — stronger evidence of sensor fault
+                # Isolated station spike — stronger evidence of sensor fault, unless nearby
+                # stations support the reading (then it is a contested call: LOW, not MEDIUM)
                 return DiagnosisResult(
                     fault_type      = FaultType.SENSOR_SPIKE,
-                    confidence      = DiagnosisConfidence.MEDIUM,
+                    confidence      = DiagnosisConfidence.LOW if regional_support else DiagnosisConfidence.MEDIUM,
                     primary_signal  = "Abrupt sensor change not reflected in neighboring stations",
                     evidence        = reasons,
                     alternatives    = [
@@ -196,14 +325,16 @@ class RootCauseClassifier:
                 )
 
         # ── 6. Calibration drift ──────────────────────────────────────────
-        if drift_score > 0.60 or "drift" in reasons_text or "cusum" in reasons_text:
+        if pd_state != "REGIONALLY_EXPLAINED" and (
+                drift_score > 0.60 or "drift" in reasons_text or "cusum" in reasons_text):
             drift_tier = "POSSIBLE_DRIFT"
             if "layer_drift" in layer_details or "drift" in layer_details:
                 drift_detail = layer_details.get("drift", {})
                 worst_tier   = drift_detail.get("worst_drift_tier", "POSSIBLE_DRIFT")
                 drift_tier   = worst_tier
 
-            conf = DiagnosisConfidence.MEDIUM if drift_score > 0.70 else DiagnosisConfidence.LOW
+            conf = (DiagnosisConfidence.MEDIUM
+                    if (drift_score > 0.70 and pd_state != "UNCORROBORATED") else DiagnosisConfidence.LOW)
             return DiagnosisResult(
                 fault_type      = FaultType.CALIBRATION_DRIFT,
                 confidence      = conf,
@@ -237,7 +368,7 @@ class RootCauseClassifier:
         if spatial_score >= 0.65:
             return DiagnosisResult(
                 fault_type      = FaultType.SINGLE_CHANNEL_FAULT,
-                confidence      = DiagnosisConfidence.MEDIUM,
+                confidence      = DiagnosisConfidence.LOW if regional_support else DiagnosisConfidence.MEDIUM,
                 primary_signal  = "This station diverges significantly from nearby stations",
                 evidence        = reasons,
                 alternatives    = [
@@ -252,6 +383,21 @@ class RootCauseClassifier:
 
         # ── 9. Multivariate inconsistency ─────────────────────────────────
         if multi_score >= 0.65:
+            n_avail = fusion_ctx.get("available_layer_count")
+            if n_avail is not None and n_avail <= 2 and meaningful <= 1:
+                # A lone multivariate signal while (almost) no other layer could assess the
+                # observation: naming a specific fault would claim more than the evidence supports.
+                return DiagnosisResult(
+                    fault_type      = FaultType.INSUFFICIENT_EVIDENCE,
+                    confidence      = DiagnosisConfidence.INSUFFICIENT_DATA,
+                    primary_signal  = "Joint (T, P, RH) state is unusual, but too few evidence layers could assess this observation",
+                    evidence        = reasons,
+                    alternatives    = [
+                        "Unusual atmospheric conditions",
+                        "A sensor fault that other layers could confirm once temporal / neighbor evidence exists",
+                    ],
+                    operator_action = "Wait for more observations (temporal history) and neighboring stations before acting.",
+                )
             return DiagnosisResult(
                 fault_type      = FaultType.NOISE_BURST,
                 confidence      = DiagnosisConfidence.LOW,

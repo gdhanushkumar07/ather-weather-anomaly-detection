@@ -48,6 +48,25 @@ class SpatialThresholds:
     neighbor_distance_km_max: float = 250.0
     spatial_z_threshold: float = 3.0
     min_neighbors_required: int = 2
+    # S1 — Spatial Neighborhood Foundation (engine/spatial_neighbors.py):
+    # the maximum number of nearest-in-radius stations kept after distance
+    # sorting. Default 8 matches the previous hardcoded
+    # `max_neighbors=8` in AnomalyDetector.get_neighbors_for_reading(), so
+    # existing production/test behavior is unchanged at this default (no
+    # currently exercised scenario has more than 5 neighbors within
+    # radius). Distinct from min_neighbors_required, which is the FLOOR
+    # below which Spatial refuses to draw a conclusion; this is the CEILING
+    # on how many of the nearest candidates are used once there are enough.
+    spatial_k_neighbors: int = 8
+    # Observation-time alignment (Phase 2 spatial validation): a neighbor is
+    # only "simultaneous" evidence for the target if BOTH were observed within
+    # this many minutes of each other (observation_timestamp, never the
+    # processing clock). A neighbor - or target - with no known observation
+    # time cannot be verified as simultaneous and is NOT used.
+    # 30 min is a policy default, not a measured value: 3x the 10-minute AWS
+    # reporting cadence and 2x the ~15-minute cadence at which Open-Meteo's
+    # `current` block updates. Tighten or relax per deployment.
+    neighbor_time_tolerance_minutes: float = 30.0
 
 @dataclass
 class DriftThresholds:
@@ -57,6 +76,27 @@ class DriftThresholds:
     temp_tolerance_c: float = 1.0     # WMO AWS standard accuracy
     humidity_tolerance_pct: float = 3.0
     pressure_tolerance_hpa: float = 0.5
+
+    # ── Sensor Health / CUSUM (Phase 3): parameters that used to be hard-coded
+    # in engine/layer5_drift.py, now explicit. Defaults reproduce the previous
+    # numeric behavior except where a note says otherwise. They are engineering
+    # policy defaults, NOT values calibrated against real sensor data.
+    # The CUSUM runs on a sensor's residual against its OWN recent baseline (an
+    # exponential moving average). Units: channel units (deg C, hPa, %RH);
+    # per-channel multipliers of slack/threshold live in layer5_drift.py
+    # (CHANNEL_CUSUM_SCALE).
+    ema_beta: float = 0.97                    # baseline memory: time constant ~ 1/(1-beta) ~ 33 samples
+    cusum_leak: float = 0.98                  # per-sample decay of each accumulator (bounded memory)
+    cusum_residual_clip_factor: float = 3.0   # residual is clipped to +/- factor*slack (NEW): one outlier
+                                              # can add at most (factor-1)*slack, so drift needs persistence
+    min_samples_for_drift: int = 12           # NEW gate: no drift score/tier below this many valid samples
+                                              # (the module always documented "> 12 samples")
+    reset_gap_minutes: float = 360.0          # NEW: a gap longer than this reinitializes the (stale)
+                                              # baseline; ~ one baseline time constant at 10-min cadence
+    health_error_rate_min_samples: int = 20   # NEW: error-rate denominator floor so 1 flagged reading of
+                                              # the first few cannot dominate the health index
+    plausible_cadence_min_minutes: float = 1.0    # rate-per-day / tolerance projections are only reported when
+    plausible_cadence_max_minutes: float = 60.0   # the observed sampling interval is within this range
 
 @dataclass
 class FusionThresholds:

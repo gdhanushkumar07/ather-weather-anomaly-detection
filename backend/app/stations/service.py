@@ -128,6 +128,7 @@ class StationService:
         }
 
         new_readings = []
+        pending_evaluation: List[Dict[str, Any]] = []
         added_count = 0
         skipped_non_aws = 0
         skipped_invalid = 0
@@ -220,23 +221,34 @@ class StationService:
                 "awsTelemetryStatus": "TELEMETRY_UNAVAILABLE",
             }
 
-            # Evaluate with 5-Layer Anomaly Detection Engine
+            # Evaluation is deferred until EVERY station of this batch is in
+            # the spatial pool (see below) - evaluating here, one station at a
+            # time, meant each station only ever saw the stations loaded
+            # before it, so the dense network could never see itself.
             if w and w.get("temperature") is not None:
-                status, anomaly = detector.evaluate_station(stn_dict)
-                stn_dict["status"] = status
-                stn_dict["anomaly"] = anomaly
-                # NOTE: this dataset is NWP-referenced (see dataSource above),
-                # so _sync_incident's own gate will correctly no-op here —
-                # called anyway so this stays correct if the source ever
-                # becomes real AWS telemetry (Phase 3: never incident from NWP).
-                self._sync_incident(stn_dict)
+                pending_evaluation.append(stn_dict)
 
             self._stations[locality_id] = stn_dict
             new_readings.append(station_dict_to_reading(stn_dict))
             added_count += 1
 
+        # Register the WHOLE batch in the spatial pool first...
         if new_readings:
             detector.update_spatial_pool(new_readings)
+
+        # ...then evaluate with 5-Layer Anomaly Detection Engine, so every
+        # station is judged against all of its (same-source, simultaneous)
+        # neighbors in the batch, independent of CSV row order. No values are
+        # fabricated: only readings that already exist are pooled.
+        for stn_dict in pending_evaluation:
+            status, anomaly = detector.evaluate_station(stn_dict)
+            stn_dict["status"] = status
+            stn_dict["anomaly"] = anomaly
+            # NOTE: this dataset is NWP-referenced (see dataSource above),
+            # so _sync_incident's own gate will correctly no-op here —
+            # called anyway so this stays correct if the source ever
+            # becomes real AWS telemetry (Phase 3: never incident from NWP).
+            self._sync_incident(stn_dict)
 
         print(
             f"StationService: Ingested {added_count} Indian AWS stations from WeatherUnionInfra.csv "

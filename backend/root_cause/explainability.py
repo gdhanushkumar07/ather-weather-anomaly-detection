@@ -117,7 +117,7 @@ class ExplanationGenerator:
 
         if fault_type == FaultType.CALIBRATION_DRIFT:
             dtf_str = (
-                f" Projected tolerance breach in {days_to_failure:.0f} days."
+                f" Rough drift-rate extrapolation: tolerance could be exceeded in about {days_to_failure:.0f} days (indicative only, not a failure prediction)."
                 if days_to_failure is not None and days_to_failure < 30 else ""
             )
             return (
@@ -209,7 +209,7 @@ class ExplanationGenerator:
             }
             base = action_map.get(fault_type, "Investigate and monitor.")
             if days_to_failure is not None and days_to_failure < 7:
-                base += f" Note: projected tolerance breach in {days_to_failure:.0f} days."
+                base += f" Note: rough drift-rate extrapolation suggests the tolerance could be exceeded in about {days_to_failure:.0f} days (indicative only, not a failure prediction)."
             return base
 
         # HIGH confidence
@@ -224,5 +224,5 @@ class ExplanationGenerator:
         }
         base = action_map_high.get(fault_type, "Inspect station hardware.")
         if days_to_failure is not None and days_to_failure < 7:
-            base += f" URGENT: Projected tolerance breach in {days_to_failure:.0f} days."
+            base += f" Note: rough drift-rate extrapolation suggests the tolerance could be exceeded in about {days_to_failure:.0f} days (indicative only, not a failure prediction)."
         return base

@@ -11,22 +11,83 @@ CORRECTNESS RULES (v2):
   - Distinguishes "no usable neighbors" from "insufficient neighbors for conclusion".
   - Returns structured detail with: neighbor_count, distance_range_km,
     target_value, consensus_value, deviation, z_score.
+
+S1 UPDATE (Spatial Neighborhood Foundation): neighbor identification
+(coordinate validation, self-exclusion, distance calculation, radius
+filtering, deterministic distance sorting, K-nearest capping) now goes
+through the single shared pipeline in engine/spatial_neighbors.py instead
+of this file's own ad hoc loop, so this layer and
+AnomalyDetector.get_neighbors_for_reading() can never disagree about what
+counts as a valid, ranked neighbor. Everything downstream of that
+selection -- IDW consensus, elevation lapse-rate correction, z-scoring,
+confidence capping -- is UNCHANGED.
+
+S2 UPDATE (Robust Spatial Statistics): each channel now ALSO computes a
+median/MAD-based robust regional baseline alongside the existing IDW
+baseline (engine/spatial_statistics.py), on the SAME elevation-adjusted,
+DataQuality-filtered neighbor estimates the IDW baseline already uses. This
+is intentionally ADDITIONAL evidence, exposed in `channel_results[ch]` as
+regional_median/regional_mad/robust_z (plus idw_mean/idw_std/idw_z, the IDW
+baseline under matching names, factored out but numerically unchanged) --
+the anomaly SCORE below still comes from the same IDW z-score vs
+spatial_z_threshold comparison as before S2. It is not yet fed into
+scoring because S3 (Regional Event Attribution) is where evidence from
+multiple baselines gets combined into a single decision; changing the score
+here first would mean re-deriving that combination twice. See the S2 final
+report for the full reasoning.
+
+S3 UPDATE (Regional Event Attribution): once a channel's ROBUST z-score
+(not the IDW-based `flagged` used for `score` below) clears the existing
+spatial_z_threshold, this layer now ALSO builds evidence
+(engine/spatial_attribution.py) for whether that deviation looks more
+like an isolated sensor fault or a coherent regional event, from the SAME
+neighbor estimates/weights/median/MAD S1+S2 already computed -- nothing
+is recomputed. Robust_z is used for this gate (rather than idw_z) because
+the plain standard deviation behind idw_z can itself be inflated by the
+very outlier/minority-cluster population S3 needs to reason about,
+suppressing idw_z below threshold in exactly the scenario S3 targets.
+Exposed additively as `ch_result["attribution_evidence"]` (per channel)
+and a new top-level `detail["regional_attribution"]` (combined across
+channels). `score` and
+`overall_score` are UNCHANGED by S3, same as S2's own scoring guarantee.
+
+S6 UPDATE (Counterfactual Verification): once all 3 channels' S3 evidence
+is collected, this layer ALSO builds a counterfactual verification result
+(engine/spatial_counterfactual.py) answering "if the target were genuine,
+do neighbors show the expected supporting response?" -- from the SAME
+per-channel ChannelAttributionEvidence S3 already built, nothing
+recomputed. Exposed additively as a new top-level
+`detail["counterfactual_verification"]`. `score`, `overall_score`, and
+`regional_attribution` are UNCHANGED by S6.
+
+PHASE 2 UPDATE (runtime integrity -- what counts as spatial EVIDENCE):
+A neighbor is only used when it is (a) the SAME data source as the target (an
+in-situ sensor and an NWP model grid value are never blended), and (b) was
+OBSERVED within CONFIG.spatial.neighbor_time_tolerance_minutes of the target,
+using observation_timestamp -- never the processing clock. A target or neighbor
+with no known observation time cannot be verified as simultaneous and is not
+used, so the layer reports INSUFFICIENT_NEIGHBORS (score 0, attribution
+UNCERTAIN, counterfactual INSUFFICIENT_EVIDENCE) instead of inventing a
+conclusion. detail["neighbor_selection"] accounts for every exclusion.
+Elevation is used ONLY when known on both sides (an unknown elevation is never
+read as 0 m); detail["elevation_adjustment"] reports what was applied.
 """
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 
 from config import CONFIG, SpatialThresholds
 from schema import AWSReading, DataQuality
-
-
-def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in kilometres."""
-    r    = 6371.0
-    phi1, phi2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlam = np.radians(lon2 - lon1)
-    a    = np.sin(dphi / 2.0) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(dlam / 2.0) ** 2
-    return float(r * 2.0 * np.arctan2(np.sqrt(a), np.sqrt(1.0 - a)))
+from engine.spatial_neighbors import (  # noqa: F401 (haversine re-exported for backward compatibility)
+    NeighborSelectionResult, haversine_distance_km, select_k_nearest_neighbors,
+)
+from engine.spatial_statistics import compute_robust_spatial_evidence
+from engine.spatial_attribution import (
+    ChannelAttributionEvidence,
+    RegionalAttribution,
+    compute_channel_attribution_evidence,
+    aggregate_regional_attribution,
+)
+from engine.spatial_counterfactual import evaluate_counterfactual_verification
 
 
 class SpatialNeighborLayer:
@@ -39,7 +100,8 @@ class SpatialNeighborLayer:
     def evaluate(
         self,
         target_reading:   AWSReading,
-        neighbor_readings: List[AWSReading]
+        neighbor_readings: List[AWSReading],
+        upstream_selection: Optional[NeighborSelectionResult] = None,
     ) -> Tuple[float, Dict[str, Optional[float]], Optional[str], Dict[str, Any]]:
         """
         Compares target_reading against valid neighbor_readings.
@@ -51,40 +113,107 @@ class SpatialNeighborLayer:
         """
         target_lat  = target_reading.lat
         target_lon  = target_reading.lon
-        target_elev = target_reading.elevation_m if target_reading.elevation_m is not None else 0.0
+        # Elevation is used ONLY when it is actually known. None means
+        # "unknown" (never silently 0 m): a lapse-rate correction between a
+        # known and an unknown elevation would manufacture a phantom
+        # temperature/pressure difference (e.g. 900 m vs "0 m" = -5.85 C).
+        target_elev: Optional[float] = target_reading.elevation_m
 
-        # Find neighbors within radius
-        valid_neighbors: List[Tuple[AWSReading, float, float]] = []  # (reading, dist_km, idw_weight)
-        distances: List[float] = []
+        # Find neighbors within radius — S1 foundation: coordinate
+        # validation, self-exclusion, distance calc, radius filter,
+        # deterministic distance sort, and K-nearest capping all happen in
+        # one shared, tested place (engine/spatial_neighbors.py). This
+        # replaces the previous ad hoc loop here without changing the IDW
+        # weighting formula or anything downstream.
+        selection = select_k_nearest_neighbors(
+            target_reading,
+            neighbor_readings,
+            radius_km=self.cfg.neighbor_distance_km_max,
+            k=self.cfg.spatial_k_neighbors,
+            # Phase 2: only SIMULTANEOUS, SAME-SOURCE neighbors are evidence.
+            max_time_diff_minutes=self.cfg.neighbor_time_tolerance_minutes,
+            require_same_source=True,
+        )
+        # When the caller (AnomalyDetector) already selected these neighbors
+        # from the whole station pool, ITS accounting is the authoritative one
+        # (this layer only ever sees the already-filtered, K-capped list).
+        pool = upstream_selection if upstream_selection is not None else selection
+        # (reading, dist_km, idw_weight) — same shape/weight formula as before
+        valid_neighbors: List[Tuple[AWSReading, float, float]] = [
+            (c.reading, c.distance_km, 1.0 / max(c.distance_km, 1.0) ** 2)
+            for c in selection.neighbors
+        ]
+        distances: List[float] = [c.distance_km for c in selection.neighbors]
 
-        for n in neighbor_readings:
-            if n.station_id == target_reading.station_id:
-                continue
-            dist = haversine_distance_km(target_lat, target_lon, n.lat, n.lon)
-            if dist <= self.cfg.neighbor_distance_km_max:
-                w = 1.0 / max(dist, 1.0) ** 2
-                valid_neighbors.append((n, dist, w))
-                distances.append(dist)
-
+        n_elev_known = sum(1 for (n, _d, _w) in valid_neighbors if n.elevation_m is not None)
+        elev_status = (
+            "NOT_APPLIED_UNKNOWN_ELEVATION" if (target_elev is None or n_elev_known == 0)
+            else "APPLIED" if n_elev_known == len(valid_neighbors)
+            else "PARTIAL"
+        )
         consensus_dict: Dict[str, Optional[float]] = {
             "temperature_c": None,
             "pressure_hpa":  None,
             "humidity_pct":  None,
         }
         detail: Dict[str, Any] = {
-            "total_neighbors_in_radius": len(valid_neighbors),
+            # Total candidates within radius BEFORE the K-nearest cap — the
+            # true pool size, unaffected by spatial_k_neighbors.
+            "total_neighbors_in_radius": pool.within_radius_count,
+            # Range of the neighbors actually used in this evaluation
+            # (i.e. after the K-nearest cap).
             "distance_range_km": {
                 "min": round(min(distances), 1) if distances else None,
                 "max": round(max(distances), 1) if distances else None,
             },
             "channel_results": {},
+            "elevation_adjustment": {
+                "status": elev_status,
+                "target_elevation_known": target_elev is not None,
+                "neighbors_with_known_elevation": n_elev_known,
+                "neighbors_used": len(valid_neighbors),
+            },
+            # Why candidates were / were not used (self, duplicates, radius,
+            # source mismatch, unverifiable or misaligned observation time).
+            "neighbor_selection": pool.summary(),
         }
 
         if len(valid_neighbors) < self.cfg.min_neighbors_required:
             detail["status"] = "INSUFFICIENT_NEIGHBORS"
             detail["note"]   = (
-                f"Only {len(valid_neighbors)} station(s) within {self.cfg.neighbor_distance_km_max} km. "
+                f"Only {len(valid_neighbors)} simultaneous same-source station(s) within "
+                f"{self.cfg.neighbor_distance_km_max} km. "
                 f"Spatial analysis requires ≥ {self.cfg.min_neighbors_required}."
+            )
+            excl = pool
+            unusable = excl.excluded_source_mismatch + excl.excluded_time_unverified + excl.excluded_time_misaligned
+            if unusable:
+                detail["note"] += (
+                    f" {unusable} nearby station(s) were not used as evidence: "
+                    f"{excl.excluded_source_mismatch} different data source, "
+                    f"{excl.excluded_time_unverified} without a verifiable observation time, "
+                    f"{excl.excluded_time_misaligned} observed more than "
+                    f"{self.cfg.neighbor_time_tolerance_minutes:g} min from the target."
+                )
+            # S3: even the insufficient-evidence path reports a (trivial)
+            # regional_attribution, so downstream consumers can always read
+            # detail["regional_attribution"] without first branching on
+            # status -- this IS the canonical "insufficient evidence"
+            # UNCERTAIN case, not a special one.
+            detail["regional_attribution"] = RegionalAttribution(
+                classification="UNCERTAIN", confidence=0.0, applicable_channels=(),
+                regional_event_evidence_strength=0.0, isolated_sensor_evidence_strength=0.0,
+                explanation=(
+                    f"Only {len(valid_neighbors)} station(s) within radius -- insufficient "
+                    f"spatial evidence for attribution."
+                ),
+            ).to_dict({})
+            # S6: same reasoning as regional_attribution above -- the
+            # insufficient-neighbors path IS the canonical
+            # INSUFFICIENT_EVIDENCE case for counterfactual verification too.
+            detail["counterfactual_verification"] = evaluate_counterfactual_verification(
+                {}, min_neighbors_required=self.cfg.min_neighbors_required,
+                spatial_k_neighbors=self.cfg.spatial_k_neighbors,
             )
             return 0.0, consensus_dict, None, detail
 
@@ -96,6 +225,7 @@ class SpatialNeighborLayer:
 
         reasons: List[str] = []
         scores:  List[float] = []
+        channel_evidence: Dict[str, ChannelAttributionEvidence] = {}  # S3: populated per channel below
 
         def _channel_consensus(
             ch_name:      str,
@@ -120,8 +250,13 @@ class SpatialNeighborLayer:
                 n_val     = get_val(n)
                 n_quality = n.data_quality.get(ch_name, DataQuality.MISSING)
                 if n_quality == DataQuality.VALID and n_val is not None:
-                    n_elev  = n.elevation_m if n.elevation_m is not None else 0.0
-                    adj_val = lapse_adj(n_val, target_elev, n_elev)
+                    n_elev  = n.elevation_m
+                    if target_elev is not None and n_elev is not None:
+                        adj_val = lapse_adj(n_val, target_elev, n_elev)
+                    else:
+                        # unknown elevation on either side: no correction
+                        # (same value clipping, zero elevation difference)
+                        adj_val = lapse_adj(n_val, 0.0, 0.0)
                     estimates.append(adj_val)
                     weights.append(w)
 
@@ -134,13 +269,16 @@ class SpatialNeighborLayer:
                 }
                 return 0.0, None
 
-            w_arr     = np.array(weights)
-            w_norm    = w_arr / np.sum(w_arr)
-            consensus = float(np.sum(w_norm * np.array(estimates)))
-
-            deviation = abs(target_val - consensus)
-            std       = max(min_std, float(np.std(estimates)))
-            z         = deviation / std
+            # S2: one call computes BOTH the existing IDW baseline (mean/
+            # std/z -- numerically identical to the previous inline code)
+            # and the new median/MAD robust baseline, on the same
+            # `estimates` (already DataQuality-filtered, already
+            # elevation-lapse-adjusted). See engine/spatial_statistics.py.
+            evidence  = compute_robust_spatial_evidence(estimates, weights, target_val, min_std)
+            consensus = evidence["idw_mean"]
+            deviation = evidence["deviation"]
+            std       = evidence["idw_std"]
+            z         = evidence["idw_z"]
 
             consensus_dict[ch_name] = round(consensus, 2)
 
@@ -151,6 +289,15 @@ class SpatialNeighborLayer:
                 "z_score":        round(z, 2),
                 "usable_neighbors": usable,
                 "method":         "IDW_lapse_rate_adjusted",
+                # ── S2: robust spatial statistics (additional evidence;
+                # does NOT change `score` below) ──────────────────────────
+                "idw_mean":        round(evidence["idw_mean"], 3),
+                "idw_std":         round(evidence["idw_std"], 3),
+                "idw_z":           round(evidence["idw_z"], 3),
+                "regional_median": round(evidence["regional_median"], 3),
+                "regional_mad":    round(evidence["regional_mad"], 4),
+                "robust_z":        round(evidence["robust_z"], 3),
+                "robust_z_method": evidence["robust_z_method"],
             }
 
             raw_score = 0.0
@@ -162,6 +309,37 @@ class SpatialNeighborLayer:
             else:
                 ch_result["score"] = 0.0
                 ch_result["flagged"] = False
+
+            # S3: attribution evidence, built from the SAME estimates/
+            # weights/regional_median/regional_mad S2 already computed
+            # above -- nothing recomputed. The "is there anything to
+            # attribute" gate deliberately uses ROBUST_Z vs the EXISTING
+            # spatial_z_threshold, NOT the existing IDW-based `flagged`:
+            # idw_z's plain standard deviation is itself inflated by the
+            # very outlier population S3 needs to reason about (a minority
+            # cluster of elevated neighbors pulls the ordinary std up,
+            # which can suppress idw_z below threshold even when the
+            # target's deviation from the ROBUST median is large and real
+            # -- confirmed empirically while building this). robust_z is
+            # exactly the statistic S2 built to resist that distortion, so
+            # S3 uses it for its own applicability gate; the reused
+            # threshold value (spatial_z_threshold) is unchanged, only the
+            # statistic it is compared against differs from `score`/
+            # `flagged` above. See engine/spatial_attribution.py.
+            ch_evidence = compute_channel_attribution_evidence(
+                channel=ch_name,
+                target_value=target_val,
+                target_flagged=abs(evidence["robust_z"]) > self.cfg.spatial_z_threshold,
+                target_robust_z=evidence["robust_z"],
+                regional_median=evidence["regional_median"],
+                regional_mad=evidence["regional_mad"],
+                neighbor_estimates=estimates,
+                neighbor_weights=weights,
+                min_std=min_std,
+                spatial_k_neighbors=self.cfg.spatial_k_neighbors,
+            )
+            channel_evidence[ch_name] = ch_evidence
+            ch_result["attribution_evidence"] = ch_evidence.to_dict()
 
             detail["channel_results"][ch_name] = ch_result
             return raw_score, ch_result
@@ -214,4 +392,27 @@ class SpatialNeighborLayer:
         overall_score = max(scores) if scores else 0.0
         detail["status"] = "EVALUATED"
         reason_str = "; ".join(reasons) if reasons else None
+
+        # S3: combine the per-channel attribution evidence collected above
+        # into one overall classification. Purely additive -- overall_score/
+        # consensus_dict/reason_str above are UNCHANGED by this call.
+        regional_attribution = aggregate_regional_attribution(
+            channel_evidence,
+            min_neighbors_required=self.cfg.min_neighbors_required,
+            spatial_k_neighbors=self.cfg.spatial_k_neighbors,
+        )
+        detail["regional_attribution"] = regional_attribution.to_dict(channel_evidence)
+
+        # S6: counterfactual verification, built from the SAME
+        # channel_evidence collected above -- nothing recomputed. Purely
+        # additive; overall_score/consensus_dict/reason_str/
+        # regional_attribution above are UNCHANGED by this call.
+        detail["counterfactual_verification"] = evaluate_counterfactual_verification(
+            channel_evidence,
+            min_neighbors_required=self.cfg.min_neighbors_required,
+            spatial_k_neighbors=self.cfg.spatial_k_neighbors,
+            s3_classification=regional_attribution.classification,
+            s3_confidence=regional_attribution.confidence,
+        )
+
         return overall_score, consensus_dict, reason_str, detail

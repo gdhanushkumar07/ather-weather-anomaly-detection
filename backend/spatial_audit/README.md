@@ -200,3 +200,32 @@ Estimated value: only produced when the diagnosis does not consider the
 observation genuine (GENUINE_EXTREME_WEATHER / POSSIBLE_WEATHER_CHANGE keep the
 raw reading); raw values are always preserved in `raw_values` /
 `observation`.
+
+
+## Phase 2 -- Spatial runtime integrity (evidence eligibility)
+
+What counts as usable spatial evidence changed; all additions are visible in
+`layers.spatial.details`:
+
+- **Same source only.** `AWS_IN_SITU`, `NWP_MODEL_REFERENCE`, `SYNTHETIC_TEST`
+  etc. are never mixed inside one neighborhood.
+- **Simultaneous only.** A neighbor must have been observed within
+  `CONFIG.spatial.neighbor_time_tolerance_minutes` (30, a policy default) of the
+  target, by `observation_timestamp` (never the processing clock). Unknown
+  observation time (target or neighbor) => not verifiable => not used.
+- **Accounted exclusions.** `details.neighbor_selection` lists candidates
+  considered, geographic pool, eligible pool and per-reason exclusions (self,
+  duplicate station, invalid coordinate, radius, source mismatch, time
+  unverified, time misaligned). `total_neighbors_in_radius` is now the
+  ELIGIBLE pool size before the K cap.
+- **Elevation is never invented.** Unknown stays `None`; the lapse-rate
+  correction is applied only when target and neighbor elevation are both known
+  (`details.elevation_adjustment.status`).
+- **Pool ordering.** An older observation never overwrites a newer one in the
+  detector's neighbor registry.
+- **Startup order.** The WeatherUnion batch is fully pooled before any of its
+  stations is evaluated.
+
+The offline audit scripts in this directory that build `AWSReading` objects
+without an `observation_timestamp` predate this contract and would now report
+INSUFFICIENT_NEIGHBORS through the Spatial layer; they were not re-run.

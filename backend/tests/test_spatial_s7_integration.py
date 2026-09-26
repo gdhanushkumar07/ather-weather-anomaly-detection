@@ -19,7 +19,20 @@ if BASE_DIR not in sys.path:
 
 from app.anomaly.detector import AnomalyDetector
 from root_cause.classifier import RootCauseClassifier
-from schema import AWSReading, FaultType
+from datetime import datetime as _dt, timezone as _tz
+from schema import AWSReading as _AWSReading, FaultType
+
+# Phase 2 spatial contract: a neighbor is only usable evidence when it was
+# OBSERVED within CONFIG.spatial.neighbor_time_tolerance_minutes of the target
+# (same source, known observation time). These fixtures model stations that
+# were observed simultaneously - the assumption the tests always made
+# implicitly, now stated explicitly.
+_FIXTURE_OBS_TIME = _dt(2026, 1, 1, 12, 0, tzinfo=_tz.utc)
+
+
+def AWSReading(**kw):  # noqa: N802 - deliberately shadows the schema class name
+    kw.setdefault("observation_timestamp", _FIXTURE_OBS_TIME)
+    return _AWSReading(**kw)
 
 
 def rd(sid, lat, lon, t=30.0, p=1013.0, h=30.0):
@@ -196,10 +209,14 @@ class TestRootCauseCorroboration(unittest.TestCase):
         self.assertEqual(len(res.evidence), 2)
         self.assertEqual(reasons, ["Abrupt change"])                  # shared list not mutated
 
-    def test_weather_like_conflicting_flags_caution_not_category_change(self):
+    def test_weather_like_call_is_downgraded_not_kept_when_spatial_evidence_conflicts(self):
+        """PHASE 4 (behavior change, was: 'decision untouched'): a strong GENUINE_EXTREME_WEATHER call is
+        no longer kept at MEDIUM against ISOLATED_SENSOR_ANOMALY / CONTRADICTED evidence. It is downgraded
+        to the contested POSSIBLE_WEATHER_CHANGE (LOW) and the conflict is still reported."""
         scores = {"physics": 0.0, "temporal": 0.8, "multivariate": 0.0, "spatial": 0.1, "drift": 0.0}
         res = self._classify(self._details("ISOLATED_SENSOR_ANOMALY", "CONTRADICTED"), scores, 0.1, ["Abrupt change"])
-        self.assertEqual(res.fault_type, FaultType.GENUINE_EXTREME_WEATHER)   # decision untouched
+        self.assertEqual(res.fault_type, FaultType.POSSIBLE_WEATHER_CHANGE)
+        self.assertEqual(res.confidence.value, "LOW")
         self.assertEqual(res.spatial_corroboration["state"], "CONFLICTING")
 
     def test_sensor_like_corroborated_by_isolation(self):

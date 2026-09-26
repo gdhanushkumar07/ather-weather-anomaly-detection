@@ -19,7 +19,7 @@ from engine.layer1_physics import PhysicsValidationLayer
 from engine.layer2_temporal import TemporalPatternLayer
 from engine.layer3_multivariate import MultivariateConsistencyLayer
 from engine.layer4_spatial import SpatialNeighborLayer
-from engine.spatial_neighbors import select_k_nearest_neighbors
+from engine.spatial_neighbors import NeighborSelectionResult, observation_time, select_k_nearest_neighbors
 from engine.layer5_drift import SensorDriftHealthLayer
 from engine.spatial_clustering import ClusterCandidate, build_cluster_candidate, cluster_anomalous_stations
 from engine.spatial_event_tracking import SpatialEventTracker
@@ -74,8 +74,20 @@ class AnomalyDetector:
             })
 
     def update_spatial_pool(self, readings: List[AWSReading]):
-        """Updates the internal spatial neighbor registry."""
+        """Updates the internal spatial neighbor registry (latest observation
+        per station).
+
+        An OLDER observation never overwrites a NEWER one for the same
+        station: if both carry a known observation time and the incoming one is
+        strictly earlier (an out-of-order / replayed / backfilled reading), the
+        registry keeps the newer reading. Readings with an unknown observation
+        time cannot be ordered, so they replace as before."""
         for r in readings:
+            existing = self._spatial_pool.get(r.station_id)
+            if existing is not None:
+                new_t, old_t = observation_time(r), observation_time(existing)
+                if new_t is not None and old_t is not None and new_t < old_t:
+                    continue
             self._spatial_pool[r.station_id] = r
 
     def register_station_metadata(self, station_id: str, meta: Dict[str, Any]):
@@ -96,17 +108,25 @@ class AnomalyDetector:
         spatial_k_neighbors) for this call only; omit it to use the
         configured default (8, unchanged from the previous hardcoded value).
         """
-        if not self._spatial_pool:
-            return []
+        return [c.reading for c in self._select_neighbors(reading, max_neighbors).neighbors]
 
+    def _select_neighbors(
+        self, reading: AWSReading, max_neighbors: Optional[int] = None
+    ) -> NeighborSelectionResult:
+        """Pool-level neighbor selection WITH its exclusion accounting.
+
+        Only same-source neighbors observed within
+        CONFIG.spatial.neighbor_time_tolerance_minutes of the target are
+        eligible (see engine/spatial_neighbors.select_k_nearest_neighbors)."""
         k = max_neighbors if max_neighbors is not None else CONFIG.spatial.spatial_k_neighbors
-        selection = select_k_nearest_neighbors(
+        return select_k_nearest_neighbors(
             reading,
             self._spatial_pool.values(),
             radius_km=CONFIG.spatial.neighbor_distance_km_max,
             k=k,
+            max_time_diff_minutes=CONFIG.spatial.neighbor_time_tolerance_minutes,
+            require_same_source=True,
         )
-        return [c.reading for c in selection.neighbors]
 
     def evaluate_station(
         self,
@@ -162,10 +182,16 @@ class AnomalyDetector:
             lambda d: (0.0, None, d))
 
         # ── 4. Layer 4: Spatial Neighbor Consensus (IDW Lapse-rate cross check) ──
+        pool_selection: Optional[NeighborSelectionResult] = None
         if neighbors is None:
-            neighbors = self.get_neighbors_for_reading(reading)
+            pool_selection = self._select_neighbors(reading)
+            neighbors = [c.reading for c in pool_selection.neighbors]
+        # Only pass the pool-level selection accounting when this detector
+        # itself selected the neighbors from its pool (a caller-supplied
+        # neighbor list has no pool-level accounting to forward).
+        layer4_kwargs = {"upstream_selection": pool_selection} if pool_selection is not None else {}
         score_l4, spatial_consensus, reason_l4, detail_l4 = self._guarded_layer(
-            "spatial", lambda: self.layer4.evaluate(reading, neighbors),
+            "spatial", lambda: self.layer4.evaluate(reading, neighbors, **layer4_kwargs),
             lambda d: (0.0, {"temperature_c": None, "pressure_hpa": None, "humidity_pct": None}, None, d))
 
         # ── 5. Layer 5: Sensor Drift & Health Tracking (CUSUM & Days to failure) ──
@@ -218,7 +244,10 @@ class AnomalyDetector:
         layer_coverage = {
             "physics": len(detail_l1.get("channels_evaluated", [])) / 3.0,
             "temporal": 1.0 if detail_l2.get("history_points", 0) >= 3 else 0.2,
-            "multivariate": detail_l3.get("valid_channel_count", 0) / 3.0,
+            # Interface contract: layer3 reports its valid-channel count as "n_valid"; this used to
+            # read "valid_channel_count" (never set), so multivariate coverage was ALWAYS 0. Both keys
+            # are accepted so a change of the layer's key name cannot silently zero it again.
+            "multivariate": detail_l3.get("n_valid", detail_l3.get("valid_channel_count", 0)) / 3.0,
             # S7 BUGFIX: layer4_spatial.py has always set
             # "total_neighbors_in_radius" (never "neighbor_count"), so this
             # used to always evaluate to 0 -- forcing fusion's
@@ -232,13 +261,23 @@ class AnomalyDetector:
         spatial_neighbor_count = detail_l4.get("total_neighbors_in_radius", 0)
         temporal_history_count = detail_l2.get("history_points", 0)
 
-        # ── 6. Conformal Evidence Fusion (v2: quality-aware, no artificial floor) ──
+        # ── 6. Evidence Fusion (evidence-availability aware; heuristic, NOT calibrated) ──
+        # A layer that could not assess the observation is UNAVAILABLE - not "assessed and normal".
+        layer_availability = self._layer_availability(
+            detail_l1, detail_l2, detail_l3, detail_l4, detail_l5, reading
+        )
+        spatial_context = {
+            "attribution": (detail_l4.get("regional_attribution") or {}).get("classification"),
+            "counterfactual": (detail_l4.get("counterfactual_verification") or {}).get("overall_status"),
+        }
         is_anomaly, status, severity, confidence, p_val, detail_fusion = self.fusion.fuse(
             layer_scores=layer_scores,
             veto_fired=veto_fired,
             layer_coverage=layer_coverage,
             spatial_neighbor_count=spatial_neighbor_count,
-            temporal_history_count=temporal_history_count
+            temporal_history_count=temporal_history_count,
+            layer_availability=layer_availability,
+            spatial_context=spatial_context,
         )
 
         layer_details = {
@@ -277,28 +316,30 @@ class AnomalyDetector:
             layer_details=layer_details
         )
 
-        # ── 9. Self-Healing Imputation ──
+        # ── 9. Self-Healing Imputation (EVIDENCE-GATED) ──
+        # The raw observation is NEVER overwritten (raw_values / observation always carry it). An
+        # estimated / trusted value is produced ONLY when the evidence justifies replacing a
+        # specific channel: see _estimation_decision.
         temporal_fallback = {
             "temperature_c": reading.temperature_c,
             "pressure_hpa": reading.pressure_hpa,
             "humidity_pct": reading.humidity_pct
         }
-        # S7: an estimated/trusted value is only produced when the diagnosis
-        # does not believe the observation is genuine. A GENUINE_EXTREME_WEATHER
-        # / POSSIBLE_WEATHER_CHANGE observation is left as-is (replacing a
-        # real regional reading with a neighbor consensus would fabricate
-        # data). The raw observation is always preserved separately in
-        # raw_values regardless.
-        observation_believed_genuine = diagnosis_res.fault_type in (
-            FaultType.GENUINE_EXTREME_WEATHER, FaultType.POSSIBLE_WEATHER_CHANGE
-        )
+        estimation = self._estimation_decision(is_anomaly, diagnosis_res, affected, detail_l4)
         corrected = self.imputer.correct_reading(
             reading=reading,
-            is_anomaly=is_anomaly and not observation_believed_genuine,
-            affected_channel=affected[0] if affected else None,
+            is_anomaly=estimation["justified"],
+            affected_channel=estimation["channel"],
             spatial_consensus=spatial_consensus,
             temporal_fallback=temporal_fallback
         )
+        estimation["applied_channels"] = [
+            ch for ch, v in corrected.items()
+            if v is not None and getattr(reading, ch, None) is not None and v != getattr(reading, ch)
+        ]
+        estimation["applied"] = bool(estimation["applied_channels"])
+        if estimation["justified"] and not estimation["applied"]:
+            estimation["reason"] = "Justified, but no independent estimate was available (insufficient neighbor consensus); the raw value is kept."
 
         # ── 10. Meteorological Weather Analysis (Section 14) ──
         weather_analysis = self._generate_weather_analysis(
@@ -360,11 +401,16 @@ class AnomalyDetector:
                 "observation_timestamp": reading.observation_timestamp.isoformat() if reading.observation_timestamp else None,
                 "received_timestamp": reading.received_timestamp.isoformat() if reading.received_timestamp else None,
             },
+            "evidence_availability": layer_availability,
+            "estimation": estimation,
             "overall": {
                 "status": status,
                 "score": round(severity, 3),
                 "anomaly_score": round(severity, 3),
                 "confidence": round(confidence, 3),
+                # honest labeling: not a calibrated probability
+                "confidence_basis": detail_fusion.get("confidence_basis"),
+                "evidence_sufficiency": detail_fusion.get("evidence_sufficiency"),
                 "threshold": 0.45,
                 "severity": (
                     "HIGH" if severity >= 0.75 else
@@ -428,6 +474,77 @@ class AnomalyDetector:
         self._alerts_cache[stn_id] = alert
         self._canonical_cache[stn_id] = canonical_result
         return alert
+
+    @staticmethod
+    def _layer_availability(d1, d2, d3, d4, d5, reading) -> Dict[str, Dict[str, Any]]:
+        """Which layers could actually ASSESS this observation. Distinguishes
+        "assessed and normal" (available, score 0) from "could not assess"
+        (unavailable: insufficient history / neighbors / samples, layer failure,
+        not applicable). Uses each layer's own reported status."""
+        def entry(available: bool, reason: Optional[str]) -> Dict[str, Any]:
+            return {"available": bool(available), "reason": None if available else reason}
+
+        def failed(d):  # a guarded layer that raised
+            return bool(d.get("layer_unavailable"))
+
+        out: Dict[str, Dict[str, Any]] = {}
+        out["physics"] = entry(
+            not failed(d1) and bool(d1.get("channels_evaluated")),
+            "layer failed" if failed(d1) else "no valid channel could be physically evaluated")
+        out["temporal"] = entry(
+            not failed(d2) and d2.get("status") == "EVALUATED",
+            "layer failed" if failed(d2) else (d2.get("note") or "insufficient temporal history"))
+        out["multivariate"] = entry(
+            not failed(d3) and d3.get("status") == "EVALUATED",
+            "layer failed" if failed(d3) else (d3.get("note") or "fewer than 2 valid channels"))
+        out["spatial"] = entry(
+            not failed(d4) and d4.get("status") == "EVALUATED",
+            "layer failed" if failed(d4) else (d4.get("note") or "insufficient simultaneous same-source neighbors"))
+        non_physical = reading.source == "NWP_MODEL_REFERENCE"
+        out["drift"] = entry(
+            not failed(d5) and d5.get("status") == "EVALUATED" and not non_physical,
+            "layer failed" if failed(d5) else (
+                "not a physical sensor (NWP model reference)" if non_physical
+                else (d5.get("note") or "insufficient samples for drift assessment")))
+        return out
+
+    # Fault categories that assert a sensor-side problem for which replacing the reading with an
+    # independent estimate can be justified. CALIBRATION_DRIFT is excluded on purpose: a drifting
+    # sensor's value is evidence to investigate, not an outlier to overwrite.
+    _ESTIMATION_ELIGIBLE_FAULTS = {
+        FaultType.SENSOR_SPIKE, FaultType.FROZEN_SENSOR,
+        FaultType.SINGLE_CHANNEL_FAULT, FaultType.NOISE_BURST,
+    }
+
+    def _estimation_decision(self, is_anomaly: bool, diagnosis_res, affected: List[str],
+                             detail_l4: Dict[str, Any]) -> Dict[str, Any]:
+        """Decides whether an estimated/trusted value is JUSTIFIED. All of:
+          - the observation is anomalous and diagnosed as a sensor-side fault (never genuine
+            weather, never INSUFFICIENT_EVIDENCE / NORMAL / drift);
+          - the diagnosis is at least MEDIUM confidence;
+          - neighbors do NOT support the reading (counterfactual not SUPPORTED, attribution not
+            REGIONAL_EVENT) - if the region backs the value, it is not replaced;
+          - a specific affected channel was identified (never a blanket replacement).
+        The raw value is preserved in every case."""
+        cf = (detail_l4.get("counterfactual_verification") or {}).get("overall_status")
+        ra = (detail_l4.get("regional_attribution") or {}).get("classification")
+        verdict = {"justified": False, "channel": None, "applied": False, "applied_channels": [],
+                   "reason": None, "raw_value_preserved": True, "basis": None}
+        if not is_anomaly:
+            verdict["reason"] = "No anomaly: the observation is used as reported."
+        elif diagnosis_res.fault_type not in self._ESTIMATION_ELIGIBLE_FAULTS:
+            verdict["reason"] = f"Diagnosis {diagnosis_res.fault_type.value} does not justify replacing the observation."
+        elif diagnosis_res.confidence not in (DiagnosisConfidence.MEDIUM, DiagnosisConfidence.HIGH):
+            verdict["reason"] = f"Diagnosis confidence {diagnosis_res.confidence.value} is too low to justify an estimate."
+        elif cf == "SUPPORTED" or ra == "REGIONAL_EVENT":
+            verdict["reason"] = "Nearby stations support this reading (counterfactual SUPPORTED / REGIONAL_EVENT): it is not replaced."
+        elif not affected:
+            verdict["reason"] = "No specific affected channel was identified: nothing is replaced."
+        else:
+            verdict.update(justified=True, channel=affected[0],
+                           basis="independent neighbor consensus (or physical inversion) for the affected channel only",
+                           reason="Sensor-side fault diagnosed with at least MEDIUM confidence and no regional support for the reading.")
+        return verdict
 
     def get_station_alert(self, station_id: str) -> Optional[AnomalyAlert]:
         """Returns cached AnomalyAlert for station."""
@@ -932,7 +1049,7 @@ class AnomalyDetector:
         if n_cnt < 2 or d4.get("status") in ("INSUFFICIENT_DATA", "INSUFFICIENT_NEIGHBORS"):
             l4_status = "INSUFFICIENT_DATA"
             l4_conf = "INSUFFICIENT_DATA"
-            l4_reason = f"Insufficient neighboring stations within radius ({n_cnt} found, 2 required)"
+            l4_reason = d4.get("note") or f"Insufficient neighboring stations within radius ({n_cnt} found, 2 required)"
         elif layer_scores["spatial"] >= 0.70:
             l4_status = "ANOMALY"
             l4_conf = "HIGH" if n_cnt >= 4 else "MEDIUM"

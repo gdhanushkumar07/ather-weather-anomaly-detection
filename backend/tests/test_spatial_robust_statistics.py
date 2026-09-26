@@ -23,7 +23,20 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from config import CONFIG
-from schema import AWSReading
+from datetime import datetime as _dt, timezone as _tz
+from schema import AWSReading as _AWSReading
+
+# Phase 2 spatial contract: a neighbor is only usable evidence when it was
+# OBSERVED within CONFIG.spatial.neighbor_time_tolerance_minutes of the target
+# (same source, known observation time). These fixtures model stations that
+# were observed simultaneously - the assumption the tests always made
+# implicitly, now stated explicitly.
+_FIXTURE_OBS_TIME = _dt(2026, 1, 1, 12, 0, tzinfo=_tz.utc)
+
+
+def AWSReading(**kw):  # noqa: N802 - deliberately shadows the schema class name
+    kw.setdefault("observation_timestamp", _FIXTURE_OBS_TIME)
+    return _AWSReading(**kw)
 from engine.spatial_statistics import (
     MAD_CONSISTENCY_CONSTANT,
     compute_median,

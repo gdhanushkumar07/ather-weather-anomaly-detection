@@ -18,6 +18,7 @@ STAGE 4 ADDITION:
     behavior (identical to pre-Stage-4 behavior).
 """
 from collections import deque
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple, Any
 import numpy as np
 
@@ -29,6 +30,58 @@ _MIN_HISTORY_FOR_TEMPORAL = 3   # Minimum readings required for any temporal con
 _MIN_HISTORY_FOR_ZSCORE   = 24  # Minimum readings required for rolling Z-score
 
 _LSTM_CHANNELS = ("temperature_c", "pressure_hpa", "humidity_pct")
+
+
+def _effective_timestamp(reading: AWSReading) -> Optional[datetime]:
+    """
+    The time this layer uses to space consecutive readings (step-rate
+    interval, LSTM contiguity/gap/ordering).
+
+    Prefers the reading's true observation time (`observation_timestamp`,
+    e.g. a source's own clock) and only falls back to `timestamp` (ATHER's
+    processing-sequence clock) when no observation time is known — so a
+    burst of readings processed milliseconds apart but observed 10 minutes
+    apart is spaced by when it was OBSERVED, not when it was processed.
+
+    A timezone-naive value is interpreted as UTC (what sources such as
+    Open-Meteo report by default) so naive and aware timestamps can never
+    raise a TypeError when subtracted.
+    """
+    ts = reading.observation_timestamp or reading.timestamp
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
+def _lstm_detail(lstm_result: LSTMStepResult, recent_peak_by_channel: Dict[str, float]) -> Dict[str, Any]:
+    """Builds the `detail["lstm"]` traceability block. Shared by the normal
+    return path and the insufficient-history early return so the block's
+    shape never depends on which path produced it."""
+    return {
+        "lstm_available": lstm_result.available,
+        "lstm_skip_reason": lstm_result.skip_reason,
+        "lstm_predicted_temperature_c": lstm_result.predicted_temperature_c,
+        "lstm_predicted_pressure_hpa": lstm_result.predicted_pressure_hpa,
+        "lstm_predicted_humidity_pct": lstm_result.predicted_humidity_pct,
+        "temperature_residual": lstm_result.temperature_residual,
+        "pressure_residual": lstm_result.pressure_residual,
+        "humidity_residual": lstm_result.humidity_residual,
+        "temperature_abs_residual": lstm_result.temperature_abs_residual,
+        "pressure_abs_residual": lstm_result.pressure_abs_residual,
+        "humidity_abs_residual": lstm_result.humidity_abs_residual,
+        "temperature_lstm_score": round(lstm_result.temperature_score, 4),
+        "pressure_lstm_score": round(lstm_result.pressure_score, 4),
+        "humidity_lstm_score": round(lstm_result.humidity_score, 4),
+        "temperature_lstm_raw_score": lstm_result.temperature_raw_score,
+        "pressure_lstm_raw_score": lstm_result.pressure_raw_score,
+        "humidity_lstm_raw_score": lstm_result.humidity_raw_score,
+        "lstm_residual_score": round(lstm_result.lstm_residual_score, 4),
+        "recent_lstm_peak": round(max(recent_peak_by_channel.values()), 4),
+        "recent_lstm_peak_by_channel": {ch: round(v, 4) for ch, v in recent_peak_by_channel.items()},
+        "note": "lstm_residual_score is an INITIAL Stage 4 calibration signal, not the final ATHER temporal score.",
+    }
 
 
 class StationTemporalBuffer:
@@ -112,8 +165,9 @@ class TemporalPatternLayer:
         # rewarming starts cleanly from this reading onward. This is the
         # SAME reset condition as before (see the append step below), just
         # evaluated at the right time; no new policy was introduced.
-        if buf.history_complete and reading.timestamp is not None:
-            gap_minutes = (reading.timestamp - buf.history_complete[-1][0]).total_seconds() / 60.0
+        eff_ts = _effective_timestamp(reading)
+        if buf.history_complete and eff_ts is not None:
+            gap_minutes = (eff_ts - buf.history_complete[-1][0]).total_seconds() / 60.0
             if gap_minutes > self.lstm.cfg.max_gap_minutes or gap_minutes <= 0:
                 buf.history_complete.clear()
 
@@ -138,7 +192,8 @@ class TemporalPatternLayer:
         if buf.last_reading is not None:
             prev = buf.last_reading
             dt_seconds = 600.0
-            if reading.timestamp and prev.timestamp:
+            prev_ts = _effective_timestamp(prev)
+            if eff_ts and prev_ts:
                 try:
                     # Stage 6: abs() — an out-of-order/backfilled/rollback
                     # reading (timestamp earlier than the cached "previous")
@@ -152,7 +207,7 @@ class TemporalPatternLayer:
                     # of the time gap keeps the threshold scaled to how much
                     # real time actually separates the two readings either
                     # direction, without asserting anything about order.
-                    dt_seconds = max(1.0, abs((reading.timestamp - prev.timestamp).total_seconds()))
+                    dt_seconds = max(1.0, abs((eff_ts - prev_ts).total_seconds()))
                 except Exception:
                     dt_seconds = 600.0
 
@@ -227,7 +282,7 @@ class TemporalPatternLayer:
         if (ch_valid("temperature_c") and ch_valid("pressure_hpa") and ch_valid("humidity_pct")
                 and reading.temperature_c is not None and reading.pressure_hpa is not None
                 and reading.humidity_pct is not None):
-            buf.history_complete.append((reading.timestamp, reading.temperature_c, reading.pressure_hpa, reading.humidity_pct))
+            buf.history_complete.append((eff_ts, reading.temperature_c, reading.pressure_hpa, reading.humidity_pct))
 
         buf.last_reading = reading
 
@@ -244,6 +299,22 @@ class TemporalPatternLayer:
             len(buf.history_rh)
         )
 
+        # Output contract: the production detector (app/anomaly/detector.py)
+        # reads a SCALAR `history_points` from this detail for fusion's
+        # temporal coverage/scarcity inputs and the data-quality summary.
+        # This layer previously only exposed the per-channel dict above, so
+        # that lookup always fell back to 0. `history_points` is the deepest
+        # rule-based per-channel history (capped by rolling_window_samples);
+        # the LSTM's own contiguous joint-valid depth is exposed separately.
+        detail["history_points"] = max_history
+        detail["lstm_history_points"] = len(buf.history_complete)
+        detail["lstm_required_history_points"] = self.lstm.cfg.sequence_length
+
+        recent_peak_by_channel: Dict[str, float] = {
+            ch: (max(buf.recent_lstm_channel_scores[ch]) if buf.recent_lstm_channel_scores[ch] else 0.0)
+            for ch in _LSTM_CHANNELS
+        }
+
         # Check if we have enough history for rolling statistics,
         # but allow acute 2-point step-rate spikes to be reported
         spike_detected = any(s > 0.5 for s in scores.values())
@@ -251,6 +322,10 @@ class TemporalPatternLayer:
         if max_history < _MIN_HISTORY_FOR_TEMPORAL and not spike_detected:
             detail["status"] = "INSUFFICIENT_DATA"
             detail["note"] = f"Only {max_history} valid reading(s) available. Temporal analysis requires {_MIN_HISTORY_FOR_TEMPORAL}+."
+            # Still report WHY the LSTM did/didn't run on this reading
+            # (e.g. skip_reason) — previously this early return omitted the
+            # whole "lstm" block.
+            detail["lstm"] = _lstm_detail(lstm_result, recent_peak_by_channel)
             return 0.0, scores, None, detail
 
         detail["status"] = "EVALUATED"
@@ -321,10 +396,9 @@ class TemporalPatternLayer:
         pre_lstm_scores = dict(scores)  # snapshot: did a rule already flag each channel this cycle?
 
         channel_labels = {"temperature_c": ("temperature", "°C"), "pressure_hpa": ("pressure", "hPa"), "humidity_pct": ("humidity", "%")}
-        recent_peak_by_channel: Dict[str, float] = {}
         for ch in _LSTM_CHANNELS:
-            recent_scores = buf.recent_lstm_channel_scores[ch]
-            recent_peak_by_channel[ch] = max(recent_scores) if recent_scores else 0.0
+            # (recent_peak_by_channel was computed above, from the same
+            # buffer state — no new scores are appended between there and here.)
             # Combine via max() — the SAME aggregation idiom every rule-based
             # check above already uses to combine evidence within a channel.
             # This can only ever RAISE a channel's score, never lower a
@@ -368,29 +442,7 @@ class TemporalPatternLayer:
                     f"{self.lstm.cfg.residual_window} readings"
                 )
 
-        detail["lstm"] = {
-            "lstm_available": lstm_result.available,
-            "lstm_skip_reason": lstm_result.skip_reason,
-            "lstm_predicted_temperature_c": lstm_result.predicted_temperature_c,
-            "lstm_predicted_pressure_hpa": lstm_result.predicted_pressure_hpa,
-            "lstm_predicted_humidity_pct": lstm_result.predicted_humidity_pct,
-            "temperature_residual": lstm_result.temperature_residual,
-            "pressure_residual": lstm_result.pressure_residual,
-            "humidity_residual": lstm_result.humidity_residual,
-            "temperature_abs_residual": lstm_result.temperature_abs_residual,
-            "pressure_abs_residual": lstm_result.pressure_abs_residual,
-            "humidity_abs_residual": lstm_result.humidity_abs_residual,
-            "temperature_lstm_score": round(lstm_result.temperature_score, 4),
-            "pressure_lstm_score": round(lstm_result.pressure_score, 4),
-            "humidity_lstm_score": round(lstm_result.humidity_score, 4),
-            "temperature_lstm_raw_score": lstm_result.temperature_raw_score,
-            "pressure_lstm_raw_score": lstm_result.pressure_raw_score,
-            "humidity_lstm_raw_score": lstm_result.humidity_raw_score,
-            "lstm_residual_score": round(lstm_result.lstm_residual_score, 4),
-            "recent_lstm_peak": round(max(recent_peak_by_channel.values()), 4),
-            "recent_lstm_peak_by_channel": {ch: round(v, 4) for ch, v in recent_peak_by_channel.items()},
-            "note": "lstm_residual_score is an INITIAL Stage 4 calibration signal, not the final ATHER temporal score.",
-        }
+        detail["lstm"] = _lstm_detail(lstm_result, recent_peak_by_channel)
 
         overall_score = max(scores.values())
         reason_str    = "; ".join(detected_reasons) if detected_reasons else None

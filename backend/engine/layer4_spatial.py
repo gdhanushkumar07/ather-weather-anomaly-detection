@@ -59,13 +59,27 @@ per-channel ChannelAttributionEvidence S3 already built, nothing
 recomputed. Exposed additively as a new top-level
 `detail["counterfactual_verification"]`. `score`, `overall_score`, and
 `regional_attribution` are UNCHANGED by S6.
+
+PHASE 2 UPDATE (runtime integrity -- what counts as spatial EVIDENCE):
+A neighbor is only used when it is (a) the SAME data source as the target (an
+in-situ sensor and an NWP model grid value are never blended), and (b) was
+OBSERVED within CONFIG.spatial.neighbor_time_tolerance_minutes of the target,
+using observation_timestamp -- never the processing clock. A target or neighbor
+with no known observation time cannot be verified as simultaneous and is not
+used, so the layer reports INSUFFICIENT_NEIGHBORS (score 0, attribution
+UNCERTAIN, counterfactual INSUFFICIENT_EVIDENCE) instead of inventing a
+conclusion. detail["neighbor_selection"] accounts for every exclusion.
+Elevation is used ONLY when known on both sides (an unknown elevation is never
+read as 0 m); detail["elevation_adjustment"] reports what was applied.
 """
 from typing import Dict, List, Optional, Tuple, Any
 import numpy as np
 
 from config import CONFIG, SpatialThresholds
 from schema import AWSReading, DataQuality
-from engine.spatial_neighbors import haversine_distance_km, select_k_nearest_neighbors  # noqa: F401 (re-exported for backward compatibility)
+from engine.spatial_neighbors import (  # noqa: F401 (haversine re-exported for backward compatibility)
+    NeighborSelectionResult, haversine_distance_km, select_k_nearest_neighbors,
+)
 from engine.spatial_statistics import compute_robust_spatial_evidence
 from engine.spatial_attribution import (
     ChannelAttributionEvidence,
@@ -86,7 +100,8 @@ class SpatialNeighborLayer:
     def evaluate(
         self,
         target_reading:   AWSReading,
-        neighbor_readings: List[AWSReading]
+        neighbor_readings: List[AWSReading],
+        upstream_selection: Optional[NeighborSelectionResult] = None,
     ) -> Tuple[float, Dict[str, Optional[float]], Optional[str], Dict[str, Any]]:
         """
         Compares target_reading against valid neighbor_readings.
@@ -98,7 +113,11 @@ class SpatialNeighborLayer:
         """
         target_lat  = target_reading.lat
         target_lon  = target_reading.lon
-        target_elev = target_reading.elevation_m if target_reading.elevation_m is not None else 0.0
+        # Elevation is used ONLY when it is actually known. None means
+        # "unknown" (never silently 0 m): a lapse-rate correction between a
+        # known and an unknown elevation would manufacture a phantom
+        # temperature/pressure difference (e.g. 900 m vs "0 m" = -5.85 C).
+        target_elev: Optional[float] = target_reading.elevation_m
 
         # Find neighbors within radius — S1 foundation: coordinate
         # validation, self-exclusion, distance calc, radius filter,
@@ -111,7 +130,14 @@ class SpatialNeighborLayer:
             neighbor_readings,
             radius_km=self.cfg.neighbor_distance_km_max,
             k=self.cfg.spatial_k_neighbors,
+            # Phase 2: only SIMULTANEOUS, SAME-SOURCE neighbors are evidence.
+            max_time_diff_minutes=self.cfg.neighbor_time_tolerance_minutes,
+            require_same_source=True,
         )
+        # When the caller (AnomalyDetector) already selected these neighbors
+        # from the whole station pool, ITS accounting is the authoritative one
+        # (this layer only ever sees the already-filtered, K-capped list).
+        pool = upstream_selection if upstream_selection is not None else selection
         # (reading, dist_km, idw_weight) — same shape/weight formula as before
         valid_neighbors: List[Tuple[AWSReading, float, float]] = [
             (c.reading, c.distance_km, 1.0 / max(c.distance_km, 1.0) ** 2)
@@ -119,6 +145,12 @@ class SpatialNeighborLayer:
         ]
         distances: List[float] = [c.distance_km for c in selection.neighbors]
 
+        n_elev_known = sum(1 for (n, _d, _w) in valid_neighbors if n.elevation_m is not None)
+        elev_status = (
+            "NOT_APPLIED_UNKNOWN_ELEVATION" if (target_elev is None or n_elev_known == 0)
+            else "APPLIED" if n_elev_known == len(valid_neighbors)
+            else "PARTIAL"
+        )
         consensus_dict: Dict[str, Optional[float]] = {
             "temperature_c": None,
             "pressure_hpa":  None,
@@ -127,7 +159,7 @@ class SpatialNeighborLayer:
         detail: Dict[str, Any] = {
             # Total candidates within radius BEFORE the K-nearest cap — the
             # true pool size, unaffected by spatial_k_neighbors.
-            "total_neighbors_in_radius": selection.within_radius_count,
+            "total_neighbors_in_radius": pool.within_radius_count,
             # Range of the neighbors actually used in this evaluation
             # (i.e. after the K-nearest cap).
             "distance_range_km": {
@@ -135,14 +167,34 @@ class SpatialNeighborLayer:
                 "max": round(max(distances), 1) if distances else None,
             },
             "channel_results": {},
+            "elevation_adjustment": {
+                "status": elev_status,
+                "target_elevation_known": target_elev is not None,
+                "neighbors_with_known_elevation": n_elev_known,
+                "neighbors_used": len(valid_neighbors),
+            },
+            # Why candidates were / were not used (self, duplicates, radius,
+            # source mismatch, unverifiable or misaligned observation time).
+            "neighbor_selection": pool.summary(),
         }
 
         if len(valid_neighbors) < self.cfg.min_neighbors_required:
             detail["status"] = "INSUFFICIENT_NEIGHBORS"
             detail["note"]   = (
-                f"Only {len(valid_neighbors)} station(s) within {self.cfg.neighbor_distance_km_max} km. "
+                f"Only {len(valid_neighbors)} simultaneous same-source station(s) within "
+                f"{self.cfg.neighbor_distance_km_max} km. "
                 f"Spatial analysis requires ≥ {self.cfg.min_neighbors_required}."
             )
+            excl = pool
+            unusable = excl.excluded_source_mismatch + excl.excluded_time_unverified + excl.excluded_time_misaligned
+            if unusable:
+                detail["note"] += (
+                    f" {unusable} nearby station(s) were not used as evidence: "
+                    f"{excl.excluded_source_mismatch} different data source, "
+                    f"{excl.excluded_time_unverified} without a verifiable observation time, "
+                    f"{excl.excluded_time_misaligned} observed more than "
+                    f"{self.cfg.neighbor_time_tolerance_minutes:g} min from the target."
+                )
             # S3: even the insufficient-evidence path reports a (trivial)
             # regional_attribution, so downstream consumers can always read
             # detail["regional_attribution"] without first branching on
@@ -198,8 +250,13 @@ class SpatialNeighborLayer:
                 n_val     = get_val(n)
                 n_quality = n.data_quality.get(ch_name, DataQuality.MISSING)
                 if n_quality == DataQuality.VALID and n_val is not None:
-                    n_elev  = n.elevation_m if n.elevation_m is not None else 0.0
-                    adj_val = lapse_adj(n_val, target_elev, n_elev)
+                    n_elev  = n.elevation_m
+                    if target_elev is not None and n_elev is not None:
+                        adj_val = lapse_adj(n_val, target_elev, n_elev)
+                    else:
+                        # unknown elevation on either side: no correction
+                        # (same value clipping, zero elevation difference)
+                        adj_val = lapse_adj(n_val, 0.0, 0.0)
                     estimates.append(adj_val)
                     weights.append(w)
 

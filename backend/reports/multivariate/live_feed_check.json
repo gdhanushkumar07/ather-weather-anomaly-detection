@@ -1,0 +1,218 @@
+{
+  "feed": {
+    "rows": 53872,
+    "stations": 296,
+    "start": "2026-09-19 00:00:00+00:00",
+    "end": "2026-09-26 13:00:00+00:00"
+  },
+  "normal_live_feed": {
+    "observations": 53872,
+    "model_source": {
+      "regional_reference": 53872
+    },
+    "status_rate": {
+      "NORMAL": 0.98456,
+      "ANOMALY": 0.00952,
+      "SUSPICIOUS": 0.00592
+    },
+    "status_count": {
+      "NORMAL": 53040,
+      "ANOMALY": 513,
+      "SUSPICIOUS": 319
+    },
+    "status_rate_by_city": {
+      "Bengaluru": {
+        "ANOMALY": 0.0113,
+        "NORMAL": 0.9742,
+        "SUSPICIOUS": 0.0144
+      },
+      "Chennai": {
+        "ANOMALY": 0.091,
+        "NORMAL": 0.8828,
+        "SUSPICIOUS": 0.0263
+      },
+      "Delhi NCR": {
+        "ANOMALY": 0.0,
+        "NORMAL": 0.9997,
+        "SUSPICIOUS": 0.0003
+      },
+      "Hyderabad": {
+        "ANOMALY": 0.0024,
+        "NORMAL": 0.9947,
+        "SUSPICIOUS": 0.0029
+      },
+      "Kolkata": {
+        "ANOMALY": 0.0069,
+        "NORMAL": 0.9864,
+        "SUSPICIOUS": 0.0067
+      },
+      "Mumbai": {
+        "ANOMALY": 0.0071,
+        "NORMAL": 0.9871,
+        "SUSPICIOUS": 0.0058
+      },
+      "Pune": {
+        "ANOMALY": 0.0068,
+        "NORMAL": 0.9858,
+        "SUSPICIOUS": 0.0073
+      }
+    },
+    "examples_flagged": [
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-19 15:00:00+00:00",
+        "temperature_c": "24.4",
+        "pressure_hpa": "1013.8",
+        "humidity_pct": "73",
+        "status": "ANOMALY",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): joint rate of change is unusual (d_pressure_hpa_per_h = +2.30/h) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-20 06:00:00+00:00",
+        "temperature_c": "23.3",
+        "pressure_hpa": "1015.2",
+        "humidity_pct": "79",
+        "status": "SUSPICIOUS",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): pressure 1015.2 hPa vs ~1010.2 hPa expected for this temperature, season and time of day (\u00b11.7; weak relationship, R\u00b2=0.44); joint rate of change is unusual (d_pressure_hpa_per_h = +0.70/h) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-23 16:00:00+00:00",
+        "temperature_c": "22.8",
+        "pressure_hpa": "1011.6",
+        "humidity_pct": "56",
+        "status": "ANOMALY",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): unusual joint temperature-humidity pattern: RH 56% at 22.8\u00b0C, where this station/season/time of day expects ~81% (\u00b15) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-25 09:00:00+00:00",
+        "temperature_c": "24.2",
+        "pressure_hpa": "1009.3",
+        "humidity_pct": "77",
+        "status": "ANOMALY",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): joint rate of change is unusual (d_humidity_pct_per_h = +23.00/h) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-25 11:00:00+00:00",
+        "temperature_c": "21.9",
+        "pressure_hpa": "1010.0",
+        "humidity_pct": "90",
+        "status": "SUSPICIOUS",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): joint rate of change is unusual (d_pressure_hpa_per_h = +1.20/h) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-26 11:00:00+00:00",
+        "temperature_c": "28.5",
+        "pressure_hpa": "1009.2",
+        "humidity_pct": "44",
+        "status": "ANOMALY",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): unusual combination of humidity_pct_anomaly, temperature_c_anomaly [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001196",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-19 15:00:00+00:00",
+        "temperature_c": "23.3",
+        "pressure_hpa": "1013.9",
+        "humidity_pct": "82",
+        "status": "SUSPICIOUS",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): joint rate of change is unusual (d_pressure_hpa_per_h = +2.50/h) [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001196",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-21 11:00:00+00:00",
+        "temperature_c": "24.4",
+        "pressure_hpa": "1008.7",
+        "humidity_pct": "78",
+        "status": "SUSPICIOUS",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): joint rate of change is unusual (d_pressure_hpa_per_h = +1.70/h) [regional reference: Bengaluru]"
+      }
+    ]
+  },
+  "injected_t_rh_decoupling": {
+    "stations_with_event": 155,
+    "injected_rows": 930,
+    "row_recall_any_flag": 0.9452,
+    "row_recall_anomaly": 0.0968,
+    "event_recall_any_flag": 1.0,
+    "examples": [
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 07:00:00+00:00",
+        "temperature_c": "28.5",
+        "humidity_pct": "87",
+        "status": "ANOMALY",
+        "ecod_p": "0.00054",
+        "if_p": "0.00163",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): unusual joint temperature-humidity pattern: RH 87% at 28.5\u00b0C, where this station/season/time of day expects ~54% (\u00b15); dew point 26.1\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 08:00:00+00:00",
+        "temperature_c": "29.9",
+        "humidity_pct": "87",
+        "status": "ANOMALY",
+        "ecod_p": "0.00082",
+        "if_p": "0.0079",
+        "reason": "Multivariate anomaly (ECOD and Isolation Forest agree): unusual joint temperature-humidity pattern: RH 87% at 29.9\u00b0C, where this station/season/time of day expects ~47% (\u00b15); dew point 27.5\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 09:00:00+00:00",
+        "temperature_c": "29.1",
+        "humidity_pct": "87",
+        "status": "SUSPICIOUS",
+        "ecod_p": "0.00272",
+        "if_p": "0.02995",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): unusual joint temperature-humidity pattern: RH 87% at 29.1\u00b0C, where this station/season/time of day expects ~51% (\u00b15); dew point 26.7\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 10:00:00+00:00",
+        "temperature_c": "27.6",
+        "humidity_pct": "87",
+        "status": "SUSPICIOUS",
+        "ecod_p": "0.00163",
+        "if_p": "0.02886",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): unusual joint temperature-humidity pattern: RH 87% at 27.6\u00b0C, where this station/season/time of day expects ~58% (\u00b15); dew point 25.2\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 11:00:00+00:00",
+        "temperature_c": "25.2",
+        "humidity_pct": "87",
+        "status": "SUSPICIOUS",
+        "ecod_p": "0.00191",
+        "if_p": "0.03185",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): unusual joint temperature-humidity pattern: RH 87% at 25.2\u00b0C, where this station/season/time of day expects ~70% (\u00b15); dew point 22.9\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      },
+      {
+        "station_id": "ZWL001156",
+        "city": "Bengaluru",
+        "timestamp": "2026-09-24 12:00:00+00:00",
+        "temperature_c": "25.4",
+        "humidity_pct": "87",
+        "status": "SUSPICIOUS",
+        "ecod_p": "0.00163",
+        "if_p": "0.04084",
+        "reason": "Suspicious multivariate pattern (only ECOD flags): unusual joint temperature-humidity pattern: RH 87% at 25.4\u00b0C, where this station/season/time of day expects ~69% (\u00b15); dew point 23.1\u00b0C is above 100.0% of this station's history for the season and time of day [regional reference: Bengaluru]"
+      }
+    ]
+  }
+}

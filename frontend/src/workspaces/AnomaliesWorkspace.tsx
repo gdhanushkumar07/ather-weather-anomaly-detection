@@ -4,11 +4,14 @@ import { AnomaliesSummary } from '../types/weather';
 import { fetchIncidents } from '../services/api';
 import { AnomalyCard } from '../components/AnomalyCard';
 import { IncidentDetail } from '../components/IncidentDetail';
+import { useLiveEvents } from '../services/live';
 
 interface AnomaliesWorkspaceProps {
   summary: AnomaliesSummary | null;
   activeIncidentCounts: Record<string, number> | null;
   onViewStation: (stationId: string) => void;
+  openIncidentId?: string | null;
+  onOpenIncident?: (incidentId: string | null) => void;
 }
 
 // UI tab label -> backend `status` filter. "ACTIVE" surfaces brand-new,
@@ -30,12 +33,14 @@ const TABS: { label: string; status: string | null }[] = [
  * incident opens its detail in place, without leaving this workspace or
  * stacking another panel on the map (Phase 37).
  */
-export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary, activeIncidentCounts, onViewStation }) => {
+export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ activeIncidentCounts, onViewStation, openIncidentId, onOpenIncident }) => {
   const [tabIndex, setTabIndex] = useState(0);
   const [incidents, setIncidents] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
+  const [localSelected, setLocalSelected] = useState<string | null>(null);
+  const selectedIncidentId = openIncidentId !== undefined ? openIncidentId : localSelected;
+  const setSelectedIncidentId = (id: string | null) => (onOpenIncident ? onOpenIncident(id) : setLocalSelected(id));
 
   const tab = TABS[tabIndex];
 
@@ -49,6 +54,11 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
   };
 
   useEffect(() => { load(); }, [tabIndex]);
+
+  // New incidents from the pipeline appear without reloading the page.
+  useLiveEvents(['INCIDENT_CREATED', 'INCIDENT_UPDATED'], () => {
+    if (!selectedIncidentId) fetchIncidents(tab.status).then((r) => setIncidents(r.incidents)).catch(() => {});
+  });
 
   if (selectedIncidentId) {
     return (
@@ -68,8 +78,8 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
         <div className="workspace-page-title-group">
           <div className="workspace-page-icon-badge"><ShieldAlert className="w-4 h-4 text-red-400" /></div>
           <div>
-            <div className="workspace-page-title">ATHER ANOMALIES</div>
-            <div className="workspace-page-subtitle">Operational anomaly management — evidence, root cause, and incident actions.</div>
+            <div className="workspace-page-title">ATHER INCIDENTS</div>
+            <div className="workspace-page-subtitle">Opened automatically by the real-time pipeline — evidence, root cause, lifecycle and operator actions. Updates live.</div>
           </div>
         </div>
       </div>
@@ -104,7 +114,7 @@ export const AnomaliesWorkspace: React.FC<AnomaliesWorkspaceProps> = ({ summary,
               accent={inc.severity === 'CRITICAL' ? 'critical' : inc.severity === 'INFO' ? 'neutral' : 'warning'}
               pillLabel={inc.status}
               stationId={inc.station_id}
-              title={`${inc.parameter} anomaly`}
+              title={`${inc.parameter} — ${inc.context?.rca_label || String(inc.root_cause || '').replace(/_/g, ' ')}${inc.source === 'SIMULATED_FEED' ? ' · simulated feed' : ''}`}
               location={`${inc.station_name || ''} · ${inc.town || ''}`}
               onView={() => setSelectedIncidentId(inc.incident_id)}
               metrics={[

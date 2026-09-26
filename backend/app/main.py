@@ -5,6 +5,9 @@ FastAPI server orchestrating weather station management, anomaly detection,
 Vane meteorological grid rendering data, and multi-protocol ingestion.
 """
 
+import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, Dict, Any
@@ -18,10 +21,39 @@ from .simulation import service as simulation_service
 from .incidents import service as incident_service
 from .layers import lab_service
 
+
+def _publish_incident(inc):
+    """Pushes an operator's incident transition to every connected dashboard."""
+    from .pipeline.runtime import get_runtime
+    from .pipeline.processor import incident_event_payload
+    rt = get_runtime()
+    if rt is not None and inc:
+        rt.broker.publish("INCIDENT_UPDATED", incident_event_payload(inc))
+    return inc
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Starts the continuous pipeline (sources -> stream -> engine -> store ->
+    events) with the API, and stops it cleanly on shutdown."""
+    from .pipeline.runtime import PipelineRuntime, set_runtime, _flag
+    rt = None
+    if _flag("ATHER_PIPELINE_ENABLED"):
+        rt = PipelineRuntime(detector=detector, station_service=station_service, incident_service=incident_service)
+        set_runtime(rt)
+        await rt.start()
+    try:
+        yield
+    finally:
+        if rt:
+            await rt.stop()
+            set_runtime(None)
+
+
 app = FastAPI(
     title="ATHER Core API",
     description="Intelligent Weather-Station Monitoring and Anomaly-Detection Platform",
-    version="1.0.0"
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for local development and demo
@@ -83,10 +115,25 @@ def get_station_observations(station_id: str, hours: int = Query(24, ge=1, le=16
     stn = station_service.get_station(station_id)
     if not stn:
         raise HTTPException(status_code=404, detail=f"Station '{station_id}' not found")
+    from .pipeline.runtime import get_runtime
+    rt = get_runtime()
+    if rt is None:
+        return {"station_id": station_id, "hours": hours,
+                "series": station_service.get_observations_history(station_id, hours=hours)}
+    # Real persisted telemetry only. Stations without a live feed get an empty
+    # series and an explanation — never a synthesized curve labelled as data.
+    import time as _time
+    rows = rt.store.history(station_id, _time.time() - hours * 3600, max_points=300)
+    series = [{
+        "timestamp": int(r["observed_at"]),
+        "timeLabel": _time.strftime("%H:%M", _time.gmtime(r["observed_at"])),
+        "temperature": r.get("temperature"), "pressure": r.get("pressure"),
+        "humidity": r.get("humidity"), "windSpeed": r.get("wind_speed"),
+        "source": r.get("source"),
+    } for r in rows]
     return {
-        "station_id": station_id,
-        "hours": hours,
-        "series": station_service.get_observations_history(station_id, hours=hours)
+        "station_id": station_id, "hours": hours, "series": series,
+        "note": None if series else "No telemetry has been recorded for this station in the selected window.",
     }
 
 @app.get("/api/weather/metadata")
@@ -189,16 +236,28 @@ def ingest_observation(payload: Dict[str, Any]):
     Multi-protocol ingestion endpoint accepting WeeWX, WOW-BE, or native ATHER packets.
     Instantly runs through the Anomaly Detection engine and updates station state.
     """
+    from .pipeline.runtime import get_runtime
     try:
         stn_id, normalized_data = IngestionAdapter.parse_payload(payload)
-        updated_stn = station_service.ingest_observation(stn_id, normalized_data)
-        return {
-            "status": "success",
-            "station_id": stn_id,
-            "station": updated_stn
-        }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    rt = get_runtime()
+    if rt is None:
+        # Pipeline not running (e.g. ATHER_PIPELINE_ENABLED=0): legacy path.
+        updated_stn = station_service.ingest_observation(stn_id, normalized_data)
+        return {"status": "success", "station_id": stn_id, "station": updated_stn}
+    from .pipeline.api import legacy_payload_to_observation
+    obs = legacy_payload_to_observation(stn_id, normalized_data, payload)
+    result = rt.process_now([obs])
+    if result["rejected"]:
+        raise HTTPException(status_code=400, detail=result["rejected"][0])
+    outcome = result["outcomes"][0]
+    return {
+        "status": outcome["status"],
+        "station_id": stn_id,
+        "station": station_service._stations.get(stn_id),
+        "detection": outcome.get("detection"),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -288,7 +347,7 @@ def get_incident(incident_id: str):
 def acknowledge_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
     actor = (payload or {}).get("actor", "operator")
     try:
-        return incident_service.acknowledge(incident_id, actor=actor)
+        return _publish_incident(incident_service.acknowledge(incident_id, actor=actor))
     except incident_service.IncidentNotFoundError:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     except incident_service.InvalidTransitionError as e:
@@ -298,7 +357,7 @@ def acknowledge_incident(incident_id: str, payload: Optional[Dict[str, Any]] = N
 def investigate_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
     actor = (payload or {}).get("actor", "operator")
     try:
-        return incident_service.investigate(incident_id, actor=actor)
+        return _publish_incident(incident_service.investigate(incident_id, actor=actor))
     except incident_service.IncidentNotFoundError:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     except incident_service.InvalidTransitionError as e:
@@ -308,7 +367,7 @@ def investigate_incident(incident_id: str, payload: Optional[Dict[str, Any]] = N
 def escalate_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):
     actor = (payload or {}).get("actor", "operator")
     try:
-        return incident_service.escalate(incident_id, actor=actor)
+        return _publish_incident(incident_service.escalate(incident_id, actor=actor))
     except incident_service.IncidentNotFoundError:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     except incident_service.InvalidTransitionError as e:
@@ -320,7 +379,7 @@ def resolve_incident(incident_id: str, payload: Dict[str, Any]):
     notes = payload.get("resolution_notes", "")
     resolution_type = payload.get("resolution_type", "")
     try:
-        return incident_service.resolve(incident_id, actor, notes, resolution_type)
+        return _publish_incident(incident_service.resolve(incident_id, actor, notes, resolution_type))
     except incident_service.IncidentNotFoundError:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     except incident_service.InvalidTransitionError as e:
@@ -333,7 +392,7 @@ def dismiss_incident(incident_id: str, payload: Dict[str, Any]):
     actor = payload.get("actor", "operator")
     reason = payload.get("dismissal_reason", "")
     try:
-        return incident_service.dismiss(incident_id, actor, reason)
+        return _publish_incident(incident_service.dismiss(incident_id, actor, reason))
     except incident_service.IncidentNotFoundError:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     except incident_service.InvalidTransitionError as e:
@@ -356,3 +415,35 @@ def get_station_incidents(station_id: str, source: Optional[str] = "LIVE_AWS"):
     Intelligence -> incident history). Returns persisted incidents only —
     never fabricates a record for a station that has never been actionable."""
     return {"incidents": incident_service.list_all(source=source, station_id=station_id)}
+
+
+# ─────────────────────────────────────────────────────────────────
+# ATHER REAL-TIME PIPELINE — live stream, state, sources, lab, replay
+# (see app/pipeline/api.py)
+# ─────────────────────────────────────────────────────────────────
+from .pipeline.api import router as realtime_router  # noqa: E402
+
+app.include_router(realtime_router)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Optional: serve the built dashboard (frontend/dist) from this same server,
+# so one port serves UI + API with no proxy in between. Active only after
+# `npm run build`; registered LAST so it can never shadow an API route, and
+# it never answers /api/* paths. Dev mode (`npm run dev`) is unaffected.
+# ─────────────────────────────────────────────────────────────────
+from pathlib import Path  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
+
+_FRONTEND_DIST = (Path(__file__).resolve().parents[2] / "frontend" / "dist").resolve()
+
+if (_FRONTEND_DIST / "index.html").is_file():
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_dashboard(full_path: str):
+        if full_path == "api" or full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = (_FRONTEND_DIST / full_path).resolve()
+        if full_path and candidate.is_file() and _FRONTEND_DIST in candidate.parents:
+            return FileResponse(candidate)
+        # Client-side routes (/map, /layer-lab, /system, ...) -> the SPA shell.
+        return FileResponse(_FRONTEND_DIST / "index.html")

@@ -1,0 +1,739 @@
+{
+  "dataset": {
+    "rows_received": 157001,
+    "columns_dropped": [
+      "dew_point_observed_c"
+    ],
+    "dropped_bad_timestamp": 0,
+    "dropped_missing_or_nonfinite_channel": 58653,
+    "dropped_outside_physical_bounds": 0,
+    "dropped_duplicate_station_timestamp": 0,
+    "rows_retained": 98348,
+    "stations": 6,
+    "dataset": "noaa_isd_lite",
+    "source_dir": "C:\\Users\\Juttu\\OneDrive\\Desktop\\SIH Ather\\ather-weather-anomaly-detection\\data\\raw\\isd_lite",
+    "pressure": "sea-level pressure (observed)",
+    "humidity": "derived from observed T and dew point (Magnus, Alduchov & Eskridge 1996)"
+  },
+  "stations_manifest": [
+    {
+      "city": "Delhi",
+      "name": "Delhi (Safdarjung)",
+      "usaf": "421820",
+      "wban": "99999",
+      "icao": "VIDD",
+      "lat": 28.585,
+      "lon": 77.206,
+      "elev_m": 214.9,
+      "complete_rows_per_year": {
+        "2019": 2845,
+        "2020": 2898,
+        "2021": 2865,
+        "2022": 2868,
+        "2023": 2856,
+        "2024": 2754
+      }
+    },
+    {
+      "city": "Mumbai",
+      "name": "Mumbai (Chhatrapati Shivaji Maharaj Intl)",
+      "usaf": "430030",
+      "wban": "99999",
+      "icao": "VABB",
+      "lat": 19.089,
+      "lon": 72.868,
+      "elev_m": 11.3,
+      "complete_rows_per_year": {
+        "2019": 2910,
+        "2020": 2910,
+        "2021": 2877,
+        "2022": 2903,
+        "2023": 2877,
+        "2024": 2773
+      }
+    },
+    {
+      "city": "Chennai",
+      "name": "Chennai (Numgambakkam)",
+      "usaf": "432780",
+      "wban": "99999",
+      "icao": null,
+      "lat": 13.067,
+      "lon": 80.2,
+      "elev_m": 7.0,
+      "complete_rows_per_year": {
+        "2019": 1980,
+        "2020": 2149,
+        "2021": 2132,
+        "2022": 2155,
+        "2023": 2091,
+        "2024": 2005
+      }
+    },
+    {
+      "city": "Kolkata",
+      "name": "Kolkata (Behala)",
+      "usaf": "428070",
+      "wban": "99999",
+      "icao": "VEBA",
+      "lat": 22.505,
+      "lon": 88.293,
+      "elev_m": 2.4,
+      "complete_rows_per_year": {
+        "2019": 2893,
+        "2020": 2880,
+        "2021": 2846,
+        "2022": 2871,
+        "2023": 2853,
+        "2024": 2772
+      }
+    },
+    {
+      "city": "Hyderabad",
+      "name": "Hyderabad (Begumpet Airport / Hyderabad Intl)",
+      "usaf": "431280",
+      "wban": "99999",
+      "icao": "VOHY",
+      "lat": 17.452,
+      "lon": 78.461,
+      "elev_m": 531.0,
+      "complete_rows_per_year": {
+        "2019": 2908,
+        "2020": 2911,
+        "2021": 2878,
+        "2022": 2886,
+        "2023": 2869,
+        "2024": 2750
+      }
+    },
+    {
+      "city": "Pune",
+      "name": "Pune (Pune)",
+      "usaf": "430630",
+      "wban": "99999",
+      "icao": null,
+      "lat": 18.533,
+      "lon": 73.85,
+      "elev_m": 558.0,
+      "complete_rows_per_year": {
+        "2019": 2902,
+        "2020": 2888,
+        "2021": 2872,
+        "2022": 2890,
+        "2023": 2871,
+        "2024": 2760
+      }
+    }
+  ],
+  "split_spec": {
+    "mode": "seasonal_years",
+    "train_years": [
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "val_years": [],
+    "test_years": [
+      2023,
+      2024
+    ],
+    "train_frac": 0.75
+  },
+  "config": {
+    "ecod_enabled": true,
+    "isolation_forest_enabled": true,
+    "if_n_estimators": 200,
+    "if_max_samples": "auto",
+    "if_random_state": 42,
+    "fit_max_rows": 6000,
+    "alpha": 0.01,
+    "calibration_fraction": 0.25,
+    "feature_representation": "diurnal_anomaly",
+    "use_rh_temperature_residual": true,
+    "use_pressure_temperature_residual": true,
+    "use_diurnal_features": true,
+    "season_window_days": 30,
+    "max_delta_gap_hours": 3.0,
+    "min_train_samples": 400,
+    "station_model_takeover_samples": 1440,
+    "retrain_interval": 24,
+    "buffer_max_len": 2160,
+    "reference_enabled": true,
+    "reference_data_path": "../data/historical/open_meteo_india_hourly.csv",
+    "reference_cache_dir": "models/multivariate/reference",
+    "reference_max_distance_km": 75.0,
+    "reference_max_cached_models": 96,
+    "clausius_clapeyron_temp_c": 32.0,
+    "clausius_clapeyron_rh_pct": 95.0,
+    "clausius_clapeyron_score": 0.85
+  },
+  "injection": {
+    "duration": 3,
+    "spacing": 16,
+    "events_per_type_per_year": 12,
+    "types": [
+      "t_rh_decoupling",
+      "rh_offset",
+      "joint_t_rh_extreme",
+      "dew_point_inconsistency",
+      "pressure_offset_control"
+    ],
+    "placed_by_type": {
+      "t_rh_decoupling": 135,
+      "rh_offset": 139,
+      "joint_t_rh_extreme": 137,
+      "dew_point_inconsistency": 125,
+      "pressure_offset_control": 137
+    }
+  },
+  "results": {
+    "test": {
+      "split": "test",
+      "alpha": 0.01,
+      "normal_data": {
+        "observations": 32231,
+        "stations": 6,
+        "flag_rate_by_tier": {
+          "anomaly": 0.00512,
+          "any_flag": 0.01036,
+          "ecod_alone": 0.0081,
+          "iforest_alone": 0.00738,
+          "univariate_baseline": 0.05597
+        },
+        "flag_count_by_tier": {
+          "anomaly": 165,
+          "any_flag": 334,
+          "ecod_alone": 261,
+          "iforest_alone": 238,
+          "univariate_baseline": 1804
+        },
+        "ecod_p_quantiles": {
+          "0.001": 0.0021,
+          "0.01": 0.01156,
+          "0.05": 0.05761,
+          "0.5": 0.5123
+        },
+        "if_p_quantiles": {
+          "0.001": 0.00211,
+          "0.01": 0.01259,
+          "0.05": 0.06445,
+          "0.5": 0.50515
+        },
+        "layer_score_quantiles_sampled": {
+          "0.5": 0.0729,
+          "0.9": 0.2248,
+          "0.99": 0.6051,
+          "0.999": 0.8468
+        },
+        "per_station_anomaly_rate": {
+          "min": 0.0023,
+          "median": 0.00578,
+          "max": 0.0061
+        }
+      },
+      "injected": {
+        "all_multivariate_types": {
+          "anomaly": {
+            "TP": 201,
+            "FP": 164,
+            "FN": 1407,
+            "TN": 30459,
+            "precision": 0.5507,
+            "recall": 0.125,
+            "f1": 0.2038,
+            "false_positive_rate": 0.0054,
+            "prevalence": 0.0499,
+            "event_recall": 0.2799,
+            "events": 536
+          },
+          "any_flag": {
+            "TP": 500,
+            "FP": 337,
+            "FN": 1108,
+            "TN": 30286,
+            "precision": 0.5974,
+            "recall": 0.3109,
+            "f1": 0.409,
+            "false_positive_rate": 0.011,
+            "prevalence": 0.0499,
+            "event_recall": 0.5354,
+            "events": 536
+          },
+          "ecod_alone": {
+            "TP": 477,
+            "FP": 264,
+            "FN": 1131,
+            "TN": 30359,
+            "precision": 0.6437,
+            "recall": 0.2966,
+            "f1": 0.4061,
+            "false_positive_rate": 0.0086,
+            "prevalence": 0.0499,
+            "event_recall": 0.4981,
+            "events": 536
+          },
+          "iforest_alone": {
+            "TP": 224,
+            "FP": 237,
+            "FN": 1384,
+            "TN": 30386,
+            "precision": 0.4859,
+            "recall": 0.1393,
+            "f1": 0.2165,
+            "false_positive_rate": 0.0077,
+            "prevalence": 0.0499,
+            "event_recall": 0.3172,
+            "events": 536
+          },
+          "univariate_baseline": {
+            "TP": 577,
+            "FP": 1740,
+            "FN": 1031,
+            "TN": 28883,
+            "precision": 0.249,
+            "recall": 0.3588,
+            "f1": 0.294,
+            "false_positive_rate": 0.0568,
+            "prevalence": 0.0499,
+            "event_recall": 0.5336,
+            "events": 536
+          }
+        },
+        "t_rh_decoupling": {
+          "anomaly": {
+            "TP": 43,
+            "FP": 166,
+            "FN": 362,
+            "TN": 31660,
+            "precision": 0.2057,
+            "recall": 0.1062,
+            "f1": 0.1401,
+            "false_positive_rate": 0.0052,
+            "prevalence": 0.0126,
+            "event_recall": 0.2741,
+            "events": 135
+          },
+          "any_flag": {
+            "TP": 96,
+            "FP": 335,
+            "FN": 309,
+            "TN": 31491,
+            "precision": 0.2227,
+            "recall": 0.237,
+            "f1": 0.2297,
+            "false_positive_rate": 0.0105,
+            "prevalence": 0.0126,
+            "event_recall": 0.5481,
+            "events": 135
+          },
+          "ecod_alone": {
+            "TP": 85,
+            "FP": 262,
+            "FN": 320,
+            "TN": 31564,
+            "precision": 0.245,
+            "recall": 0.2099,
+            "f1": 0.2261,
+            "false_positive_rate": 0.0082,
+            "prevalence": 0.0126,
+            "event_recall": 0.4741,
+            "events": 135
+          },
+          "iforest_alone": {
+            "TP": 54,
+            "FP": 239,
+            "FN": 351,
+            "TN": 31587,
+            "precision": 0.1843,
+            "recall": 0.1333,
+            "f1": 0.1547,
+            "false_positive_rate": 0.0075,
+            "prevalence": 0.0126,
+            "event_recall": 0.3481,
+            "events": 135
+          },
+          "univariate_baseline": {
+            "TP": 130,
+            "FP": 1793,
+            "FN": 275,
+            "TN": 30033,
+            "precision": 0.0676,
+            "recall": 0.321,
+            "f1": 0.1117,
+            "false_positive_rate": 0.0563,
+            "prevalence": 0.0126,
+            "event_recall": 0.5333,
+            "events": 135
+          }
+        },
+        "rh_offset": {
+          "anomaly": {
+            "TP": 11,
+            "FP": 164,
+            "FN": 406,
+            "TN": 31650,
+            "precision": 0.0629,
+            "recall": 0.0264,
+            "f1": 0.0372,
+            "false_positive_rate": 0.0052,
+            "prevalence": 0.0129,
+            "event_recall": 0.0791,
+            "events": 139
+          },
+          "any_flag": {
+            "TP": 43,
+            "FP": 334,
+            "FN": 374,
+            "TN": 31480,
+            "precision": 0.1141,
+            "recall": 0.1031,
+            "f1": 0.1083,
+            "false_positive_rate": 0.0105,
+            "prevalence": 0.0129,
+            "event_recall": 0.2374,
+            "events": 139
+          },
+          "ecod_alone": {
+            "TP": 39,
+            "FP": 261,
+            "FN": 378,
+            "TN": 31553,
+            "precision": 0.13,
+            "recall": 0.0935,
+            "f1": 0.1088,
+            "false_positive_rate": 0.0082,
+            "prevalence": 0.0129,
+            "event_recall": 0.223,
+            "events": 139
+          },
+          "iforest_alone": {
+            "TP": 15,
+            "FP": 237,
+            "FN": 402,
+            "TN": 31577,
+            "precision": 0.0595,
+            "recall": 0.036,
+            "f1": 0.0448,
+            "false_positive_rate": 0.0074,
+            "prevalence": 0.0129,
+            "event_recall": 0.0935,
+            "events": 139
+          },
+          "univariate_baseline": {
+            "TP": 95,
+            "FP": 1793,
+            "FN": 322,
+            "TN": 30021,
+            "precision": 0.0503,
+            "recall": 0.2278,
+            "f1": 0.0824,
+            "false_positive_rate": 0.0564,
+            "prevalence": 0.0129,
+            "event_recall": 0.3669,
+            "events": 139
+          }
+        },
+        "joint_t_rh_extreme": {
+          "anomaly": {
+            "TP": 125,
+            "FP": 163,
+            "FN": 286,
+            "TN": 31657,
+            "precision": 0.434,
+            "recall": 0.3041,
+            "f1": 0.3577,
+            "false_positive_rate": 0.0051,
+            "prevalence": 0.0128,
+            "event_recall": 0.5912,
+            "events": 137
+          },
+          "any_flag": {
+            "TP": 289,
+            "FP": 332,
+            "FN": 122,
+            "TN": 31488,
+            "precision": 0.4654,
+            "recall": 0.7032,
+            "f1": 0.5601,
+            "false_positive_rate": 0.0104,
+            "prevalence": 0.0128,
+            "event_recall": 0.9124,
+            "events": 137
+          },
+          "ecod_alone": {
+            "TP": 287,
+            "FP": 259,
+            "FN": 124,
+            "TN": 31561,
+            "precision": 0.5256,
+            "recall": 0.6983,
+            "f1": 0.5998,
+            "false_positive_rate": 0.0081,
+            "prevalence": 0.0128,
+            "event_recall": 0.8978,
+            "events": 137
+          },
+          "iforest_alone": {
+            "TP": 127,
+            "FP": 236,
+            "FN": 284,
+            "TN": 31584,
+            "precision": 0.3499,
+            "recall": 0.309,
+            "f1": 0.3282,
+            "false_positive_rate": 0.0074,
+            "prevalence": 0.0128,
+            "event_recall": 0.6058,
+            "events": 137
+          },
+          "univariate_baseline": {
+            "TP": 296,
+            "FP": 1782,
+            "FN": 115,
+            "TN": 30038,
+            "precision": 0.1424,
+            "recall": 0.7202,
+            "f1": 0.2378,
+            "false_positive_rate": 0.056,
+            "prevalence": 0.0128,
+            "event_recall": 0.927,
+            "events": 137
+          }
+        },
+        "dew_point_inconsistency": {
+          "anomaly": {
+            "TP": 22,
+            "FP": 166,
+            "FN": 353,
+            "TN": 31690,
+            "precision": 0.117,
+            "recall": 0.0587,
+            "f1": 0.0782,
+            "false_positive_rate": 0.0052,
+            "prevalence": 0.0116,
+            "event_recall": 0.168,
+            "events": 125
+          },
+          "any_flag": {
+            "TP": 72,
+            "FP": 338,
+            "FN": 303,
+            "TN": 31518,
+            "precision": 0.1756,
+            "recall": 0.192,
+            "f1": 0.1834,
+            "false_positive_rate": 0.0106,
+            "prevalence": 0.0116,
+            "event_recall": 0.44,
+            "events": 125
+          },
+          "ecod_alone": {
+            "TP": 66,
+            "FP": 265,
+            "FN": 309,
+            "TN": 31591,
+            "precision": 0.1994,
+            "recall": 0.176,
+            "f1": 0.187,
+            "false_positive_rate": 0.0083,
+            "prevalence": 0.0116,
+            "event_recall": 0.392,
+            "events": 125
+          },
+          "iforest_alone": {
+            "TP": 28,
+            "FP": 239,
+            "FN": 347,
+            "TN": 31617,
+            "precision": 0.1049,
+            "recall": 0.0747,
+            "f1": 0.0872,
+            "false_positive_rate": 0.0075,
+            "prevalence": 0.0116,
+            "event_recall": 0.216,
+            "events": 125
+          },
+          "univariate_baseline": {
+            "TP": 56,
+            "FP": 1784,
+            "FN": 319,
+            "TN": 30072,
+            "precision": 0.0304,
+            "recall": 0.1493,
+            "f1": 0.0506,
+            "false_positive_rate": 0.056,
+            "prevalence": 0.0116,
+            "event_recall": 0.288,
+            "events": 125
+          }
+        },
+        "pressure_offset_control": {
+          "anomaly": {
+            "TP": 18,
+            "FP": 166,
+            "FN": 393,
+            "TN": 31654,
+            "precision": 0.0978,
+            "recall": 0.0438,
+            "f1": 0.0605,
+            "false_positive_rate": 0.0052,
+            "prevalence": 0.0128,
+            "event_recall": 0.1168,
+            "events": 137
+          },
+          "any_flag": {
+            "TP": 48,
+            "FP": 339,
+            "FN": 363,
+            "TN": 31481,
+            "precision": 0.124,
+            "recall": 0.1168,
+            "f1": 0.1203,
+            "false_positive_rate": 0.0107,
+            "prevalence": 0.0128,
+            "event_recall": 0.3066,
+            "events": 137
+          },
+          "ecod_alone": {
+            "TP": 37,
+            "FP": 266,
+            "FN": 374,
+            "TN": 31554,
+            "precision": 0.1221,
+            "recall": 0.09,
+            "f1": 0.1036,
+            "false_positive_rate": 0.0084,
+            "prevalence": 0.0128,
+            "event_recall": 0.2263,
+            "events": 137
+          },
+          "iforest_alone": {
+            "TP": 29,
+            "FP": 239,
+            "FN": 382,
+            "TN": 31581,
+            "precision": 0.1082,
+            "recall": 0.0706,
+            "f1": 0.0854,
+            "false_positive_rate": 0.0075,
+            "prevalence": 0.0128,
+            "event_recall": 0.1971,
+            "events": 137
+          },
+          "univariate_baseline": {
+            "TP": 120,
+            "FP": 1786,
+            "FN": 291,
+            "TN": 30034,
+            "precision": 0.063,
+            "recall": 0.292,
+            "f1": 0.1036,
+            "false_positive_rate": 0.0561,
+            "prevalence": 0.0128,
+            "event_recall": 0.5328,
+            "events": 137
+          }
+        }
+      },
+      "alpha_sweep": {
+        "0.001": {
+          "normal_anomaly_rate": 0.0,
+          "normal_any_flag_rate": 0.0,
+          "anomaly_tier": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": null,
+            "false_positive_rate": 0.0
+          },
+          "any_flag_tier": {
+            "precision": null,
+            "recall": 0.0,
+            "f1": null,
+            "false_positive_rate": 0.0
+          }
+        },
+        "0.0025": {
+          "normal_anomaly_rate": 0.00109,
+          "normal_any_flag_rate": 0.00199,
+          "anomaly_tier": {
+            "precision": 0.5,
+            "recall": 0.0218,
+            "f1": 0.0417,
+            "false_positive_rate": 0.0011
+          },
+          "any_flag_tier": {
+            "precision": 0.6559,
+            "recall": 0.0759,
+            "f1": 0.136,
+            "false_positive_rate": 0.0021
+          }
+        },
+        "0.005": {
+          "normal_anomaly_rate": 0.00258,
+          "normal_any_flag_rate": 0.00512,
+          "anomaly_tier": {
+            "precision": 0.5389,
+            "recall": 0.0603,
+            "f1": 0.1085,
+            "false_positive_rate": 0.0027
+          },
+          "any_flag_tier": {
+            "precision": 0.6297,
+            "recall": 0.1766,
+            "f1": 0.2759,
+            "false_positive_rate": 0.0055
+          }
+        },
+        "0.01": {
+          "normal_anomaly_rate": 0.00512,
+          "normal_any_flag_rate": 0.01036,
+          "anomaly_tier": {
+            "precision": 0.5507,
+            "recall": 0.125,
+            "f1": 0.2038,
+            "false_positive_rate": 0.0054
+          },
+          "any_flag_tier": {
+            "precision": 0.5974,
+            "recall": 0.3109,
+            "f1": 0.409,
+            "false_positive_rate": 0.011
+          }
+        },
+        "0.02": {
+          "normal_anomaly_rate": 0.01253,
+          "normal_any_flag_rate": 0.02026,
+          "anomaly_tier": {
+            "precision": 0.5466,
+            "recall": 0.2991,
+            "f1": 0.3867,
+            "false_positive_rate": 0.013
+          },
+          "any_flag_tier": {
+            "precision": 0.5473,
+            "recall": 0.4857,
+            "f1": 0.5147,
+            "false_positive_rate": 0.0211
+          }
+        },
+        "0.05": {
+          "normal_anomaly_rate": 0.03189,
+          "normal_any_flag_rate": 0.04973,
+          "anomaly_tier": {
+            "precision": 0.456,
+            "recall": 0.5286,
+            "f1": 0.4896,
+            "false_positive_rate": 0.0331
+          },
+          "any_flag_tier": {
+            "precision": 0.4176,
+            "recall": 0.7015,
+            "f1": 0.5236,
+            "false_positive_rate": 0.0514
+          }
+        }
+      }
+    }
+  }
+}

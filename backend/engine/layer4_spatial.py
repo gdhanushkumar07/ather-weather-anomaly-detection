@@ -73,6 +73,12 @@ class SpatialNeighborLayer:
         }
         detail: Dict[str, Any] = {
             "total_neighbors_in_radius": len(valid_neighbors),
+            # Keys read by the detector, canonical layer card, fusion coverage
+            # and weather analysis (they previously defaulted to 0/None
+            # because only the nested distance_range_km dict was set).
+            "neighbor_count": len(valid_neighbors),
+            "min_distance_km": round(min(distances), 1) if distances else None,
+            "max_distance_km": round(max(distances), 1) if distances else None,
             "distance_range_km": {
                 "min": round(min(distances), 1) if distances else None,
                 "max": round(max(distances), 1) if distances else None,

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TopNav } from './components/TopNav';
 import { StationPanel } from './panels/StationPanel';
-import { TestLabModal } from './components/TestLabModal';
+import { TestLabWorkspace } from './workspaces/TestLabWorkspace';
 import { NetworkOverview } from './components/NetworkOverview';
 import { MapWorkspace } from './workspaces/MapWorkspace';
 import { AtherMapHandle, MapViewState } from './map/AtherMap';
@@ -13,6 +13,9 @@ import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary, fetch
 import { HomePage } from './pages/HomePage';
 import { findNearestStations, AWSNeighbor } from './aws/awsGeo';
 import { LayerLabWorkspace } from './workspaces/LayerLabWorkspace';
+import { SystemWorkspace } from './workspaces/SystemWorkspace';
+import { mapStatus, useLive } from './services/live';
+
 
 /**
  * Maps browser path to Workspace
@@ -26,6 +29,7 @@ function getWorkspaceFromPath(): Workspace {
   if (path === '/testlab' || path === '/test-lab') return 'testlab';
   if (path === '/layers' || path === '/layer-lab') return 'layers';
   if (path === '/station') return 'station';
+  if (path === '/system') return 'system';
   // Default root '/' is the marketing & product homepage
   return 'home';
 }
@@ -40,6 +44,7 @@ function getPathForWorkspace(ws: Workspace): string {
     case 'testlab': return '/test-lab';
     case 'layers': return '/layer-lab';
     case 'station': return '/station';
+    case 'system': return '/system';
     default: return '/';
   }
 }
@@ -64,9 +69,12 @@ export const App: React.FC = () => {
   // per-station status counts, and labeled accordingly wherever it is shown).
   const [activeIncidentCounts, setActiveIncidentCounts] = useState<Record<string, number> | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [basemap, setBasemap] = useState<'dark' | 'satellite'>('dark');
+  const [basemap, setBasemap] = useState<'dark' | 'satellite'>('satellite');
   const [isGlobeMode, setIsGlobeMode] = useState<boolean>(false);
   const [neighbors, setNeighbors] = useState<AWSNeighbor[]>([]);
+  // Epoch ms of the last successful summary refresh — surfaced in the nav so
+  // the LIVE badge is backed by an actual, visible data age.
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [showAnomalyOverlay, setShowAnomalyOverlay] = useState(true);
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
@@ -106,22 +114,60 @@ export const App: React.FC = () => {
     }
   };
 
-  // Map view-state persistence (Phase 2-4 of the map/station refinement):
-  // the map itself is never unmounted (see the always-mounted wrapper
-  // below), so center/zoom/bearing/pitch survive workspace switches on
-  // their own. The one remaining gap is the existing "fly to selected
-  // station" behavior, which would otherwise silently change the view the
-  // user returns to. mapRef gives imperative access to capture the view
-  // right before a station is selected, and to restore it on "Back to Map".
+  // Map view-state persistence: the map itself is never unmounted, so center/zoom/bearing/pitch
+  // survive workspace switches on their own. mapRef gives imperative access to capture
+  // the view right before navigating to full station details, and restore it on "Back to Map".
   const mapRef = useRef<AtherMapHandle>(null);
   const savedMapViewRef = useRef<MapViewState | null>(null);
 
-  // Fetch initial stations and summary — shared across every workspace.
+  // Incident deep link (/incidents?id=INC-...) — opened from the live feed.
+  const [openIncidentId, setOpenIncidentId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('id')
+  );
+
+  // The station CATALOGUE is loaded once; live status is merged in below from
+  // the SSE-driven store. Filtering is client-side — no refetch per filter.
   useEffect(() => {
     loadStations();
     loadSummary();
     loadActiveIncidentCounts();
-  }, [statusFilter]);
+  }, []);
+
+  const { stations: liveStations, stationsVersion, incidentCounts: liveIncidentCounts } = useLive();
+  useEffect(() => {
+    if (liveIncidentCounts) setActiveIncidentCounts(liveIncidentCounts);
+  }, [liveIncidentCounts]);
+
+  const mapGeoJSON = useMemo<GeoJSON.FeatureCollection | null>(() => {
+    if (!stationsGeoJSON) return null;
+    const features = stationsGeoJSON.features
+      .map((f) => {
+        const id = String(f.properties?.id ?? '');
+        const live = liveStations.get(id);
+        if (!live) return f;
+        const v = live.values || {};
+        return {
+          ...f,
+          properties: {
+            ...f.properties,
+            status: mapStatus(live.overall_status),
+            liveStatus: live.overall_status,
+            interpretation: live.interpretation,
+            hasAnomaly: live.overall_status === 'anomaly' ? 1 : 0,
+            severity: live.severity || 'NONE',
+            temperature: typeof v.temperature === 'number' && v.temperature > -45 && v.temperature < 60 ? v.temperature : null,
+            humidity: typeof v.humidity === 'number' && v.humidity >= 0 && v.humidity <= 100 ? v.humidity : null,
+            pressure: typeof v.pressure === 'number' && v.pressure > 850 && v.pressure < 1090 ? v.pressure : null,
+            windSpeed: v.wind_speed ?? f.properties?.windSpeed,
+            source: live.source,
+            timestamp: live.last_observed_at,
+          },
+        };
+      })
+      .filter((f) => !statusFilter || f.properties?.status === statusFilter);
+    return { ...stationsGeoJSON, features };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationsGeoJSON, stationsVersion, statusFilter]);
 
   // Real nearest-3-neighbor computation (Haversine over actual station
   // coordinates already in stationsGeoJSON) -- single source of truth,
@@ -153,9 +199,7 @@ export const App: React.FC = () => {
 
   const loadStations = async () => {
     try {
-      const geojson = await fetchStationsGeoJSON({
-        status: statusFilter || undefined
-      });
+      const geojson = await fetchStationsGeoJSON();
       setStationsGeoJSON(geojson);
     } catch (err) {
       console.error('Error loading stations', err);
@@ -166,20 +210,29 @@ export const App: React.FC = () => {
     try {
       const sum = await fetchAnomaliesSummary();
       setSummary(sum);
+      setLastUpdatedAt(Date.now());
     } catch (err) {
       console.error('Error loading summary', err);
     }
   };
 
-  // Selecting a station (map click, search, anomaly card, health card) always
-  // opens the Station Intelligence workspace — never another floating card
-  // stacked on top of whatever workspace was active (Phase 7).
+  // Selecting a station (map click, search, alert click):
+  // Keeps the map visible, centers/highlights on map, and opens the compact Station Preview Panel!
   const handleSelectStation = async (id: string) => {
-    // Capture the map's CURRENT view before anything (React state changes,
-    // the existing fly-to-station effect) can move it — this is what gets
-    // restored on "Back to Map", regardless of how the station was
-    // selected (map click, search, an anomaly/health card) or whether the
-    // map was even the visible workspace at the time (Phase 3/31).
+    if (workspace !== 'map') {
+      changeWorkspace('map');
+    }
+    try {
+      const stn = await fetchStationDetails(id);
+      setSelectedStation(stn);
+    } catch (err) {
+      console.error('Error selecting station', err);
+    }
+  };
+
+  // Level 3 Progressive Disclosure: Only called when the user explicitly clicks
+  // [ VIEW DETAILS ] in the Station Preview Panel.
+  const handleOpenStationDetails = async (id: string) => {
     const captured = mapRef.current?.getViewState();
     if (captured) savedMapViewRef.current = captured;
 
@@ -188,14 +241,11 @@ export const App: React.FC = () => {
       setSelectedStation(stn);
       changeWorkspace('station');
     } catch (err) {
-      console.error('Error selecting station', err);
+      console.error('Error opening station details', err);
     }
   };
 
   const handleBackToMap = () => {
-    // Single-use: once restored, clear it so a later "Back to Map" call
-    // (e.g. from Test Lab, with no station selection in between) doesn't
-    // re-apply a now-stale view over whatever the user has since done.
     if (savedMapViewRef.current) {
       mapRef.current?.restoreViewState(savedMapViewRef.current);
       savedMapViewRef.current = null;
@@ -204,7 +254,13 @@ export const App: React.FC = () => {
   };
 
   const handleNavigate = (target: Workspace) => {
+    if (target !== 'anomalies') setOpenIncidentId(null);
     changeWorkspace(target);
+  };
+
+  const handleOpenIncident = (incidentId: string) => {
+    setOpenIncidentId(incidentId);
+    changeWorkspace('anomalies');
   };
 
   // Temperature / Pressure / Relative Humidity are mutually exclusive — the
@@ -243,6 +299,7 @@ export const App: React.FC = () => {
             onNavigate={handleNavigate}
             isGlobeMode={isGlobeMode}
             onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
+            lastUpdatedAt={lastUpdatedAt}
           />
 
           <main className="ather-workspace-content">
@@ -260,9 +317,12 @@ export const App: React.FC = () => {
               <MapWorkspace
                 ref={mapRef}
                 isActive={workspace === 'map'}
-                stationsGeoJSON={stationsGeoJSON}
-                selectedStationId={selectedStation?.id ?? null}
+                stationsGeoJSON={mapGeoJSON}
+                selectedStation={selectedStation}
                 onSelectStation={handleSelectStation}
+                onClosePreview={() => setSelectedStation(null)}
+                onViewStationDetails={handleOpenStationDetails}
+                onOpenIncident={handleOpenIncident}
                 activeLayers={activeLayers}
                 onToggleLayer={handleToggleLayer}
                 basemap={basemap}
@@ -274,6 +334,8 @@ export const App: React.FC = () => {
                 isGlobeMode={isGlobeMode}
                 onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
                 neighbors={neighbors}
+                summary={summary}
+                onNavigate={handleNavigate}
               />
             </div>
 
@@ -296,6 +358,8 @@ export const App: React.FC = () => {
               station={selectedStation}
               onClose={handleBackToMap}
               neighbors={neighbors}
+              onOpenIncident={handleOpenIncident}
+              onSelectStation={handleOpenStationDetails}
             />
           ) : (
             <div className="workspace-empty-redirect">
@@ -306,7 +370,13 @@ export const App: React.FC = () => {
         )}
 
         {workspace === 'anomalies' && (
-          <AnomaliesWorkspace summary={summary} activeIncidentCounts={activeIncidentCounts} onViewStation={handleSelectStation} />
+          <AnomaliesWorkspace
+            summary={summary}
+            activeIncidentCounts={activeIncidentCounts}
+            onViewStation={handleOpenStationDetails}
+            openIncidentId={openIncidentId}
+            onOpenIncident={setOpenIncidentId}
+          />
         )}
 
         {workspace === 'health' && (
@@ -317,11 +387,13 @@ export const App: React.FC = () => {
           <LayerLabWorkspace stationsGeoJSON={stationsGeoJSON} />
         )}
 
+        {workspace === 'system' && <SystemWorkspace />}
+
         {workspace === 'testlab' && (
-          <TestLabModal
-            variant="page"
-            isOpen={true}
+          <TestLabWorkspace
             onClose={handleBackToMap}
+            onOpenIncident={handleOpenIncident}
+            onViewStation={handleOpenStationDetails}
             stations={
               stationsGeoJSON?.features
                 .map((f) => ({ id: String(f.properties?.id ?? ''), name: String(f.properties?.name ?? f.properties?.id ?? '') }))

@@ -133,6 +133,25 @@ class RootCauseClassifier:
                 or layer_details["spatial"].get("total_neighbors_in_radius", 0)
             )
 
+        # 4a. A station under sustained drift that suddenly jumps BACK into
+        # agreement with its neighbours is a sensor reset/recovery, not
+        # weather: the neighbours agree with the NEW value, not with a change.
+        drift_samples = (layer_details.get("drift") or {}).get("samples_in_radius", 0)
+        spatial_ok = (layer_details.get("spatial") or {}).get("neighbor_count", 0) >= 2
+        if (temporal_score > 0.60 and spatial_score < 0.30 and drift_score >= 0.40
+                and spatial_ok and drift_samples >= 12):
+            return DiagnosisResult(
+                fault_type      = FaultType.CALIBRATION_DRIFT,
+                confidence      = DiagnosisConfidence.MEDIUM,
+                primary_signal  = ("Abrupt step back towards neighbour consensus after sustained drift — "
+                                   "consistent with a sensor reset or recovery, not a weather event"),
+                evidence        = reasons,
+                alternatives    = ["Maintenance/recalibration performed at the station",
+                                   "Coincident real weather change"],
+                operator_action = ("Confirm whether maintenance occurred. If not, inspect the sensor: "
+                                   "a drift followed by a snap-back often indicates an intermittent fault."),
+            )
+
         if temporal_score > 0.60 and spatial_score < 0.30 and n_neighbors >= 2:
             if n_neighbors >= 4:
                 # Strong corroboration from many neighbors
@@ -219,21 +238,10 @@ class RootCauseClassifier:
                 ),
             )
 
-        # ── 7. Noise burst / statistical outlier ──────────────────────────
-        if "outlier" in reasons_text or "z=" in reasons_text or "modified z" in reasons_text:
-            return DiagnosisResult(
-                fault_type      = FaultType.NOISE_BURST,
-                confidence      = DiagnosisConfidence.LOW,
-                primary_signal  = "Statistical outlier in sensor time series",
-                evidence        = reasons,
-                alternatives    = [
-                    "Real short-duration weather anomaly",
-                    "Random measurement noise",
-                ],
-                operator_action = "Monitor the next reading. Single statistical outliers often self-resolve.",
-            )
-
-        # ── 8. Spatial outlier (isolated station) ─────────────────────────
+        # ── 7. Spatial outlier (isolated station) ─────────────────────────
+        # Checked before the statistical-outlier rule: a value that is both a
+        # temporal outlier AND strongly isolated from its neighbours is a
+        # station-level fault, not random noise.
         if spatial_score >= 0.65:
             return DiagnosisResult(
                 fault_type      = FaultType.SINGLE_CHANNEL_FAULT,
@@ -248,6 +256,20 @@ class RootCauseClassifier:
                     "Compare raw data from this station against neighboring stations manually. "
                     "Inspect the station if divergence persists across multiple readings."
                 ),
+            )
+
+        # ── 8. Noise burst / statistical outlier ──────────────────────────
+        if "outlier" in reasons_text or "z=" in reasons_text or "modified z" in reasons_text:
+            return DiagnosisResult(
+                fault_type      = FaultType.NOISE_BURST,
+                confidence      = DiagnosisConfidence.LOW,
+                primary_signal  = "Statistical outlier in sensor time series",
+                evidence        = reasons,
+                alternatives    = [
+                    "Real short-duration weather anomaly",
+                    "Random measurement noise",
+                ],
+                operator_action = "Monitor the next reading. Single statistical outliers often self-resolve.",
             )
 
         # ── 9. Multivariate inconsistency ─────────────────────────────────

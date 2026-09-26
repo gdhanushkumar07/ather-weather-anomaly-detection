@@ -9,7 +9,7 @@ import time
 import urllib.request
 import urllib.parse
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # WMO Weather interpretation codes (WW)
 WMO_WEATHER_CODES = {
@@ -54,6 +54,19 @@ def degrees_to_cardinal(deg: Optional[float]) -> str:
     return cardinals[(val % 16)]
 
 import os
+import ssl
+from typing import List
+
+
+def _tls_context() -> ssl.SSLContext:
+    """Verified TLS. certifi's CA bundle is used when available because
+    python.org macOS builds ship without system CA certificates."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return ssl.create_default_context()
+
 
 class OpenMeteoService:
     def __init__(self, cache_ttl_seconds: int = 1800):
@@ -61,6 +74,10 @@ class OpenMeteoService:
         self.cache_ttl = cache_ttl_seconds
         self._cache_file = os.path.join(os.path.dirname(__file__), ".weather_cache.json")
         self._load_disk_cache()
+        self._ctx = _tls_context()
+        # Outcome of the most recent batch fetch — lets the reference adapter
+        # distinguish "source down" from "everything already cached".
+        self.last_report: Dict[str, Any] = {}
 
     def _load_disk_cache(self):
         try:
@@ -97,10 +114,7 @@ class OpenMeteoService:
         }
         url = f"https://api.open-meteo.com/v1/forecast?{urllib.parse.urlencode(params)}"
 
-        import ssl
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx = self._ctx
 
         req = urllib.request.Request(
             url,
@@ -158,13 +172,12 @@ class OpenMeteoService:
         Fetches current weather for a list of (lat, lon) coordinates in chunks of up to 50
         using Open-Meteo multi-coordinate API. Returns list matching input order.
         """
-        import ssl
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        ctx = self._ctx
 
         now = time.time()
         results: List[Optional[Dict[str, Any]]] = [None] * len(coords)
+        report = {"requested": len(coords), "to_fetch": 0, "fetched": 0, "errors": 0, "last_error": None, "at": now}
+        self.last_report = report
 
         # Check cache first
         indices_to_fetch = []
@@ -178,6 +191,7 @@ class OpenMeteoService:
             else:
                 indices_to_fetch.append(idx)
 
+        report["to_fetch"] = len(indices_to_fetch)
         if not indices_to_fetch:
             return results
 
@@ -242,11 +256,14 @@ class OpenMeteoService:
                                 self.cache[cache_key] = {"cached_at": now, "data": formatted_data}
                                 results[target_idx] = formatted_data
                                 updated_any = True
+                                report["fetched"] += 1
                             break
                 except Exception as e:
                     if "429" in str(e) and attempt == 0:
                         time.sleep(1.5)
                         continue
+                    report["errors"] += 1
+                    report["last_error"] = f"{type(e).__name__}: {e}"[:200]
                     print(f"Warning: Open-Meteo batch weather fetch error for chunk {i}: {e}")
                     break
 

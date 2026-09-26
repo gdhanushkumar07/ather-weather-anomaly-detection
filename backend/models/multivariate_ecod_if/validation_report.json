@@ -1,0 +1,484 @@
+{
+ "design": {
+  "base_rows": 3000,
+  "source": "held-out TEST period 2021-2026 (never used for fit/calibration)",
+  "magnitudes": {
+   "temperature_spike": [
+    [
+     "+5C",
+     "t",
+     5.0
+    ],
+    [
+     "+10C",
+     "t",
+     10.0
+    ],
+    [
+     "+15C",
+     "t",
+     15.0
+    ]
+   ],
+   "temperature_drop": [
+    [
+     "-5C",
+     "t",
+     -5.0
+    ],
+    [
+     "-10C",
+     "t",
+     -10.0
+    ],
+    [
+     "-15C",
+     "t",
+     -15.0
+    ]
+   ],
+   "pressure_offset_pos": [
+    [
+     "+5hPa",
+     "p",
+     5.0
+    ],
+    [
+     "+15hPa",
+     "p",
+     15.0
+    ],
+    [
+     "+30hPa",
+     "p",
+     30.0
+    ]
+   ],
+   "pressure_offset_neg": [
+    [
+     "-5hPa",
+     "p",
+     -5.0
+    ],
+    [
+     "-15hPa",
+     "p",
+     -15.0
+    ],
+    [
+     "-30hPa",
+     "p",
+     -30.0
+    ]
+   ],
+   "humidity_offset_pos": [
+    [
+     "+15%",
+     "h",
+     15.0
+    ],
+    [
+     "+30%",
+     "h",
+     30.0
+    ],
+    [
+     "+50%",
+     "h",
+     50.0
+    ]
+   ],
+   "humidity_offset_neg": [
+    [
+     "-15%",
+     "h",
+     -15.0
+    ],
+    [
+     "-30%",
+     "h",
+     -30.0
+    ],
+    [
+     "-50%",
+     "h",
+     -50.0
+    ]
+   ]
+  },
+  "noise_sigma_multiplier": 3.0,
+  "seed": 7,
+  "note": "Ground truth known by construction. Nothing was tuned on these results."
+ },
+ "scenarios": {
+  "clean_control": {
+   "ground_truth": "CLEAN",
+   "n": 3000,
+   "ecod_ge_0_5": 0.005333333333333333,
+   "isolation_forest_ge_0_5": 0.005333333333333333,
+   "combined_ge_0_5": 0.008,
+   "combined_ge_0_75": 0.0023333333333333335,
+   "combined_mean": 0.01759514734610288,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.954,
+   "driver_isolation_forest": 0.046
+  },
+  "temperature_spike +5C": {
+   "ground_truth": "FAULT (temperature_c +5)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.03933333333333333,
+   "isolation_forest_ge_0_5": 0.018333333333333333,
+   "combined_ge_0_5": 0.043333333333333335,
+   "combined_ge_0_75": 0.015333333333333332,
+   "combined_mean": 0.05342298266432438,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.9016666666666666,
+   "driver_isolation_forest": 0.09833333333333333,
+   "dominant_channel_correct": 0.6266666666666667
+  },
+  "temperature_spike +10C": {
+   "ground_truth": "FAULT (temperature_c +10)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.107,
+   "isolation_forest_ge_0_5": 0.034333333333333334,
+   "combined_ge_0_5": 0.115,
+   "combined_ge_0_75": 0.04133333333333333,
+   "combined_mean": 0.12394693432830506,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.8393333333333334,
+   "driver_isolation_forest": 0.16066666666666668,
+   "dominant_channel_correct": 0.7886666666666666
+  },
+  "temperature_spike +15C": {
+   "ground_truth": "FAULT (temperature_c +15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.238,
+   "isolation_forest_ge_0_5": 0.04533333333333334,
+   "combined_ge_0_5": 0.24166666666666667,
+   "combined_ge_0_75": 0.08433333333333333,
+   "combined_mean": 0.24302707168609622,
+   "ecod_median": 0.003330982821160086,
+   "isolation_forest_median": 0.055905213147024485,
+   "combined_median": 0.07999288337131671,
+   "driver_ecod": 0.797,
+   "driver_isolation_forest": 0.203,
+   "dominant_channel_correct": 0.8943333333333333
+  },
+  "temperature_drop -5C": {
+   "ground_truth": "FAULT (temperature_c -5)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.024333333333333332,
+   "isolation_forest_ge_0_5": 0.004666666666666667,
+   "combined_ge_0_5": 0.026333333333333334,
+   "combined_ge_0_75": 0.007666666666666666,
+   "combined_mean": 0.04378366790046834,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.9413333333333334,
+   "driver_isolation_forest": 0.058666666666666666,
+   "dominant_channel_correct": 0.5586666666666666
+  },
+  "temperature_drop -10C": {
+   "ground_truth": "FAULT (temperature_c -10)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.11766666666666667,
+   "isolation_forest_ge_0_5": 0.015,
+   "combined_ge_0_5": 0.12166666666666667,
+   "combined_ge_0_75": 0.04033333333333333,
+   "combined_mean": 0.13664127887430147,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.876,
+   "driver_isolation_forest": 0.124,
+   "dominant_channel_correct": 0.777
+  },
+  "temperature_drop -15C": {
+   "ground_truth": "FAULT (temperature_c -15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.29933333333333334,
+   "isolation_forest_ge_0_5": 0.030666666666666665,
+   "combined_ge_0_5": 0.30766666666666664,
+   "combined_ge_0_75": 0.096,
+   "combined_mean": 0.28163834086520023,
+   "ecod_median": 0.03484668164240283,
+   "isolation_forest_median": 0.024480212463360917,
+   "combined_median": 0.1308529887014257,
+   "driver_ecod": 0.8383333333333334,
+   "driver_isolation_forest": 0.16166666666666665,
+   "dominant_channel_correct": 0.8996666666666666
+  },
+  "pressure_offset_pos +5hPa": {
+   "ground_truth": "FAULT (pressure_hpa +5)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.04033333333333333,
+   "isolation_forest_ge_0_5": 0.013333333333333334,
+   "combined_ge_0_5": 0.04566666666666667,
+   "combined_ge_0_75": 0.013,
+   "combined_mean": 0.06201948620977288,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.928,
+   "driver_isolation_forest": 0.072,
+   "dominant_channel_correct": 0.417
+  },
+  "pressure_offset_pos +15hPa": {
+   "ground_truth": "FAULT (pressure_hpa +15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.35733333333333334,
+   "isolation_forest_ge_0_5": 0.033,
+   "combined_ge_0_5": 0.359,
+   "combined_ge_0_75": 0.11866666666666667,
+   "combined_mean": 0.31689329554853307,
+   "ecod_median": 0.19590052509588018,
+   "isolation_forest_median": 0.014654403401196267,
+   "combined_median": 0.20193808257132398,
+   "driver_ecod": 0.9103333333333333,
+   "driver_isolation_forest": 0.08966666666666667,
+   "dominant_channel_correct": 0.8586666666666667
+  },
+  "pressure_offset_pos +30hPa": {
+   "ground_truth": "FAULT (pressure_hpa +30)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.8456666666666667,
+   "isolation_forest_ge_0_5": 0.041,
+   "combined_ge_0_5": 0.846,
+   "combined_ge_0_75": 0.26,
+   "combined_mean": 0.6315774198310411,
+   "ecod_median": 0.626571856281764,
+   "isolation_forest_median": 0.0809508777092331,
+   "combined_median": 0.626571856281764,
+   "driver_ecod": 0.963,
+   "driver_isolation_forest": 0.037,
+   "dominant_channel_correct": 0.9943333333333333
+  },
+  "pressure_offset_neg -5hPa": {
+   "ground_truth": "FAULT (pressure_hpa -5)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.027333333333333334,
+   "isolation_forest_ge_0_5": 0.012,
+   "combined_ge_0_5": 0.028666666666666667,
+   "combined_ge_0_75": 0.009666666666666667,
+   "combined_mean": 0.051178728121243494,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.91,
+   "driver_isolation_forest": 0.09,
+   "dominant_channel_correct": 0.454
+  },
+  "pressure_offset_neg -15hPa": {
+   "ground_truth": "FAULT (pressure_hpa -15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.25266666666666665,
+   "isolation_forest_ge_0_5": 0.044,
+   "combined_ge_0_5": 0.25966666666666666,
+   "combined_ge_0_75": 0.07633333333333334,
+   "combined_mean": 0.26431823864135695,
+   "ecod_median": 0.0986164063148312,
+   "isolation_forest_median": 0.0829994183702814,
+   "combined_median": 0.15632763784732806,
+   "driver_ecod": 0.8096666666666666,
+   "driver_isolation_forest": 0.19033333333333333,
+   "dominant_channel_correct": 0.7986666666666666
+  },
+  "pressure_offset_neg -30hPa": {
+   "ground_truth": "FAULT (pressure_hpa -30)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.6946666666666667,
+   "isolation_forest_ge_0_5": 0.065,
+   "combined_ge_0_5": 0.6953333333333334,
+   "combined_ge_0_75": 0.20233333333333334,
+   "combined_mean": 0.5771036742074412,
+   "ecod_median": 0.5866584846544455,
+   "isolation_forest_median": 0.20490971202570873,
+   "combined_median": 0.5867849244734326,
+   "driver_ecod": 0.8793333333333333,
+   "driver_isolation_forest": 0.12066666666666667,
+   "dominant_channel_correct": 0.9786666666666667
+  },
+  "humidity_offset_pos +15%": {
+   "ground_truth": "FAULT (humidity_pct +15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.013,
+   "isolation_forest_ge_0_5": 0.0013333333333333333,
+   "combined_ge_0_5": 0.013666666666666667,
+   "combined_ge_0_75": 0.004,
+   "combined_mean": 0.028278055918260263,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.9703333333333334,
+   "driver_isolation_forest": 0.029666666666666668,
+   "dominant_channel_correct": 0.4086666666666667
+  },
+  "humidity_offset_pos +30%": {
+   "ground_truth": "FAULT (humidity_pct +30)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.027333333333333334,
+   "isolation_forest_ge_0_5": 0.0003333333333333333,
+   "combined_ge_0_5": 0.027333333333333334,
+   "combined_ge_0_75": 0.009333333333333334,
+   "combined_mean": 0.04267101714856176,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.977,
+   "driver_isolation_forest": 0.023,
+   "dominant_channel_correct": 0.49066666666666664
+  },
+  "humidity_offset_pos +50%": {
+   "ground_truth": "FAULT (humidity_pct +50)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.035333333333333335,
+   "isolation_forest_ge_0_5": 0.002,
+   "combined_ge_0_5": 0.035333333333333335,
+   "combined_ge_0_75": 0.012,
+   "combined_mean": 0.053396513426427455,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.98,
+   "driver_isolation_forest": 0.02,
+   "dominant_channel_correct": 0.5956666666666667
+  },
+  "humidity_offset_neg -15%": {
+   "ground_truth": "FAULT (humidity_pct -15)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.008666666666666666,
+   "isolation_forest_ge_0_5": 0.017666666666666667,
+   "combined_ge_0_5": 0.019,
+   "combined_ge_0_75": 0.006,
+   "combined_mean": 0.03427720273828014,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.8993333333333333,
+   "driver_isolation_forest": 0.10066666666666667,
+   "dominant_channel_correct": 0.44366666666666665
+  },
+  "humidity_offset_neg -30%": {
+   "ground_truth": "FAULT (humidity_pct -30)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.022,
+   "isolation_forest_ge_0_5": 0.042666666666666665,
+   "combined_ge_0_5": 0.046,
+   "combined_ge_0_75": 0.015333333333333332,
+   "combined_mean": 0.07295717914385129,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.7913333333333333,
+   "driver_isolation_forest": 0.20866666666666667,
+   "dominant_channel_correct": 0.6683333333333333
+  },
+  "humidity_offset_neg -50%": {
+   "ground_truth": "FAULT (humidity_pct -50)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.05566666666666667,
+   "isolation_forest_ge_0_5": 0.092,
+   "combined_ge_0_5": 0.10133333333333333,
+   "combined_ge_0_75": 0.03166666666666667,
+   "combined_mean": 0.14569148245016716,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.6423333333333333,
+   "driver_isolation_forest": 0.3576666666666667,
+   "dominant_channel_correct": 0.8526666666666667
+  },
+  "frozen_stale T+RH (opposite-season values, P live)": {
+   "ground_truth": "FAULT (stale T and RH)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.006333333333333333,
+   "isolation_forest_ge_0_5": 0.008333333333333333,
+   "combined_ge_0_5": 0.010333333333333333,
+   "combined_ge_0_75": 0.0033333333333333335,
+   "combined_mean": 0.02321996215076112,
+   "ecod_median": 0.0,
+   "isolation_forest_median": 0.0,
+   "combined_median": 0.0,
+   "driver_ecod": 0.9253333333333333,
+   "driver_isolation_forest": 0.07466666666666667
+  },
+  "noise_burst (3 sigma on all channels)": {
+   "ground_truth": "FAULT (noise on T,P,RH)",
+   "n": 3000,
+   "ecod_ge_0_5": 0.588,
+   "isolation_forest_ge_0_5": 0.35,
+   "combined_ge_0_5": 0.609,
+   "combined_ge_0_75": 0.434,
+   "combined_mean": 0.5813669088146156,
+   "ecod_median": 0.6474973628631325,
+   "isolation_forest_median": 0.3440634760636502,
+   "combined_median": 0.6636249041779905,
+   "driver_ecod": 0.8256666666666667,
+   "driver_isolation_forest": 0.17433333333333334
+  },
+  "combined_abnormal (T +3sd, P -3sd, RH 100)": {
+   "ground_truth": "FAULT (joint state)",
+   "n": 3000,
+   "ecod_ge_0_5": 1.0,
+   "isolation_forest_ge_0_5": 1.0,
+   "combined_ge_0_5": 1.0,
+   "combined_ge_0_75": 1.0,
+   "combined_mean": 0.9512904969241628,
+   "ecod_median": 0.974419848842251,
+   "isolation_forest_median": 0.7624756985402403,
+   "combined_median": 0.974419848842251,
+   "driver_ecod": 1.0,
+   "driver_isolation_forest": 0.0
+  }
+ },
+ "data_quality_gating": {
+  "all 3 channels valid (control)": {
+   "n": 150,
+   "status_counts": {
+    "EVALUATED": 150
+   },
+   "ecod_and_if_executed": 150,
+   "mean_score": 0.00796782164662213
+  },
+  "pressure missing": {
+   "n": 150,
+   "status_counts": {
+    "INSUFFICIENT_DATA": 150
+   },
+   "ecod_and_if_executed": 0,
+   "mean_score": 0.0
+  },
+  "humidity missing": {
+   "n": 150,
+   "status_counts": {
+    "INSUFFICIENT_DATA": 150
+   },
+   "ecod_and_if_executed": 0,
+   "mean_score": 0.0
+  },
+  "temperature + humidity missing": {
+   "n": 150,
+   "status_counts": {
+    "INSUFFICIENT_DATA": 150
+   },
+   "ecod_and_if_executed": 0,
+   "mean_score": 0.0
+  },
+  "all 3 valid, pressure convention UNKNOWN": {
+   "n": 150,
+   "status_counts": {
+    "INSUFFICIENT_DATA": 150
+   },
+   "ecod_and_if_executed": 0,
+   "mean_score": 0.0
+  }
+ },
+ "batch_vs_runtime_layer_max_abs_diff": 3.039827315076682e-05
+}

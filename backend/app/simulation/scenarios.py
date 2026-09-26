@@ -39,11 +39,31 @@ class Scenario:
     name: str
     description: str
     steps: List[ScenarioStep]
+    # Which pressure convention the scenario's `pressure_hpa` values are written
+    # in: "MSL" (sea-level pressure, e.g. the ~1013 hPa values used here) or
+    # "SURFACE" (station pressure). REQUIRED and deliberately without a default:
+    # the Multivariate layer never guesses a convention, so every scenario must
+    # state it. It is passed straight onto every reading (target and neighbors).
+    pressure_convention: str
     interval_minutes: float = 10.0
     neighbors: List[NeighborOffset] = field(default_factory=list)
     # Hypothesis only — see module docstring.
     expected_bucket: str = "LIKELY_SENSOR_ANOMALY"
     expected_root_cause_hint: str = ""
+    # Authoritative elevation of the VIRTUAL station, in metres. Required for a
+    # SURFACE scenario (it is what converts surface pressure to sea level); for
+    # an MSL scenario it is unused and the inherited/default baseline applies.
+    elevation_m: Optional[float] = None
+
+    def __post_init__(self):
+        if self.pressure_convention not in ("MSL", "SURFACE"):
+            raise ValueError(
+                f"Scenario {self.id}: pressure_convention must be 'MSL' or 'SURFACE', "
+                f"got {self.pressure_convention!r}")
+        if self.pressure_convention == "SURFACE" and not (self.elevation_m and self.elevation_m > 0):
+            raise ValueError(
+                f"Scenario {self.id}: a SURFACE scenario must declare a positive elevation_m; "
+                f"an elevation is never inferred")
 
 
 # Default baseline used when no real station is selected to inherit from.
@@ -57,6 +77,7 @@ def _flat(value: float, n: int, field_name: str) -> List[ScenarioStep]:
 SCENARIOS: Dict[str, Scenario] = {
     "TEMPERATURE_SPIKE": Scenario(
         id="TEMPERATURE_SPIKE",
+        pressure_convention="MSL",
         name="Temperature Spike",
         description="A sudden, physically implausible jump in a single reading after several stable baseline readings.",
         steps=[
@@ -77,6 +98,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "FROZEN_TEMPERATURE_SENSOR": Scenario(
         id="FROZEN_TEMPERATURE_SENSOR",
+        pressure_convention="MSL",
         name="Frozen Temperature Sensor",
         description="The same exact temperature value repeated across many consecutive observations (stuck ADC / sensor lockup).",
         steps=_flat(32.1, 14, "temperature_c"),
@@ -85,6 +107,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "TEMPERATURE_SENSOR_DRIFT": Scenario(
         id="TEMPERATURE_SENSOR_DRIFT",
+        pressure_convention="MSL",
         name="Temperature Sensor Drift",
         description=(
             "A slow, monotonic upward creep in temperature (+0.4C every ~10 minutes) "
@@ -108,6 +131,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "IMPOSSIBLE_HUMIDITY": Scenario(
         id="IMPOSSIBLE_HUMIDITY",
+        pressure_convention="MSL",
         name="Impossible Humidity",
         description="Relative humidity reported above 100% — a physically impossible value that must fail data-quality/physics validation, not be treated as valid weather.",
         steps=[ScenarioStep(temperature_c=30.0, pressure_hpa=1012.0, humidity_pct=135.0)],
@@ -116,6 +140,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "PRESSURE_SPIKE": Scenario(
         id="PRESSURE_SPIKE",
+        pressure_convention="MSL",
         name="Pressure Spike",
         description="A single implausible barometric pressure reading against an otherwise stable series.",
         steps=[
@@ -133,6 +158,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "MISSING_TELEMETRY": Scenario(
         id="MISSING_TELEMETRY",
+        pressure_convention="MSL",
         name="Missing Telemetry",
         description="Only one channel is reported and there is no observation history — ATHER must report insufficient evidence, not fabricate a fault.",
         steps=[ScenarioStep(temperature_c=29.0, pressure_hpa=None, humidity_pct=None)],
@@ -146,6 +172,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "MULTIVARIATE_INCONSISTENCY": Scenario(
         id="MULTIVARIATE_INCONSISTENCY",
+        pressure_convention="MSL",
         name="Multivariate Inconsistency",
         description="Temperature, pressure, and humidity are each individually plausible, but the joint combination (high heat with near-saturated humidity) is physically rare. Kept below the wet-bulb survivability veto so this isolates the MULTIVARIATE layer's joint-state check specifically.",
         steps=[
@@ -158,6 +185,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "SPATIAL_OUTLIER": Scenario(
         id="SPATIAL_OUTLIER",
+        pressure_convention="MSL",
         name="Spatial Outlier",
         description="The target station reports 45°C while nearby AWS stations all report 31-34°C — a single-station divergence with no regional support. Kept under the physics hard-veto bound so this scenario cleanly isolates SPATIAL evidence rather than also tripping a physics veto (that combination is covered by COMBINED_SENSOR_FAILURE).",
         steps=[ScenarioStep(temperature_c=45.0, pressure_hpa=1013.0, humidity_pct=45.0)],
@@ -172,6 +200,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "REGIONAL_WEATHER_EVENT": Scenario(
         id="REGIONAL_WEATHER_EVENT",
+        pressure_convention="MSL",
         name="Regional Weather Event",
         description=(
             "The target station jumps +6C in one interval — enough to trip the TEMPORAL "
@@ -207,6 +236,7 @@ SCENARIOS: Dict[str, Scenario] = {
     ),
     "COMBINED_SENSOR_FAILURE": Scenario(
         id="COMBINED_SENSOR_FAILURE",
+        pressure_convention="MSL",
         name="Combined Sensor Failure",
         description=(
             "Temperature spike, extreme humidity inconsistency, and a temporal "
@@ -236,6 +266,7 @@ def list_scenarios() -> List[Dict[str, Any]]:
             "name": s.name,
             "description": s.description,
             "step_count": len(s.steps),
+            "pressure_convention": s.pressure_convention,
             "expected_bucket": s.expected_bucket,
             "expected_root_cause_hint": s.expected_root_cause_hint,
         }

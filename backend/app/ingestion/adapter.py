@@ -4,7 +4,28 @@ ATHER Multi-Protocol Ingestion Adapter
 Adapts telemetry payloads from WeeWX, WOW-BE, Weather Underground, and native ATHER API.
 """
 
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Optional, Tuple
+
+_DECLARABLE_CONVENTIONS = ("MSL", "SURFACE")
+
+
+def declared_pressure_convention(data: Dict[str, Any]) -> Optional[str]:
+    """The pressure convention a payload EXPLICITLY declares, or None.
+
+    Only "MSL" (sea-level-reduced) or "SURFACE" (station pressure) are accepted,
+    case-insensitively; anything else, or no declaration, is None (UNKNOWN).
+
+    PROVENANCE POLICY: none of the supported third-party formats (WeeWX
+    `barometer`, Weather Underground / WOW `baromin`/`barometer`, the native
+    format's `pressure`) is assumed to have a particular convention by this
+    adapter -- their vendor documentation is not encoded here, so a convention is
+    recorded only when the sender states it. Nothing is inferred from magnitude.
+    """
+    value = data.get("pressureConvention")
+    if isinstance(value, str) and value.strip().upper() in _DECLARABLE_CONVENTIONS:
+        return value.strip().upper()
+    return None
+
 
 class IngestionAdapter:
     @staticmethod
@@ -19,6 +40,7 @@ class IngestionAdapter:
             return stn_id, {
                 "temperature": data.get("temperature"),
                 "pressure": data.get("pressure"),
+                "pressureConvention": declared_pressure_convention(data),
                 "humidity": data.get("humidity"),
                 "windSpeed": data.get("windSpeed"),
                 "windDirection": data.get("windDirection"),
@@ -63,6 +85,7 @@ class IngestionAdapter:
             return stn_id, {
                 "temperature": temp_c,
                 "pressure": press_hpa,
+                "pressureConvention": declared_pressure_convention(data),
                 "humidity": humidity,
                 "windSpeed": wind_kmh,
                 "windDirection": str(data.get("winddir", "VAR")),
@@ -85,6 +108,7 @@ class IngestionAdapter:
             return stn_id, {
                 "temperature": temp_c,
                 "pressure": press_hpa,
+                "pressureConvention": declared_pressure_convention(data),
                 "humidity": data.get("outHumidity"),
                 "windSpeed": wind_kmh,
                 "windDirection": str(data.get("windDir", "CALM")),

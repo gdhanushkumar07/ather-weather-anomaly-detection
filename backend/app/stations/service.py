@@ -206,6 +206,10 @@ class StationService:
                 "region": region,
                 "temperature": w.get("temperature") if w else None,
                 "pressure": w.get("pressure") if w else None,
+                # PROVENANCE ONLY: which Open-Meteo field supplied `pressure`
+                # (MSL = pressure_msl, SURFACE = the surface_pressure fallback,
+                # None = not recorded). The value itself is not altered.
+                "pressureConvention": w.get("pressureConvention") if w else None,
                 "humidity": w.get("humidity") if w else None,
                 "windSpeed": w.get("windSpeed") if w else None,
                 "windDirection": w.get("windDirection") if w else None,
@@ -357,6 +361,10 @@ class StationService:
                     stn["temperature"] = w.get("temperature")
                     stn["humidity"] = w.get("humidity")
                     stn["pressure"] = w.get("pressure")
+                    # Provenance for the pressure copied just above (MSL / SURFACE / None):
+                    # without it a known-convention NWP value would reach the Multivariate
+                    # layer as UNKNOWN. Must be set BEFORE the evaluation below.
+                    stn["pressureConvention"] = w.get("pressureConvention")
                     stn["windSpeed"] = w.get("windSpeed")
                     stn["windDirection"] = w.get("windDirection")
                     stn["condition"] = w.get("condition", "Reported")
@@ -675,6 +683,10 @@ class StationService:
         for k in ["temperature", "pressure", "humidity", "windSpeed", "windDirection", "condition"]:
             if k in payload and payload[k] is not None:
                 stn[k] = payload[k]
+
+        # Pressure provenance belongs to THIS observation: a packet that does not
+        # declare a convention must not inherit one recorded for an earlier packet.
+        stn["pressureConvention"] = payload.get("pressureConvention")
 
         stn["timestamp"] = "Just now"
         # Pushed telemetry from a real station driver (WeeWX/WOW-BE/native) is

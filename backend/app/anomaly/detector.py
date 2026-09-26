@@ -17,7 +17,7 @@ from schema import (
 
 from engine.layer1_physics import PhysicsValidationLayer
 from engine.layer2_temporal import TemporalPatternLayer
-from engine.layer3_multivariate import MultivariateConsistencyLayer
+from engine.layer3_multivariate import MultivariateConsistencyLayer, resolve_pressure_convention
 from engine.layer4_spatial import SpatialNeighborLayer
 from engine.spatial_neighbors import NeighborSelectionResult, observation_time, select_k_nearest_neighbors
 from engine.layer5_drift import SensorDriftHealthLayer
@@ -392,6 +392,8 @@ class AnomalyDetector:
                 "timestamp": (reading.observation_timestamp or reading.received_timestamp).isoformat(),
                 "temperature": reading.temperature_c,
                 "pressure": reading.pressure_hpa,
+                # MSL / SURFACE / UNKNOWN as resolved for this reading (never guessed).
+                "pressure_convention": resolve_pressure_convention(reading)[0],
                 "relative_humidity": reading.humidity_pct,
                 "wind_speed": reading.wind_speed_kmh,
                 # Never hardcode "AWS Station Data" — reflect the verified
@@ -1022,11 +1024,19 @@ class AnomalyDetector:
             l2_reason = "Time-series variance and rate of change within nominal thresholds"
 
         # 3. Multivariate
-        v_cnt = d3.get("valid_channel_count", 0)
+        # The layer reports the validated channel count as BOTH "n_valid" and
+        # "valid_channel_count" (the card previously read a key that was never
+        # set, so it always saw 0). Never report "0 available" when channels are valid.
+        v_cnt = d3.get("n_valid", d3.get("valid_channel_count", 0))
         if v_cnt < 2 or d3.get("status") == "INSUFFICIENT_DATA":
             l3_status = "INSUFFICIENT_DATA"
             l3_conf = "INSUFFICIENT_DATA"
-            l3_reason = f"Multivariate analysis requires ≥2 valid channels ({v_cnt} available)"
+            if v_cnt < 2:
+                l3_reason = f"Multivariate analysis requires ≥2 valid channels ({v_cnt} available)"
+            else:
+                # Enough valid channels, but the models could not run (e.g. the pressure
+                # convention is unknown): state the layer's own reason instead.
+                l3_reason = d3.get("skip_reason") or d3.get("note") or "Multivariate evidence unavailable"
         elif layer_scores["multivariate"] >= 0.75:
             l3_status = "ANOMALY"
             l3_conf = "HIGH" if v_cnt == 3 else "MEDIUM"
@@ -1038,7 +1048,8 @@ class AnomalyDetector:
         else:
             l3_status = "PASS"
             l3_conf = "HIGH"
-            l3_reason = f"Joint state manifold ({d3.get('test_performed', 'bivariate')}) consistent"
+            # Name the method that ACTUALLY executed (layer3 detail["method_executed"]).
+            l3_reason = f"Joint state manifold ({d3.get('method_executed') or d3.get('method') or 'bivariate'}) consistent"
 
         # 4. Spatial
         # S7 BUGFIX: real key is total_neighbors_in_radius; layer4 also reports

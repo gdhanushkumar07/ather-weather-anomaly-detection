@@ -132,6 +132,12 @@ class AWSReading(BaseModel):
     #   never silently defaulted to "now".
     # received_timestamp: when ATHER's backend obtained/loaded the value.
     source:                 str                = ObservationSource.UNKNOWN
+    # Which pressure convention `pressure_hpa` is expressed in: "MSL"
+    # (sea-level-reduced), "SURFACE" (station pressure) or None/"UNKNOWN".
+    # Never guessed here: the Multivariate layer derives MSL only for a source
+    # that is known to report it (NWP pressure_msl) and otherwise treats an
+    # undeclared convention as UNKNOWN rather than assuming it is MSL.
+    pressure_convention:    Optional[str]      = None
     observation_timestamp:  Optional[datetime]  = None
     received_timestamp:     datetime            = Field(default_factory=lambda: datetime.now(timezone.utc))
     freshness:               str                = Freshness.UNKNOWN
@@ -599,6 +605,7 @@ def station_dict_to_reading(stn: Dict[str, Any]) -> AWSReading:
             "humidity_pct":  hum_quality,
         },
         source=source,
+        pressure_convention=stn.get("pressureConvention"),
         observation_timestamp=obs_ts,
         received_timestamp=received_ts,
         freshness=freshness,

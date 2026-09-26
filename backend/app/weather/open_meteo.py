@@ -9,7 +9,7 @@ import time
 import urllib.request
 import urllib.parse
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 
 # WMO Weather interpretation codes (WW)
 WMO_WEATHER_CODES = {
@@ -55,6 +55,48 @@ def degrees_to_cardinal(deg: Optional[float]) -> str:
 
 import os
 
+
+def select_pressure(current: Dict[str, Any]) -> Tuple[Optional[float], Optional[str]]:
+    """The pressure ATHER uses, together with WHICH Open-Meteo field supplied it.
+
+    Selection is unchanged: `pressure_msl` when present, otherwise
+    `surface_pressure`. What is new is the recorded convention, so a fallback to
+    surface pressure can never be mistaken for sea-level pressure downstream:
+
+        pressure_msl used        -> "MSL"
+        surface_pressure used    -> "SURFACE"
+        neither available        -> (None, None)
+
+    This is PROVENANCE only. The value is returned exactly as Open-Meteo gave it
+    (no correction is applied).
+    """
+    msl = current.get("pressure_msl")
+    if msl:
+        return msl, "MSL"
+    surface = current.get("surface_pressure")
+    if surface:
+        return surface, "SURFACE"
+    return None, None
+
+
+def with_pressure_provenance(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensures a formatted weather record carries `pressureConvention`.
+
+    Records written before the field existed (disk cache) are completed ONLY when
+    it is logically certain: `pressure` is always either pressure_msl or
+    surface_pressure, so a `pressure` that differs from the record's own
+    `surfacePressure` must have come from pressure_msl. If they are equal the
+    source field cannot be told apart, so the convention stays None (UNKNOWN).
+    No conclusion is drawn from the magnitude of the pressure.
+    """
+    if data.get("pressureConvention") is not None or "pressureConvention" in data:
+        return data
+    p, sp = data.get("pressure"), data.get("surfacePressure")
+    data = dict(data)
+    data["pressureConvention"] = "MSL" if (p is not None and sp is not None and p != sp) else None
+    return data
+
+
 class OpenMeteoService:
     def __init__(self, cache_ttl_seconds: int = 1800):
         self.cache: Dict[str, Dict[str, Any]] = {}
@@ -87,7 +129,7 @@ class OpenMeteoService:
         if cache_key in self.cache:
             entry = self.cache[cache_key]
             if now - entry["cached_at"] < self.cache_ttl:
-                return entry["data"]
+                return with_pressure_provenance(entry["data"])
 
         # Build Open-Meteo URL
         params = {
@@ -117,13 +159,15 @@ class OpenMeteoService:
             weather_code = current.get("weather_code", 0)
             wind_deg = current.get("wind_direction_10m")
 
+            pressure, pressure_convention = select_pressure(current)
             formatted_data = {
                 "latitude": lat,
                 "longitude": lon,
                 "temperature": current.get("temperature_2m"),
                 "apparentTemperature": current.get("apparent_temperature"),
                 "humidity": current.get("relative_humidity_2m"),
-                "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
+                "pressure": pressure,
+                "pressureConvention": pressure_convention,
                 "surfacePressure": current.get("surface_pressure"),
                 "windSpeed": current.get("wind_speed_10m"),
                 "windGusts": current.get("wind_gusts_10m"),
@@ -146,7 +190,7 @@ class OpenMeteoService:
         except Exception as e:
             # Fallback to existing cache even if expired
             if cache_key in self.cache:
-                return self.cache[cache_key]["data"]
+                return with_pressure_provenance(self.cache[cache_key]["data"])
             raise e
 
     def get_batch_weather(
@@ -171,7 +215,7 @@ class OpenMeteoService:
         for idx, (lat, lon) in enumerate(coords):
             cache_key = f"{round(lat, 3)}_{round(lon, 3)}"
             if cache_key in self.cache:
-                results[idx] = self.cache[cache_key]["data"]
+                results[idx] = with_pressure_provenance(self.cache[cache_key]["data"])
                 # Only re-fetch if older than TTL
                 if now - self.cache[cache_key]["cached_at"] >= self.cache_ttl:
                     indices_to_fetch.append(idx)
@@ -219,13 +263,15 @@ class OpenMeteoService:
                                 weather_code = current.get("weather_code", 0)
                                 wind_deg = current.get("wind_direction_10m")
 
+                                pressure, pressure_convention = select_pressure(current)
                                 formatted_data = {
                                     "latitude": orig_lat,
                                     "longitude": orig_lon,
                                     "temperature": current.get("temperature_2m"),
                                     "apparentTemperature": current.get("apparent_temperature"),
                                     "humidity": current.get("relative_humidity_2m"),
-                                    "pressure": current.get("pressure_msl") or current.get("surface_pressure"),
+                                    "pressure": pressure,
+                                    "pressureConvention": pressure_convention,
                                     "surfacePressure": current.get("surface_pressure"),
                                     "windSpeed": current.get("wind_speed_10m"),
                                     "windGusts": current.get("wind_gusts_10m"),

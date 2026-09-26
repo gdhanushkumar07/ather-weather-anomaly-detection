@@ -18,6 +18,11 @@ import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 import { AWSNeighbor } from '../aws/awsGeo';
 import { AWSStationOverlay } from '../aws/AWSStationOverlay';
+import { StationMarkerLayer } from './StationMarkerLayer';
+import { StarField } from './StarField';
+import { SunLayer } from './SunLayer';
+import { CursorCoords } from './CursorCoords';
+import { setupGraticule } from './Graticule';
 
 // Matches --bg-app in index.css, so any not-yet-loaded tile area (network
 // latency during pan/zoom) shows a seamless dark fill instead of a black gap.
@@ -218,6 +223,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     map.on('load', () => {
+      setupGraticule(map);
       mapRef.current = map;
       setIsMapReady(true);
     });
@@ -362,7 +368,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             if (!mapRef.current) return;
             const layer = new VaneParticlesLayer(grid);
             particlesLayerRef.current = layer;
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
+            const beforeId = map.getLayer('ather-unclustered-ring') ? 'ather-unclustered-ring' : 'esri-dark-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }
@@ -370,7 +376,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
           .catch((err) => console.error('Failed to load wind field', err));
       } else {
         if (!map.getLayer(particlesLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
+          const beforeId = map.getLayer('ather-unclustered-ring') ? 'ather-unclustered-ring' : 'esri-light-gray-reference';
           map.addLayer(particlesLayerRef.current, beforeId);
         }
       }
@@ -453,7 +459,24 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
 
   return (
     <div className="map-viewport">
+      <StarField map={isMapReady ? mapRef.current : null} />
+      <SunLayer map={isMapReady ? mapRef.current : null} />
       <div ref={mapContainerRef} className="maplibre-container" />
+      <CursorCoords map={isMapReady ? mapRef.current : null} />
+
+      {/* Individual stations: animated weather-station markers (SVG/CSS). Clusters,
+          data, camera and selection are unchanged - see StationMarkerLayer.tsx. */}
+      {isMapReady && mapRef.current && (
+        <StationMarkerLayer
+          map={mapRef.current}
+          visible={activeLayers.stations}
+          selectedStationId={selectedStationId}
+          onSelectStation={(id) => onSelectStationRef.current(id)}
+          showAnomalyRadar={showAnomalyOverlay}
+          neighborIds={neighbors.map((n) => n.id)}
+          dataVersion={stationsGeoJSON}
+        />
+      )}
 
       {/* Realistic 3D AWS model -- only the selected station, only at close
           zoom. At most one 3D scene ever exists at a time. */}

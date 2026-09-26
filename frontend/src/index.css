@@ -100,6 +100,44 @@ body {
   overflow: hidden;
 }
 
+.star-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  pointer-events: none;
+}
+
+.sun-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.cursor-coords {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(8, 12, 20, 0.72);
+  backdrop-filter: blur(6px);
+  color: #e6edf7;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
 .maplibre-container {
   width: 100%;
   height: 100%;
@@ -5136,3 +5174,295 @@ body {
 }
 .station-grid-row > .section-card { margin: 0; height: 100%; }
 
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   Weather-station marker (individual stations)  ·  WeatherStationMarker.tsx
+   Geometry: 44x44 box, the station's FOOT (geographic anchor and radar
+   centre) at (22,36), the rotor's axis at (22,11). Everything animates with
+   CSS transforms/opacity only - no JS loops.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Zero-size host => the foot sits exactly on the station's coordinates. */
+.ws-marker-host { width: 0; height: 0; }
+
+.ws-marker {
+  --ws-rgb: 16, 185, 129;                 /* normal  = --status-normal  */
+  --ws-base: 1;                           /* compact size; --ws-zoom is set per map zoom */
+  --ws-spin: 2.4s;                        /* rotor: one revolution */
+  --ws-ring-dur: 3.8s; --ws-ring-a: 0.35; /* radar ring pulse */
+  --ws-sweep-dur: 8s;  --ws-sweep-a: 0.35;/* radar sweep */
+  position: absolute;
+  left: -22px;
+  top: -36px;
+  width: 44px;
+  height: 44px;
+  perspective: 100px;                     /* depth for the tilted rotor plane */
+  perspective-origin: 22px 11px;
+  transform: scale(calc(var(--ws-base) * var(--ws-zoom, 1)));
+  transform-origin: 22px 36px;            /* scale about the foot: stays anchored */
+  transition: transform 0.18s ease;
+  pointer-events: none;                   /* only the glyph is interactive */
+  -webkit-tap-highlight-color: transparent;
+}
+.ws-marker.ws-warning { --ws-rgb: 245, 158, 11; --ws-ring-dur: 2.8s; --ws-ring-a: 0.5;  --ws-sweep-dur: 6s; --ws-sweep-a: 0.5; }
+.ws-marker.ws-anomaly { --ws-rgb: 239, 68, 68;  --ws-ring-dur: 1.9s; --ws-ring-a: 0.7;  --ws-sweep-dur: 4s; --ws-sweep-a: 0.65; }
+.ws-marker.ws-offline { --ws-rgb: 100, 116, 139; }
+
+/* Selected: a little larger, stronger glow, stronger radar. The rotor keeps turning. */
+.ws-marker.is-selected { --ws-base: 1.3; --ws-ring-a: 0.9; --ws-sweep-a: 0.85; }
+
+/* ── ground plane (centre = foot): base glow + radar ── */
+.ws-glow, .ws-ring, .ws-sweep {
+  position: absolute;
+  left: 0;
+  top: 14px;                              /* 36 - 22: box centre lands on the foot */
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.ws-radar { position: absolute; left: 0; top: 0; width: 44px; height: 44px; pointer-events: none; }
+
+.ws-glow {
+  background: radial-gradient(circle, rgba(var(--ws-rgb), 0.45) 0, rgba(var(--ws-rgb), 0.12) 55%, rgba(var(--ws-rgb), 0) 72%);
+  box-shadow: inset 0 0 0 1px rgba(var(--ws-rgb), 0.45);
+  transform: scaleY(0.5) scale(0.62);     /* squashed onto the ground */
+  opacity: 0.85;
+}
+.ws-marker.is-selected .ws-glow {
+  box-shadow: inset 0 0 0 1.5px rgba(var(--ws-rgb), 0.9), 0 0 9px 2px rgba(var(--ws-rgb), 0.55);
+  opacity: 1;
+}
+.ws-marker.ws-offline .ws-glow { opacity: 0.4; }
+
+.ws-ring {
+  border: 1.2px solid rgb(var(--ws-rgb));
+  opacity: 0;
+  transform: scaleY(0.5) scale(0.18);
+  animation: ws-ring var(--ws-ring-dur) ease-out infinite;
+  animation-delay: var(--ws-delay, 0ms);
+}
+.ws-ring-b { animation-delay: calc(var(--ws-delay, 0ms) + var(--ws-ring-dur) / 2); }
+.ws-marker.is-selected .ws-ring { border-width: 1.6px; }
+
+.ws-sweep {
+  background: conic-gradient(from 0deg, rgba(var(--ws-rgb), 0) 0deg, rgba(var(--ws-rgb), 0) 235deg, rgba(var(--ws-rgb), 0.55) 360deg);
+  opacity: var(--ws-sweep-a);
+  transform: scaleY(0.5) rotate(0deg);
+  animation: ws-sweep var(--ws-sweep-dur) linear infinite;
+  animation-delay: var(--ws-delay, 0ms);
+}
+
+@keyframes ws-ring {
+  0%   { opacity: var(--ws-ring-a); transform: scaleY(0.5) scale(0.18); }
+  100% { opacity: 0;                transform: scaleY(0.5) scale(1); }
+}
+@keyframes ws-sweep {
+  from { transform: scaleY(0.5) rotate(0deg); }
+  to   { transform: scaleY(0.5) rotate(360deg); }
+}
+
+/* ── STATIONARY parts: mast, bell body, status band, fixed hub ── */
+.ws-body { position: absolute; left: 0; top: 0; display: block; overflow: visible; }
+.ws-outline-line { fill: none; stroke: rgba(6, 12, 22, 0.9); stroke-width: 3.4; stroke-linecap: round; }
+.ws-mast, .ws-arm { fill: none; stroke: #eaf6ef; stroke-width: 1.5; stroke-linecap: round; }
+.ws-cone { fill: rgb(var(--ws-rgb)); stroke: rgba(6, 12, 22, 0.9); stroke-width: 1.3; stroke-linejoin: round; }
+.ws-shine { fill: rgba(255, 255, 255, 0.62); }
+.ws-band { fill: #f4fbf6; }
+.ws-hub-static, .ws-hub { fill: rgb(var(--ws-rgb)); stroke: rgba(6, 12, 22, 0.9); stroke-width: 1; }
+.ws-hit { fill: transparent; pointer-events: all; }
+.ws-body, .ws-rotor svg { cursor: pointer; pointer-events: auto; }
+
+/* ── ROTATING part: arm + two cups, turning about the mast's vertical axis.
+   The rotor plane is tilted with rotateX() and spun with rotateZ(), so the
+   arm sweeps an ellipse (a rotor seen from slightly above) and the cups stay
+   round discs in that plane. Only this element turns. ── */
+.ws-rotor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 22px;
+  transform-origin: 22px 11px;
+  transform: rotateX(58deg) rotateZ(0deg);
+  animation: ws-spin var(--ws-spin) linear infinite;
+  animation-delay: var(--ws-delay, 0ms);
+}
+.ws-rotor svg { display: block; overflow: visible; }
+.ws-cup { fill: #f4fbf6; stroke: rgba(6, 12, 22, 0.9); stroke-width: 1.2; }
+.ws-cup-dot { fill: rgb(var(--ws-rgb)); }         /* colour on one cup so the turning reads clearly */
+
+@keyframes ws-spin {
+  from { transform: rotateX(58deg) rotateZ(0deg); }
+  to   { transform: rotateX(58deg) rotateZ(360deg); }
+}
+
+/* Offline: same glyph, muted; rotor parked, no radar. */
+.ws-marker.ws-offline .ws-rotor { animation: none; transform: rotateX(58deg) rotateZ(14deg); }
+.ws-marker.ws-offline .ws-ring, .ws-marker.ws-offline .ws-sweep { display: none; }
+.ws-marker.ws-offline .ws-body, .ws-marker.ws-offline .ws-rotor { opacity: 0.75; }
+
+/* Level of detail (classes are toggled once on the map container): with many
+   stations on screen the calm ones drop their radar; the rotor keeps turning. */
+.ws-marker.ws-no-radar .ws-ring, .ws-marker.ws-no-radar .ws-sweep { display: none; }
+.ws-dense .ws-marker.ws-normal:not(.is-selected) .ws-ring,
+.ws-dense .ws-marker.ws-normal:not(.is-selected) .ws-sweep { display: none; }
+.ws-very-dense .ws-marker:not(.is-selected) .ws-ring,
+.ws-very-dense .ws-marker:not(.is-selected) .ws-sweep { display: none; }
+
+/* Stations on the far side of the globe are faded out by MapLibre: make them inert. */
+.ws-marker-host[style*="opacity: 0;"] .ws-marker * { pointer-events: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ws-rotor, .ws-ring, .ws-sweep { animation: none; }
+  .ws-rotor { transform: rotateX(58deg) rotateZ(14deg); }
+}
+
+
+/* ── Cluster = the SAME AWS marker + a small neutral count badge (no circle). ── */
+.ws-count {
+  position: absolute;
+  left: 50%;
+  top: -13px;                              /* sits just above the rotor */
+  transform: translateX(-50%);
+  min-width: 18px;
+  height: 14px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: rgba(8, 14, 26, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #f5f9ff;
+  font: 700 10px/12px 'Inter', 'JetBrains Mono', system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  text-align: center;
+  white-space: nowrap;
+  pointer-events: auto;                    /* clicking the count expands the cluster too */
+  cursor: pointer;
+}
+/* A cluster keeps only a discreet radar (anomaly-containing clusters), never for calm ones. */
+.ws-marker.is-cluster.ws-normal .ws-ring, .ws-marker.is-cluster.ws-normal .ws-sweep,
+.ws-marker.is-cluster.ws-warning .ws-ring, .ws-marker.is-cluster.ws-warning .ws-sweep,
+.ws-marker.is-cluster.ws-offline .ws-ring, .ws-marker.is-cluster.ws-offline .ws-sweep { display: none; }
+
+/* Neighbours of the selected station: a thin ground ring on the marker, not a circle around it. */
+.ws-marker.is-neighbor .ws-glow {
+  box-shadow: inset 0 0 0 1.5px rgba(0, 229, 255, 0.95), 0 0 6px 1px rgba(0, 229, 255, 0.45);
+  opacity: 1;
+}
+
+
+/* ── Temporal Intelligence evidence (TemporalEvidence.tsx) ─────────────── */
+.temporal-evidence { display: flex; flex-direction: column; gap: 8px; }
+.temporal-mono { font-family: var(--font-mono); }
+
+.temporal-banner {
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.temporal-banner.insufficient_data { border-left-color: #64748b; }
+.temporal-banner.pass { border-left-color: var(--status-normal); }
+.temporal-banner.warning { border-left-color: var(--status-warning); }
+.temporal-banner.anomaly, .temporal-banner.veto { border-left-color: var(--status-anomaly); }
+.temporal-banner-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.temporal-banner-title { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; color: var(--text-secondary); }
+.temporal-banner-text { font-size: 0.7rem; font-weight: 600; color: #ffffff; margin: 2px 0; }
+.temporal-banner-sub { font-size: 0.62rem; line-height: 1.4; color: var(--text-secondary); margin: 2px 0; }
+
+.temporal-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 12, 20, 0.35);
+}
+.temporal-block-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--brand-cyan);
+}
+.temporal-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 0.62rem; color: var(--text-secondary); }
+.temporal-kv strong { color: #ffffff; font-weight: 700; text-align: right; }
+.temporal-hint { font-size: 0.6rem; line-height: 1.4; color: var(--text-muted); }
+.temporal-backend-note { font-style: italic; }
+.temporal-raw-code { color: var(--text-muted); font-weight: 400; }
+
+.temporal-inactive-tag, .temporal-active-tag {
+  font-size: 0.54rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.04em;
+}
+.temporal-inactive-tag { background: rgba(255, 255, 255, 0.06); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.temporal-active-tag { background: var(--brand-cyan-light); color: var(--brand-cyan); border: 1px solid var(--border-focus); }
+
+.temporal-progress-track { height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.07); overflow: hidden; }
+.temporal-progress-fill { height: 100%; background: var(--brand-cyan); border-radius: 3px; transition: width 0.3s ease; }
+
+.temporal-lstm-table { display: flex; flex-direction: column; gap: 2px; font-size: 0.62rem; }
+.temporal-lstm-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr;
+  gap: 6px;
+  padding: 2px 0;
+  color: #ffffff;
+}
+.temporal-lstm-row.head { color: var(--text-muted); font-size: 0.56rem; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+
+.temporal-rule { padding: 4px 0; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.temporal-rule:first-of-type { border-top: none; }
+.temporal-rule-head { display: flex; justify-content: space-between; font-size: 0.64rem; font-weight: 600; color: #ffffff; }
+.temporal-rule-verdict { color: var(--status-warning-text); font-weight: 700; font-size: 0.58rem; }
+
+.modelled-reference-tag {
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(148, 163, 184, 0.14);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  cursor: help;
+}
+.table-status-pill.modelled { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+
+
+/* ── Evidence-aware status (insufficient / unavailable is never "normal") ── */
+.status-pill.NO_ANOMALY_CONFIRMED,
+.status-pill.INSUFFICIENT_EVIDENCE,
+.status-pill.OFFLINE {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+}
+.NO_ANOMALY_CONFIRMED .status-pill-dot,
+.INSUFFICIENT_EVIDENCE .status-pill-dot,
+.OFFLINE .status-pill-dot { background: #94a3b8; box-shadow: none; }
+.summary-status-tag.NO_ANOMALY_CONFIRMED,
+.summary-status-tag.INSUFFICIENT_EVIDENCE,
+.summary-status-tag.OFFLINE { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
+.summary-status-tag.NORMAL { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+
+.summary-sub { display: block; margin-top: 2px; font-size: 0.56rem; line-height: 1.3; color: var(--text-muted); }
+.health-na-note { margin-top: 6px; font-size: 0.62rem; color: var(--text-muted); }
+
+.layer-status-pill.not_applicable,
+.layer-status-pill.unavailable { background: rgba(255, 255, 255, 0.06); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+
+.neighbor-verdict-pill.informational {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border-color: rgba(148, 163, 184, 0.3);
+}

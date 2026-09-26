@@ -28,7 +28,8 @@ import {
   ObservationHistory,
   OpenMeteoWeather,
   StationAnomalyAssessment,
-  CanonicalLayerCard
+  CanonicalLayerCard,
+  TemporalLayerCard
 } from '../types/weather';
 import {
   fetchStationObservations, fetchCurrentWeather, fetchStationAnomaly,
@@ -38,7 +39,13 @@ import { EscalationPreviewModal } from '../components/EscalationPreviewModal';
 import { ResolveIncidentModal } from '../components/ResolveIncidentModal';
 import { DismissIncidentModal } from '../components/DismissIncidentModal';
 import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
+import { TemporalEvidence } from '../components/TemporalEvidence';
 import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft, XCircle } from 'lucide-react';
+import {
+  LayerEvidenceState,
+  summarizeEvidence,
+  buildNormalStatusInsight
+} from '../utils/layerEvidence';
 import { AWSNeighbor, compareToNeighbors, deriveValidationVerdict, checkNeighborConsistency } from '../aws/awsGeo';
 
 // Mirrors app/incidents/service.py::VALID_TRANSITIONS — used only to decide
@@ -289,6 +296,38 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
   // Confidence level tag
   const confidenceLevel = canonicalDiag?.confidence || (confidenceScore >= 0.75 ? 'HIGH' : confidenceScore >= 0.45 ? 'MEDIUM' : 'LOW');
 
+  // Evidence-aware summary derived only from the backend layer cards and
+  // evidence_availability. insufficient / unavailable / not applicable is
+  // never presented as normal.
+  const evidence = summarizeEvidence({
+    layers: canonicalLayers,
+    availability: canonical?.evidence_availability,
+    backendStatus: status,
+    diagnosisPrimary: canonicalDiag?.primary,
+    isInSitu: isAwsInSitu,
+  });
+  const layerEvidenceByKey = Object.fromEntries(evidence.layers.map((l) => [l.key, l]));
+  const sensorHealthEv = layerEvidenceByKey['sensor_health'];
+  const spatialEv = layerEvidenceByKey['spatial'];
+  // Sensor health is only meaningful for a physical sensor with enough samples.
+  const sensorHealthAvailable = Boolean(sensorHealthEv?.assessed) && canonical?.sensor_health_index !== undefined;
+  const sensorHealthNaReason = isNwpReference
+    ? 'NWP model reference — no physical sensor to assess'
+    : sensorHealthEv?.reason || 'Not assessed';
+  const displayStatus = evidence.displayStatus;
+  const displayStatusLabel = evidence.label;
+  const LAYER_STATE_LABEL: Record<LayerEvidenceState, string> = {
+    PASS: 'PASS', WARNING: 'WARNING', ANOMALY: 'ANOMALY',
+    INSUFFICIENT: 'INSUFFICIENT DATA', NOT_APPLICABLE: 'NOT APPLICABLE', UNAVAILABLE: 'UNAVAILABLE',
+  };
+  const telemetrySummaryLabel = isAwsInSitu
+    ? obsFreshness === 'STALE' ? 'STALE (IN-SITU)' : obsFreshness === 'LIVE' ? 'LIVE (IN-SITU)' : 'IN-SITU'
+    : isNwpReference
+      ? 'IN-SITU FEED UNAVAILABLE'
+      : obsSource === 'MISSING'
+        ? 'NO TELEMETRY'
+        : 'UNVERIFIED';
+
   // Confidence-gated diagnosis label per §20
   const getGatedDiagnosisTitle = (primary?: string, conf?: string): string => {
     if (!primary || primary === 'NORMAL') return 'Nominal Telemetry Envelope';
@@ -309,16 +348,26 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
   // 5-Layer card definitions (Phase 12)
   const layerDefs = [
     { key: 'physics', num: '01', label: 'PHYSICS', full: 'Thermodynamic Boundary Validation' },
-    { key: 'temporal', num: '02', label: 'TEMPORAL', full: 'Temporal Rate of Change & Persistence' },
+    { key: 'temporal', num: '02', label: 'TEMPORAL', full: 'Temporal consistency and LSTM prediction evidence' },
     { key: 'multivariate', num: '03', label: 'MULTIVARIATE', full: 'Inter-Channel Correlation' },
     { key: 'spatial', num: '04', label: 'SPATIAL', full: 'Regional AWS Mesh Consensus' },
-    { key: 'drift', num: '05', label: 'SENSOR HEALTH', full: 'Sensor Degradation & Drift' },
+    { key: 'sensor_health', num: '05', label: 'SENSOR HEALTH', full: 'Sensor Degradation & Drift' },
   ];
 
   const getLayerData = (key: string): CanonicalLayerCard => {
     const raw = canonicalLayers[key];
     if (raw && typeof raw === 'object' && 'status' in raw) {
       return raw as CanonicalLayerCard;
+    }
+    // A layer the backend did not report is UNAVAILABLE — never PASS.
+    if (raw === undefined || raw === null) {
+      return {
+        name: key.toUpperCase(),
+        status: 'UNAVAILABLE',
+        score: 0,
+        evidence_quality: 'INSUFFICIENT_DATA',
+        reason: 'Not reported by the backend.',
+      };
     }
     // Fallback for legacy layer scores (dict of numbers)
     const score = typeof raw === 'number' ? raw : 0.0;
@@ -330,6 +379,18 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
       reason: score >= 0.70 ? 'Elevated layer divergence detected' : 'Within normal statistical threshold',
     };
   };
+
+  // Temporal availability: evidence_availability.temporal from the API is the
+  // source of truth for "could this layer assess the observation at all".
+  // When unavailable, a 0 score means "no assessment", never "normal".
+  const temporalAvailability = canonical?.evidence_availability?.temporal;
+  const temporalLayer = getLayerData('temporal') as TemporalLayerCard;
+  const temporalHistoryPoints: number | null =
+    typeof temporalLayer.details?.history_points === 'number'
+      ? temporalLayer.details.history_points
+      : typeof canonicalQuality?.historical_points === 'number'
+        ? canonicalQuality.historical_points
+        : null;
 
   // Phase 14: Evidence derivation from real engine output
   const flaggedEvidence: string[] = (() => {
@@ -347,7 +408,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
     const l2 = getLayerData('temporal');
     const l3 = getLayerData('multivariate');
     const l4 = getLayerData('spatial');
-    const l5 = getLayerData('drift');
+    const l5 = getLayerData('sensor_health');
 
     if (l1.status === 'ANOMALY' || l1.status === 'VETO') list.push('Physics deviation: ' + l1.reason);
     if (l2.status === 'ANOMALY') list.push('Temporal spike: ' + l2.reason);
@@ -356,6 +417,15 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
     if (l5.status === 'ANOMALY' || l5.status === 'WARNING') list.push('Sensor drift: ' + l5.reason);
     return list;
   })();
+
+  // Operator insights. For a backend-NORMAL station the backend supplies a
+  // fixed "all layers confirm" line; it is replaced by an insight built from
+  // the real per-layer states. WARNING/ANOMALY/insufficient-evidence insights
+  // are produced from real diagnosis evidence and are shown as returned.
+  const insightsToShow =
+    status === 'NORMAL' && canonical
+      ? [buildNormalStatusInsight(evidence, canonicalInsights[0]?.action || canonicalDiag?.operator_action, isNwpReference)]
+      : canonicalInsights;
 
   return (
     <div className={variant === 'page' ? 'station-intelligence-page' : `station-panel-wrapper ${station ? 'expanded' : 'collapsed'}`}>
@@ -584,23 +654,23 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               <Activity className="w-3.5 h-3.5 text-emerald-400" />
               <span className="card-section-title">STATION HEALTH & TELEMETRY</span>
             </div>
-            <div className={`status-pill ${status}`}>
+            <div className={`status-pill ${displayStatus}`} title={evidence.detail}>
               <span className="status-pill-dot" />
-              <span className="status-pill-text">{status}</span>
+              <span className="status-pill-text">{displayStatusLabel}</span>
             </div>
           </div>
 
           <div className="station-health-grid">
             <div className="health-grid-col">
-              <span className="health-grid-lbl">Health Score</span>
-              <span className="health-grid-val">
-                {canonical?.sensor_health_index !== undefined ? `${canonical.sensor_health_index.toFixed(0)}%` : '100%'}
+              <span className="health-grid-lbl">Sensor Health</span>
+              <span className="health-grid-val" title={sensorHealthAvailable ? undefined : sensorHealthNaReason}>
+                {sensorHealthAvailable ? `${canonical!.sensor_health_index.toFixed(0)}%` : 'N/A'}
               </span>
             </div>
             <div className="health-grid-col">
               <span className="health-grid-lbl">Telemetry State</span>
               <span className="health-grid-val">
-                {awsTelemetryStatus === 'TELEMETRY_AVAILABLE' ? 'ONLINE / CONNECTED' : 'UNAVAILABLE'}
+                {awsTelemetryStatus === 'TELEMETRY_AVAILABLE' ? 'ONLINE / CONNECTED' : 'IN-SITU FEED UNAVAILABLE'}
               </span>
             </div>
             <div className="health-grid-col">
@@ -617,7 +687,11 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
           </div>
 
-          {canonical?.sensor_health_index !== undefined && (
+          {!sensorHealthAvailable && (
+            <div className="health-na-note">Sensor health not assessed: {sensorHealthNaReason}.</div>
+          )}
+
+          {sensorHealthAvailable && (
             <div className="health-bar-track">
               <div
                 className="health-bar-fill"
@@ -634,7 +708,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
           )}
 
-          {canonical?.estimated_days_to_failure && (
+          {sensorHealthAvailable && canonical?.estimated_days_to_failure && (
             <div className="days-failure-hint">
               <AlertTriangle className="w-3 h-3 text-amber-400" />
               <span>
@@ -650,10 +724,16 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             <div className="card-header-flex">
               <div className="card-title-group">
                 <Radio className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="card-section-title">NEAREST STATION VALIDATION</span>
+                <span className="card-section-title">INFORMATIONAL NEARBY STATIONS</span>
+                <span
+                  className="modelled-reference-tag"
+                  title="A quick client-side comparison for context. It is not ATHER's Spatial Intelligence and does not feed the anomaly decision."
+                >
+                  CLIENT-SIDE · NOT ATHER SPATIAL
+                </span>
               </div>
               {neighborVerdict && (
-                <span className={`neighbor-verdict-pill verdict-${neighborVerdict}`}>
+                <span className={`neighbor-verdict-pill informational verdict-${neighborVerdict}`} title="Informational client-side result — not an ATHER decision">
                   {neighborVerdict.replace(/_/g, ' ')}
                 </span>
               )}
@@ -670,7 +750,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               ))}
             </div>
 
-            <div className="neighbor-check-title">VALIDATING NEIGHBOR STATIONS</div>
+            <div className="neighbor-check-title">NEARBY STATION CHECKS (INFORMATIONAL)</div>
             <div className="neighbor-check-list">
               {neighborChecks.map((check, idx) => (
                 <div
@@ -709,9 +789,9 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
 
             <div className="neighbor-validation-note">
-              Quick comparison against the {neighbors.length} nearest station{neighbors.length > 1 ? 's' : ''} by real
-              distance (client-side, informational). See Spatial Consensus (L4) above for the backend's own regional
-              consistency score.
+              Informational only: a quick client-side comparison against the {neighbors.length} nearest station
+              {neighbors.length > 1 ? 's' : ''} by real distance. It does not feed ATHER's anomaly decision. ATHER's
+              actual Spatial Intelligence is the backend Spatial Consensus (L4) result in the diagnostics above.
             </div>
           </div>
         )}
@@ -774,7 +854,13 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             {layerDefs.map(({ key, num, label, full }) => {
               const layerData = getLayerData(key);
               const isExpanded = Boolean(expandedLayers[key]);
-              const statusClass = layerData.status.toLowerCase();
+              const layerEv = layerEvidenceByKey[key];
+              const layerAssessed = layerEv ? layerEv.assessed : true;
+              // A layer that did not assess the observation gets a neutral state,
+              // never PASS / a 0% score.
+              const statusClass = layerAssessed
+                ? layerData.status.toLowerCase()
+                : layerEv.state === 'INSUFFICIENT' ? 'insufficient_data' : layerEv.state.toLowerCase();
 
               return (
                 <div key={key} className={`layer-accordion-item ${statusClass}`}>
@@ -791,10 +877,10 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
 
                     <div className="layer-header-right">
                       <span className={`layer-status-pill ${statusClass}`}>
-                        ● {layerData.status}
+                        ● {layerAssessed ? layerData.status : LAYER_STATE_LABEL[layerEv.state]}
                       </span>
                       <span className="layer-score-pill">
-                        {(layerData.score * 100).toFixed(0)}%
+                        {layerAssessed ? `${(layerData.score * 100).toFixed(0)}%` : 'N/A'}
                       </span>
                       {isExpanded ? (
                         <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
@@ -804,12 +890,25 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
                     </div>
                   </div>
 
-                  {isExpanded && (
+                  {isExpanded && key === 'temporal' && (
+                    <div className="layer-accordion-body">
+                      <TemporalEvidence
+                        layer={temporalLayer}
+                        availability={temporalAvailability}
+                        observed={{ temperature_c: obsTemp, pressure_hpa: obsPress, humidity_pct: obsHumid }}
+                        dataQualityHistoricalPoints={canonicalQuality?.historical_points}
+                      />
+                    </div>
+                  )}
+
+                  {isExpanded && key !== 'temporal' && (
                     <div className="layer-accordion-body">
                       <div className="layer-expanded-grid">
                         <div>
                           <span className="layer-meta-lbl">Layer Score:</span>
-                          <span className="layer-meta-val">{(layerData.score * 100).toFixed(1)}%</span>
+                          <span className="layer-meta-val">
+                            {layerAssessed ? `${(layerData.score * 100).toFixed(1)}%` : 'N/A — not assessed'}
+                          </span>
                         </div>
                         <div>
                           <span className="layer-meta-lbl">Evidence Quality:</span>
@@ -1051,44 +1150,63 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
               <span className="card-section-title">ATHER STATION SUMMARY</span>
             </div>
-            <span className={`summary-status-tag ${status}`}>
-              {status}
+            <span className={`summary-status-tag ${displayStatus}`} title={evidence.detail}>
+              {displayStatusLabel}
             </span>
           </div>
           <div className="station-summary-grid">
             <div className="summary-metric">
               <span className="summary-key">Current State</span>
-              <span className="summary-val font-mono">{status}</span>
+              <span className="summary-val font-mono">{displayStatusLabel}</span>
+              {displayStatus !== status && (
+                <span className="summary-sub">Backend status: {status}</span>
+              )}
             </div>
             <div className="summary-metric">
               <span className="summary-key">Data Quality</span>
-              <span className="summary-val">{canonicalQuality?.status || 'GOOD'}</span>
+              <span className="summary-val">{canonicalQuality?.status || 'UNKNOWN'}</span>
             </div>
             <div className="summary-metric">
               <span className="summary-key">Telemetry</span>
-              <span className="summary-val">{isAwsInSitu ? 'LIVE (IN-SITU)' : 'ACTIVE'}</span>
+              <span className="summary-val">{telemetrySummaryLabel}</span>
+              {isNwpReference && <span className="summary-sub">NWP MODEL REFERENCE — not measured</span>}
             </div>
             <div className="summary-metric">
               <span className="summary-key">Historical Coverage</span>
-              <span className="summary-val">{historyHours === 168 ? '7 Days' : '24 Hours'}</span>
+              <span className="summary-val">
+                {temporalHistoryPoints !== null
+                  ? `${temporalHistoryPoints} valid observation${temporalHistoryPoints === 1 ? '' : 's'}`
+                  : 'Not reported'}
+              </span>
             </div>
             <div className="summary-metric">
               <span className="summary-key">Anomalies</span>
-              <span className="summary-val">{isAnomaly ? '1 Active' : '0'}</span>
+              <span className="summary-val">{isAnomaly ? '1 Active' : '0 confirmed'}</span>
             </div>
             <div className="summary-metric">
               <span className="summary-key">Sensor Health</span>
-              <span className="summary-val">{canonical?.sensor_health_index !== undefined ? `${canonical.sensor_health_index.toFixed(0)}%` : '100%'}</span>
+              <span className="summary-val" title={sensorHealthAvailable ? undefined : sensorHealthNaReason}>
+                {sensorHealthAvailable ? `${canonical!.sensor_health_index.toFixed(0)}%` : 'N/A'}
+              </span>
+              {!sensorHealthAvailable && <span className="summary-sub">{sensorHealthNaReason}</span>}
             </div>
             <div className="summary-metric">
               <span className="summary-key">Spatial Consistency</span>
-              <span className="summary-val">{canonicalLayers?.layer4_spatial?.status || 'NORMAL'}</span>
+              <span className="summary-val">
+                {spatialEv?.assessed
+                  ? spatialEv.state === 'PASS'
+                    ? `CONSISTENT${typeof canonicalLayers?.spatial?.details?.total_neighbors_in_radius === 'number'
+                        ? ` · ${canonicalLayers.spatial.details.total_neighbors_in_radius} stations`
+                        : ''}`
+                    : LAYER_STATE_LABEL[spatialEv.state]
+                  : spatialEv
+                    ? LAYER_STATE_LABEL[spatialEv.state]
+                    : 'UNAVAILABLE'}
+              </span>
             </div>
             <div className="summary-metric">
               <span className="summary-key">Overall Assessment</span>
-              <span className="summary-val text-xs leading-tight">
-                {canonicalWeather?.summary || (isAnomaly ? 'Local sensor outlier detected' : 'Operating normally')}
-              </span>
+              <span className="summary-val text-xs leading-tight">{evidence.detail}</span>
             </div>
           </div>
         </div>
@@ -1108,6 +1226,14 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
 
             <p className="weather-summary-text">{canonicalWeather.summary}</p>
 
+            {(isNwpReference || evidence.notAssessed.length > 0) && (
+              <div className="weather-context-note">
+                <span className="context-lbl">Evidence limits:</span>{' '}
+                {isNwpReference && 'This analysis describes an NWP model reference, not a measured observation. '}
+                {evidence.notAssessed.length > 0 && evidence.detail}
+              </div>
+            )}
+
             {canonicalWeather.meteorological_context && (
               <div className="weather-context-note">
                 <span className="context-lbl">Context:</span> {canonicalWeather.meteorological_context}
@@ -1117,7 +1243,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
         )}
 
         {/* Operator Insights List */}
-        {canonicalInsights.length > 0 && (
+        {insightsToShow.length > 0 && (
           <div className="section-card insights-card">
             <div className="card-header-flex">
               <div className="card-title-group">
@@ -1127,7 +1253,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             </div>
 
             <div className="insights-list">
-              {canonicalInsights.map((insight, idx) => (
+              {insightsToShow.map((insight, idx) => (
                 <div key={idx} className="insight-card-item">
                   <div className="insight-row">
                     <span className="insight-lbl">WHAT:</span>
@@ -1159,8 +1285,8 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               <Database className="w-3.5 h-3.5 text-slate-400" />
               <span className="card-section-title">DATA PROVENANCE & QUALITY</span>
             </div>
-            <span className={`data-quality-status-pill ${canonicalQuality?.status || 'VALID'}`}>
-              {canonicalQuality?.status || 'VALID'}
+            <span className={`data-quality-status-pill ${canonicalQuality?.status || 'UNKNOWN'}`}>
+              {canonicalQuality?.status || 'UNKNOWN'}
             </span>
           </div>
 
@@ -1170,7 +1296,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
               <span className="quality-val">
                 {canonicalQuality?.valid_fields?.length
                   ? canonicalQuality.valid_fields.map((f) => f.replace('_c', '').replace('_hpa', '').replace('_pct', '').toUpperCase()).join(', ')
-                  : 'T, P, RH'}
+                  : 'Not reported'}
               </span>
             </div>
 
@@ -1187,7 +1313,7 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
             <div className="quality-item">
               <span className="quality-key">Historical Samples:</span>
               <span className="quality-val">
-                {canonicalQuality?.historical_points ?? history?.series.length ?? 0} samples
+                {temporalHistoryPoints !== null ? `${temporalHistoryPoints} valid observation${temporalHistoryPoints === 1 ? '' : 's'}` : 'Not reported'}
               </span>
             </div>
 

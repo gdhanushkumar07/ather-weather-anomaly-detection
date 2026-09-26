@@ -12,8 +12,9 @@ const PARAMETER_COLOR_STOPS: Record<ParameterField, ReturnType<typeof toMapLibre
   pressure: toMapLibreColorExpression('pressure', PRESSURE_STOPS),
   humidity: toMapLibreColorExpression('humidity', HUMIDITY_STOPS),
 };
-export const CLUSTERS_LAYER_ID = 'ather-clusters';
-export const CLUSTER_COUNT_LAYER_ID = 'ather-cluster-count';
+// NOTE: there are intentionally NO native cluster layers any more. Clusters are drawn as
+// weather-station markers with a small count badge (StationMarkerLayer.tsx); the old
+// cyan circle ('ather-clusters') and its text layer ('ather-cluster-count') were removed.
 export const ANOMALY_PULSE_LAYER_ID = 'ather-anomaly-pulse';
 export const SELECTED_HALO_LAYER_ID = 'ather-selected-station-halo';
 export const UNCLUSTERED_RING_LAYER_ID = 'ather-unclustered-ring';
@@ -30,67 +31,25 @@ export function setupStationLayers(
     map.addSource(STATIONS_SOURCE_ID, {
       type: 'geojson',
       data: data,
+      // MapLibre's built-in (supercluster) hierarchical clustering: clusters split as the
+      // zoom increases, driven purely by station coordinates. Reused unchanged except that
+      // each cluster now also carries how many of its stations are in each status, so the
+      // cluster marker can show its highest severity without losing the individual statuses.
       cluster: true,
-      clusterMaxZoom: 11,
-      clusterRadius: 45
+      clusterMaxZoom: 11,   // at zoom > 11 every station is individual (no clusters)
+      clusterRadius: 60,    // px: sized for the AWS marker + count badge footprint
+      clusterProperties: {
+        anomalies: ['+', ['case', ['==', ['get', 'status'], 'ANOMALY'], 1, 0]],
+        warnings: ['+', ['case', ['==', ['get', 'status'], 'WARNING'], 1, 0]],
+        normals: ['+', ['case', ['==', ['get', 'status'], 'NORMAL'], 1, 0]]
+      }
     });
   } else {
     const src = map.getSource(STATIONS_SOURCE_ID) as maplibregl.GeoJSONSource;
     src.setData(data);
   }
 
-  // 1. Cluster Circles (Dark translucent center, cyan accent ring, crisp white border)
-  if (!map.getLayer(CLUSTERS_LAYER_ID)) {
-    map.addLayer({
-      id: CLUSTERS_LAYER_ID,
-      type: 'circle',
-      source: STATIONS_SOURCE_ID,
-      filter: ['has', 'point_count'],
-      paint: {
-        'circle-color': [
-          'step',
-          ['get', 'point_count'],
-          'rgba(14, 28, 48, 0.90)', // small cluster (< 20)
-          20,
-          'rgba(12, 38, 64, 0.92)', // medium cluster (20 - 100)
-          100,
-          'rgba(8, 48, 80, 0.94)'   // large cluster (> 100)
-        ],
-        'circle-radius': [
-          'step',
-          ['get', 'point_count'],
-          14,
-          20,
-          18,
-          100,
-          23
-        ],
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#00e5ff',
-        'circle-opacity': 0.98
-      }
-    });
-  }
-
-  // 2. Cluster Count Labels
-  if (!map.getLayer(CLUSTER_COUNT_LAYER_ID)) {
-    map.addLayer({
-      id: CLUSTER_COUNT_LAYER_ID,
-      type: 'symbol',
-      source: STATIONS_SOURCE_ID,
-      filter: ['has', 'point_count'],
-      layout: {
-        'text-field': '{point_count_abbreviated}',
-        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-        'text-size': 11,
-        'text-allow-overlap': true,
-        'text-ignore-placement': true
-      },
-      paint: {
-        'text-color': '#ffffff'
-      }
-    });
-  }
+  // (Cluster circle + count layers removed: clusters are DOM weather-station markers with a count badge.)
 
   // 3. Anomaly Pulsing Alert Halo (Unclustered)
   if (!map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
@@ -259,23 +218,6 @@ export function setupStationLayers(
   if (!(map as any)._atherStationListenersAttached) {
     (map as any)._atherStationListenersAttached = true;
 
-    // Click handler for clusters: smooth zoom into cluster
-    map.on('click', CLUSTERS_LAYER_ID, (e) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: [CLUSTERS_LAYER_ID] });
-      if (!features.length) return;
-      const clusterId = features[0].properties?.cluster_id;
-      const source = map.getSource(STATIONS_SOURCE_ID) as maplibregl.GeoJSONSource;
-
-      source.getClusterExpansionZoom(clusterId).then((zoom) => {
-        const coords = (features[0].geometry as GeoJSON.Point).coordinates;
-        map.easeTo({
-          center: [coords[0], coords[1]],
-          zoom: zoom + 0.6,
-          duration: 450
-        });
-      });
-    });
-
     // Click handler for individual station: select station
     map.on('click', UNCLUSTERED_RING_LAYER_ID, (e) => {
       const features = map.queryRenderedFeatures(e.point, { layers: [UNCLUSTERED_RING_LAYER_ID] });
@@ -287,8 +229,6 @@ export function setupStationLayers(
     });
 
     // Hover cursor changes
-    map.on('mouseenter', CLUSTERS_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
-    map.on('mouseleave', CLUSTERS_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
     map.on('mouseenter', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
   }
@@ -348,8 +288,6 @@ export function updateSelectedStationHalo(map: maplibregl.Map, selectedStationId
 export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean) {
   const vis = visible ? 'visible' : 'none';
   [
-    CLUSTERS_LAYER_ID,
-    CLUSTER_COUNT_LAYER_ID,
     SELECTED_HALO_LAYER_ID,
     UNCLUSTERED_RING_LAYER_ID,
     UNCLUSTERED_BASE_LAYER_ID,
@@ -376,6 +314,40 @@ export function setAnomalyOverlayVisibility(map: maplibregl.Map, visible: boolea
   if (map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
     map.setLayoutProperty(ANOMALY_PULSE_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
   }
+}
+
+/**
+ * Individual stations are now drawn as animated DOM weather-station markers
+ * (see StationMarkerLayer.tsx / WeatherStationMarker.tsx). The native circle
+ * layers above are kept as an automatic FALLBACK: this excludes the stations
+ * that currently have a DOM marker so nothing is drawn twice, while any
+ * station beyond the DOM-marker cap still gets its circle (and its existing
+ * click handler). Pass an empty array to restore the circles for everyone.
+ * Clusters are never affected.
+ */
+export function setDomMarkedStations(map: maplibregl.Map, markedIds: string[]) {
+  const notCluster: any[] = ['!', ['has', 'point_count']];
+  const notMarked: any[] | null = markedIds.length
+    ? ['!', ['in', ['get', 'id'], ['literal', markedIds]]]
+    : null;
+  const withExclusion = (...extra: any[]) => ['all', notCluster, ...extra, ...(notMarked ? [notMarked] : [])] as any;
+
+  [UNCLUSTERED_RING_LAYER_ID, UNCLUSTERED_BASE_LAYER_ID, UNCLUSTERED_CORE_LAYER_ID].forEach((layerId) => {
+    if (map.getLayer(layerId)) map.setFilter(layerId, withExclusion());
+  });
+  // The static anomaly halo keeps its own predicate; the DOM marker's radar
+  // replaces it for marked stations.
+  if (map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
+    map.setFilter(ANOMALY_PULSE_LAYER_ID, withExclusion(['==', ['get', 'hasAnomaly'], 1]));
+  }
+}
+
+/** Hides the native cyan selection ring when the selected station is drawn as a
+ * DOM marker (the marker carries its own selected glow); restores it otherwise. */
+export function setSelectedHaloSuppressed(map: maplibregl.Map, suppressed: boolean) {
+  if (!map.getLayer(SELECTED_HALO_LAYER_ID)) return;
+  map.setPaintProperty(SELECTED_HALO_LAYER_ID, 'circle-opacity', suppressed ? 0 : 1);
+  map.setPaintProperty(SELECTED_HALO_LAYER_ID, 'circle-stroke-opacity', suppressed ? 0 : 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -448,7 +420,9 @@ export function ensureNeighborLayers(map: maplibregl.Map) {
         'circle-radius': 12,
         'circle-stroke-width': 2,
         'circle-stroke-color': '#00e5ff',
-        'circle-stroke-opacity': 0.9
+        // Drawn on the DOM marker itself (`is-neighbor`, a thin ground ring) instead of a cyan
+        // circle around it; the layer stays so nothing that references it breaks.
+        'circle-stroke-opacity': 0
       }
     });
   }
@@ -506,7 +480,8 @@ function animateNeighborLinesIn(map: maplibregl.Map, durationMs = 600) {
   const start = performance.now();
   function step(now: number) {
     if (!map.getLayer(NEIGHBOR_LINES_LAYER_ID)) return;
-    const t = Math.min(1, (now - start) / durationMs);
+    // rAF timestamps can precede performance.now(): clamp so opacity is never negative
+    const t = Math.max(0, Math.min(1, (now - start) / durationMs));
     const eased = 1 - Math.pow(1 - t, 3);
     map.setPaintProperty(NEIGHBOR_LINES_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_OPACITY * eased);
     map.setPaintProperty(NEIGHBOR_LINES_GLOW_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_GLOW_OPACITY * eased);

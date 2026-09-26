@@ -9,6 +9,7 @@ interface StationPreviewPanelProps {
   station: Station;
   onClose: () => void;
   onViewDetails: (stationId: string) => void;
+  onOpenIncident?: (incidentId: string) => void;
 }
 
 export const StationPreviewPanel: React.FC<StationPreviewPanelProps> = ({

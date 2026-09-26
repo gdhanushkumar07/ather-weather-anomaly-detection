@@ -1,5 +1,5 @@
 """
-Layer 2: Temporal Pattern Analysis Engine (v2).
+Layer 2: Temporal Pattern Analysis Engine (v2 + Stage 4 LSTM evidence).
 
 CORRECTNESS RULES:
   - Only evaluates channels with DataQuality == VALID.
@@ -7,20 +7,85 @@ CORRECTNESS RULES:
   - Reports historical_points per channel so the frontend can show data coverage.
   - Step-rate spikes require a VALID previous reading too.
   - Never declares a spike or freeze on a single data point.
+
+STAGE 4 ADDITION:
+  - An optional LSTM next-step-prediction residual is combined with the
+    ORIGINAL rule-based evidence above as an ADDITIONAL signal — it never
+    replaces or disables any of the rule-based checks. See
+    engine/lstm_temporal.py for the LSTM wrapper and config.LSTMTemporalConfig
+    for its settings. If the LSTM artifacts are unavailable or fail to
+    load/run, this layer transparently falls back to rule-based-only
+    behavior (identical to pre-Stage-4 behavior).
 """
 from collections import deque
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple, Any
 import numpy as np
 
-from config import CONFIG, TemporalThresholds
+from config import CONFIG, TemporalThresholds, LSTMTemporalConfig
 from schema import AWSReading, DataQuality
+from .lstm_temporal import LSTMTemporalEvidence, LSTMStepResult
 
 _MIN_HISTORY_FOR_TEMPORAL = 3   # Minimum readings required for any temporal conclusion
 _MIN_HISTORY_FOR_ZSCORE   = 24  # Minimum readings required for rolling Z-score
 
+_LSTM_CHANNELS = ("temperature_c", "pressure_hpa", "humidity_pct")
+
+
+def _effective_timestamp(reading: AWSReading) -> Optional[datetime]:
+    """
+    The time this layer uses to space consecutive readings (step-rate
+    interval, LSTM contiguity/gap/ordering).
+
+    Prefers the reading's true observation time (`observation_timestamp`,
+    e.g. a source's own clock) and only falls back to `timestamp` (ATHER's
+    processing-sequence clock) when no observation time is known — so a
+    burst of readings processed milliseconds apart but observed 10 minutes
+    apart is spaced by when it was OBSERVED, not when it was processed.
+
+    A timezone-naive value is interpreted as UTC (what sources such as
+    Open-Meteo report by default) so naive and aware timestamps can never
+    raise a TypeError when subtracted.
+    """
+    ts = reading.observation_timestamp or reading.timestamp
+    if ts is None:
+        return None
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return ts
+
+
+def _lstm_detail(lstm_result: LSTMStepResult, recent_peak_by_channel: Dict[str, float]) -> Dict[str, Any]:
+    """Builds the `detail["lstm"]` traceability block. Shared by the normal
+    return path and the insufficient-history early return so the block's
+    shape never depends on which path produced it."""
+    return {
+        "lstm_available": lstm_result.available,
+        "lstm_skip_reason": lstm_result.skip_reason,
+        "lstm_predicted_temperature_c": lstm_result.predicted_temperature_c,
+        "lstm_predicted_pressure_hpa": lstm_result.predicted_pressure_hpa,
+        "lstm_predicted_humidity_pct": lstm_result.predicted_humidity_pct,
+        "temperature_residual": lstm_result.temperature_residual,
+        "pressure_residual": lstm_result.pressure_residual,
+        "humidity_residual": lstm_result.humidity_residual,
+        "temperature_abs_residual": lstm_result.temperature_abs_residual,
+        "pressure_abs_residual": lstm_result.pressure_abs_residual,
+        "humidity_abs_residual": lstm_result.humidity_abs_residual,
+        "temperature_lstm_score": round(lstm_result.temperature_score, 4),
+        "pressure_lstm_score": round(lstm_result.pressure_score, 4),
+        "humidity_lstm_score": round(lstm_result.humidity_score, 4),
+        "temperature_lstm_raw_score": lstm_result.temperature_raw_score,
+        "pressure_lstm_raw_score": lstm_result.pressure_raw_score,
+        "humidity_lstm_raw_score": lstm_result.humidity_raw_score,
+        "lstm_residual_score": round(lstm_result.lstm_residual_score, 4),
+        "recent_lstm_peak": round(max(recent_peak_by_channel.values()), 4),
+        "recent_lstm_peak_by_channel": {ch: round(v, 4) for ch, v in recent_peak_by_channel.items()},
+        "note": "lstm_residual_score is an INITIAL Stage 4 calibration signal, not the final ATHER temporal score.",
+    }
+
 
 class StationTemporalBuffer:
-    def __init__(self, max_len: int = 72):
+    def __init__(self, max_len: int = 72, lstm_sequence_length: int = 144, lstm_residual_window: int = 6):
         # Store only VALID readings per channel
         self.history_temp:  deque = deque(maxlen=max_len)
         self.history_press: deque = deque(maxlen=max_len)
@@ -37,18 +102,45 @@ class StationTemporalBuffer:
         # do not poison the rolling statistics after the sensor recovers.
         self.frozen_len: Dict[str, int] = {}
 
+        # ── Stage 4: LSTM-specific buffers (additive, do not affect the
+        # rule-based deques above) ──────────────────────────────────────
+        # Only ever appended when ALL THREE channels are VALID together on
+        # the SAME reading, so every entry is a complete, aligned
+        # (timestamp, T, P, RH) tuple — never partially missing, never fed
+        # to the LSTM with a NaN.
+        self.history_complete: deque = deque(maxlen=lstm_sequence_length)
+        # Rolling recent LSTM channel scores, for the "recent peak" logic
+        # (spec section 11) — lets a temporal deviation the LSTM caught a
+        # few steps ago keep contributing evidence even if the LSTM has
+        # since adapted to a frozen/stale value and its CURRENT residual
+        # has fallen.
+        self.recent_lstm_channel_scores: Dict[str, deque] = {
+            ch: deque(maxlen=lstm_residual_window) for ch in _LSTM_CHANNELS
+        }
+
 
 class TemporalPatternLayer:
     """
-    Evaluates temporal dynamics: step-rate spikes, frozen sensors, and rolling Z-score.
+    Evaluates temporal dynamics: step-rate spikes, frozen sensors, rolling
+    Z-score (all original, unchanged rule-based checks), PLUS an optional
+    Stage 4 LSTM next-step-prediction residual as additional evidence.
     """
-    def __init__(self, config: TemporalThresholds = CONFIG.temporal):
+    def __init__(self, config: TemporalThresholds = CONFIG.temporal,
+                 lstm_config: LSTMTemporalConfig = CONFIG.lstm_temporal):
         self.cfg = config
         self.buffers: Dict[str, StationTemporalBuffer] = {}
+        # Loaded ONCE here (not per station, not per reading). Degrades
+        # gracefully to rule-based-only behavior if artifacts are missing
+        # or fail to load — see LSTMTemporalEvidence.__init__.
+        self.lstm = LSTMTemporalEvidence(lstm_config)
 
     def _get_buffer(self, station_id: str) -> StationTemporalBuffer:
         if station_id not in self.buffers:
-            self.buffers[station_id] = StationTemporalBuffer(max_len=self.cfg.rolling_window_samples)
+            self.buffers[station_id] = StationTemporalBuffer(
+                max_len=self.cfg.rolling_window_samples,
+                lstm_sequence_length=self.lstm.cfg.sequence_length,
+                lstm_residual_window=self.lstm.cfg.residual_window,
+            )
         return self.buffers[station_id]
 
     def evaluate(self, reading: AWSReading) -> Tuple[float, Dict[str, float], Optional[str], Dict[str, Any]]:
@@ -70,13 +162,61 @@ class TemporalPatternLayer:
         def ch_valid(ch: str) -> bool:
             return reading.data_quality.get(ch) == DataQuality.VALID
 
+        # Stage 6: check staleness/ordering of the LSTM history BEFORE it is
+        # used for prediction — not just before deciding whether to append
+        # to it. Originally this check only ran later (at append time), so
+        # the very reading that ARRIVED after a big gap (or out of order)
+        # still got an LSTM prediction using the now-stale/misordered
+        # pre-gap history, one step later than intended. Moving the same
+        # check here means a reading arriving long after (or not after) the
+        # buffer's last entry never uses that stale/misordered history —
+        # it correctly reports insufficient_valid_history instead, and
+        # rewarming starts cleanly from this reading onward. This is the
+        # SAME reset condition as before (see the append step below), just
+        # evaluated at the right time; no new policy was introduced.
+        eff_ts = _effective_timestamp(reading)
+        if buf.history_complete and eff_ts is not None:
+            gap_minutes = (eff_ts - buf.history_complete[-1][0]).total_seconds() / 60.0
+            if gap_minutes > self.lstm.cfg.max_gap_minutes or gap_minutes <= 0:
+                buf.history_complete.clear()
+
+        # ── Stage 4: LSTM next-step prediction (uses the history as it
+        # stood BEFORE this reading — never includes the reading being
+        # predicted in its own 144-step input, per spec section 7). The
+        # result is only MERGED into scores/reasons/detail further below,
+        # after all the ORIGINAL rule-based checks have run unchanged.
+        history_before_this_reading = list(buf.history_complete)
+        lstm_result: LSTMStepResult = self.lstm.evaluate(
+            history_before_this_reading,
+            reading.temperature_c if ch_valid("temperature_c") else None,
+            reading.pressure_hpa if ch_valid("pressure_hpa") else None,
+            reading.humidity_pct if ch_valid("humidity_pct") else None,
+        )
+        if lstm_result.available:
+            buf.recent_lstm_channel_scores["temperature_c"].append(lstm_result.temperature_score)
+            buf.recent_lstm_channel_scores["pressure_hpa"].append(lstm_result.pressure_score)
+            buf.recent_lstm_channel_scores["humidity_pct"].append(lstm_result.humidity_score)
+
         # ── 1. Step-Rate / Spike Check ─────────────────────────────────────
         if buf.last_reading is not None:
             prev = buf.last_reading
             dt_seconds = 600.0
-            if reading.timestamp and prev.timestamp:
+            prev_ts = _effective_timestamp(prev)
+            if eff_ts and prev_ts:
                 try:
-                    dt_seconds = max(1.0, (reading.timestamp - prev.timestamp).total_seconds())
+                    # Stage 6: abs() — an out-of-order/backfilled/rollback
+                    # reading (timestamp earlier than the cached "previous")
+                    # must not be clamped down to a 1-second interval. That
+                    # collapsed interval_factor to its floor (0.5), making
+                    # the abrupt-change threshold artificially tight and
+                    # capable of flagging a perfectly normal value change as
+                    # a false spike (confirmed: a plausible +2C/30min change
+                    # scored 0.91 and produced a false "Abrupt temperature
+                    # change" reason before this fix). Using the MAGNITUDE
+                    # of the time gap keeps the threshold scaled to how much
+                    # real time actually separates the two readings either
+                    # direction, without asserting anything about order.
+                    dt_seconds = max(1.0, abs((eff_ts - prev_ts).total_seconds()))
                 except Exception:
                     dt_seconds = 600.0
 
@@ -157,6 +297,19 @@ class TemporalPatternLayer:
             buf.history_rh.append(reading.humidity_pct)
             buf.ts_rh.append(reading.timestamp)
 
+        # Stage 4: append to the LSTM's joint-valid history ONLY when all
+        # three channels are VALID on this SAME reading, and only AFTER
+        # lstm_result above was already computed from the prior state —
+        # this reading never appears inside its own prediction's input.
+        # (Stage 6: the gap/ordering check that used to live here now runs
+        # BEFORE the LSTM call above, so by this point the buffer is
+        # already correctly reset if this reading broke contiguity —
+        # appending here is unconditional on that account.)
+        if (ch_valid("temperature_c") and ch_valid("pressure_hpa") and ch_valid("humidity_pct")
+                and reading.temperature_c is not None and reading.pressure_hpa is not None
+                and reading.humidity_pct is not None):
+            buf.history_complete.append((eff_ts, reading.temperature_c, reading.pressure_hpa, reading.humidity_pct))
+
         buf.last_reading = reading
 
         # Track history counts for data quality reporting
@@ -172,6 +325,22 @@ class TemporalPatternLayer:
             len(buf.history_rh)
         )
 
+        # Output contract: the production detector (app/anomaly/detector.py)
+        # reads a SCALAR `history_points` from this detail for fusion's
+        # temporal coverage/scarcity inputs and the data-quality summary.
+        # This layer previously only exposed the per-channel dict above, so
+        # that lookup always fell back to 0. `history_points` is the deepest
+        # rule-based per-channel history (capped by rolling_window_samples);
+        # the LSTM's own contiguous joint-valid depth is exposed separately.
+        detail["history_points"] = max_history
+        detail["lstm_history_points"] = len(buf.history_complete)
+        detail["lstm_required_history_points"] = self.lstm.cfg.sequence_length
+
+        recent_peak_by_channel: Dict[str, float] = {
+            ch: (max(buf.recent_lstm_channel_scores[ch]) if buf.recent_lstm_channel_scores[ch] else 0.0)
+            for ch in _LSTM_CHANNELS
+        }
+
         # Check if we have enough history for rolling statistics,
         # but allow acute 2-point step-rate spikes to be reported
         spike_detected = any(s > 0.5 for s in scores.values())
@@ -179,6 +348,10 @@ class TemporalPatternLayer:
         if max_history < _MIN_HISTORY_FOR_TEMPORAL and not spike_detected:
             detail["status"] = "INSUFFICIENT_DATA"
             detail["note"] = f"Only {max_history} valid reading(s) available. Temporal analysis requires {_MIN_HISTORY_FOR_TEMPORAL}+."
+            # Still report WHY the LSTM did/didn't run on this reading
+            # (e.g. skip_reason) — previously this early return omitted the
+            # whole "lstm" block.
+            detail["lstm"] = _lstm_detail(lstm_result, recent_peak_by_channel)
             return 0.0, scores, None, detail
 
         detail["status"] = "EVALUATED"
@@ -279,6 +452,59 @@ class TemporalPatternLayer:
                             "mad": round(mad, 3), "modified_z": round(mod_z, 2),
                             "sample_count": len(hist), "score": round(z_score, 3)
                         }
+
+        # ── Stage 4: merge LSTM evidence (ADDS to, never replaces, the
+        # rule-based scores computed above) ─────────────────────────────
+        pre_lstm_scores = dict(scores)  # snapshot: did a rule already flag each channel this cycle?
+
+        channel_labels = {"temperature_c": ("temperature", "°C"), "pressure_hpa": ("pressure", "hPa"), "humidity_pct": ("humidity", "%")}
+        for ch in _LSTM_CHANNELS:
+            # (recent_peak_by_channel was computed above, from the same
+            # buffer state — no new scores are appended between there and here.)
+            # Combine via max() — the SAME aggregation idiom every rule-based
+            # check above already uses to combine evidence within a channel.
+            # This can only ever RAISE a channel's score, never lower a
+            # strong existing rule-based signal (spec section 13).
+            scores[ch] = max(scores[ch], recent_peak_by_channel[ch])
+
+        for ch in _LSTM_CHANNELS:
+            if recent_peak_by_channel[ch] <= self.lstm.cfg.reason_report_threshold:
+                continue
+            label, unit = channel_labels[ch]
+            rule_already_flagged = pre_lstm_scores[ch] > self.lstm.cfg.reason_report_threshold
+            if rule_already_flagged:
+                detected_reasons.append(f"{label.capitalize()} anomaly with elevated temporal prediction residual")
+            elif lstm_result.available and ch == "temperature_c" and lstm_result.temperature_score == recent_peak_by_channel[ch]:
+                sign = "+" if lstm_result.temperature_residual >= 0 else ""
+                detected_reasons.append(
+                    f"Temporal prediction residual: {label} deviates from expected value "
+                    f"(expected {lstm_result.predicted_temperature_c:.1f}{unit}, actual {reading.temperature_c:.1f}{unit}, "
+                    f"residual {sign}{lstm_result.temperature_residual:.1f}{unit})"
+                )
+            elif lstm_result.available and ch == "pressure_hpa" and lstm_result.pressure_score == recent_peak_by_channel[ch]:
+                sign = "+" if lstm_result.pressure_residual >= 0 else ""
+                detected_reasons.append(
+                    f"Temporal prediction residual: {label} deviates from expected value "
+                    f"(expected {lstm_result.predicted_pressure_hpa:.1f}{unit}, actual {reading.pressure_hpa:.1f}{unit}, "
+                    f"residual {sign}{lstm_result.pressure_residual:.1f}{unit})"
+                )
+            elif lstm_result.available and ch == "humidity_pct" and lstm_result.humidity_score == recent_peak_by_channel[ch]:
+                sign = "+" if lstm_result.humidity_residual >= 0 else ""
+                detected_reasons.append(
+                    f"Temporal prediction residual: {label} deviates from expected value "
+                    f"(expected {lstm_result.predicted_humidity_pct:.1f}{unit}, actual {reading.humidity_pct:.1f}{unit}, "
+                    f"residual {sign}{lstm_result.humidity_residual:.1f}{unit})"
+                )
+            else:
+                # The current step's own LSTM residual has already fallen
+                # (e.g. frozen/stale adaptation) but a recent peak within
+                # the rolling window still carries evidence forward.
+                detected_reasons.append(
+                    f"Temporal prediction residual: recent elevated {label} deviation within the last "
+                    f"{self.lstm.cfg.residual_window} readings"
+                )
+
+        detail["lstm"] = _lstm_detail(lstm_result, recent_peak_by_channel)
 
         overall_score = max(scores.values())
         reason_str    = "; ".join(detected_reasons) if detected_reasons else None

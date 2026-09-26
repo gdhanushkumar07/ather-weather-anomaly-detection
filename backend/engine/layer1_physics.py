@@ -129,11 +129,12 @@ class PhysicsValidationLayer:
         # ── 4. Wind speed bounds ───────────────────────────────────────────
         wind_kmh = reading.wind_speed_kmh
         if wind_kmh is not None:
+            channels_evaluated.append("wind_speed_kmh")
             if wind_kmh >= self.cfg.wind_storm_kmh:
                 return _make_result(
                     1.0, True,
                     f"Storm-force wind ({wind_kmh:.1f} km/h) exceeds operational sensor ceiling",
-                    channels_evaluated + ["wind_speed_kmh"],
+                    channels_evaluated,
                     {"channel": "wind_speed_kmh", "value": wind_kmh, "threshold": self.cfg.wind_storm_kmh}
                 )
             elif wind_kmh >= self.cfg.wind_gale_kmh:

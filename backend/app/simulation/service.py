@@ -91,6 +91,7 @@ def _resolve_baseline(base_station_id: Optional[str]) -> Dict[str, Any]:
 
 def _step_to_reading(
     station_id: str, step: ScenarioStep, lat: float, lon: float, elevation_m: float, ts: datetime,
+    pressure_convention: str,
 ) -> AWSReading:
     return AWSReading(
         station_id=station_id,
@@ -102,6 +103,8 @@ def _step_to_reading(
         lon=lon,
         elevation_m=elevation_m,
         source=ObservationSource.SYNTHETIC_TEST,
+        # Declared by the scenario (never inferred): see Scenario.pressure_convention.
+        pressure_convention=pressure_convention,
         observation_timestamp=ts,
         received_timestamp=ts,
         freshness="LIVE",
@@ -112,8 +115,18 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
     scenario = get_scenario(scenario_id)
     if not scenario:
         raise ValueError(f"Unknown scenario '{scenario_id}'. See /api/simulation/scenarios.")
+    return run_scenario(scenario, base_station_id)
 
+
+def run_scenario(scenario: Scenario, base_station_id: Optional[str] = None) -> Dict[str, Any]:
+    """Runs one Scenario object through the isolated engine (run_simulation looks
+    the scenario up by id first). Split out so a scenario can be exercised
+    directly, e.g. a SURFACE-pressure scenario in tests."""
     baseline = _resolve_baseline(base_station_id)
+    if scenario.elevation_m is not None:
+        # A scenario that declares its own elevation OWNS it (it defines the
+        # virtual station); otherwise the inherited/default baseline is used.
+        baseline = dict(baseline, elevation_m=float(scenario.elevation_m))
     sim_station_id = _new_sim_station_id()
 
     # A BRAND NEW, throwaway detector instance — this is the isolation
@@ -136,6 +149,7 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
             series.append(_step_to_reading(
                 n_id, step, baseline["lat"] + neighbor.lat_offset, baseline["lon"] + neighbor.lon_offset,
                 baseline["elevation_m"], ts,
+                scenario.pressure_convention,
             ))
         neighbor_series.append(series)
 
@@ -143,7 +157,8 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
     alert = None
     for i, step in enumerate(scenario.steps):
         ts = base_ts + timedelta(minutes=scenario.interval_minutes * i)
-        reading = _step_to_reading(sim_station_id, step, baseline["lat"], baseline["lon"], baseline["elevation_m"], ts)
+        reading = _step_to_reading(sim_station_id, step, baseline["lat"], baseline["lon"], baseline["elevation_m"], ts,
+                                   scenario.pressure_convention)
         neighbors_at_step = [series[i] for series in neighbor_series]
         alert = sim_detector.evaluate_reading(reading, neighbors=neighbors_at_step)
         observations.append({
@@ -211,6 +226,7 @@ def run_simulation(scenario_id: str, base_station_id: Optional[str] = None) -> D
             "description": scenario.description,
             "expected_bucket": expected_bucket,
             "expected_root_cause_hint": scenario.expected_root_cause_hint,
+            "pressure_convention": scenario.pressure_convention,
         },
         "observations": observations,
         "final_observation": {

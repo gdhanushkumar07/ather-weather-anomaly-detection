@@ -1,0 +1,49 @@
+{
+  "A_normal_weather": {
+    "status": "WARNING",
+    "layer_scores": {
+      "physics": 0.0,
+      "temporal": 0.134,
+      "multivariate": 0.0,
+      "spatial": 0.0,
+      "drift": 0.67
+    },
+    "temporal_score": 0.134
+  },
+  "B_temperature_spike": {
+    "status": "ANOMALY",
+    "temporal_score": 1.0,
+    "is_anomaly": true,
+    "reasons": [
+      "Abrupt temperature change: 17.0\u00b0C in 1s (max expected 1.8\u00b0C); temperature_c statistical outlier: current=42.00, rolling median=24.99, modified Z=5.3 (threshold 3.5); Temperature anomaly with elevated temporal prediction residual",
+      "temperature_c CUSUM drift (HIGH_RISK): estimated bias +1.22, 145 samples tracked; humidity_pct CUSUM drift (LIKELY_DRIFT): estimated bias +4.47, 145 samples tracked; Projected tolerance breach in 0.0 days"
+    ]
+  },
+  "C_frozen_temperature": {
+    "status": "ANOMALY",
+    "temporal_score": 0.95,
+    "reasons": [
+      "Frozen temperature sensor: constant 25.00\u00b0C across 12 consecutive readings; Frozen pressure sensor: constant 1012.07 hPa across 12 readings; Frozen humidity sensor: constant 59.93% across 12 readings",
+      "humidity_pct CUSUM drift (LIKELY_DRIFT): estimated bias +3.41, 158 samples tracked; Projected tolerance breach in 0.0 days"
+    ]
+  },
+  "D_stale_packet": {
+    "status": "ANOMALY",
+    "temporal_score": 0.95,
+    "reasons": [
+      "Frozen temperature sensor: constant 25.01\u00b0C across 12 consecutive readings; Frozen pressure sensor: constant 1011.95 hPa across 12 readings; Frozen humidity sensor: constant 59.90% across 12 readings",
+      "humidity_pct CUSUM drift (LIKELY_DRIFT): estimated bias +3.40, 158 samples tracked; Projected tolerance breach in 0.0 days"
+    ]
+  },
+  "E_missing_observation": {
+    "status": "NORMAL",
+    "temporal_score": 0.0
+  },
+  "F_regional_weather_event": {
+    "fusion_status": "WARNING",
+    "root_cause": "GENUINE_EXTREME_WEATHER",
+    "temporal_layer_score": 0.952,
+    "spatial_layer_score": 0.0,
+    "note": "Reuses existing app/simulation scenario infrastructure unmodified \u2014 not a Stage 5 addition."
+  }
+}

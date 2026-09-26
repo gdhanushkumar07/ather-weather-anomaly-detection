@@ -368,7 +368,8 @@ class TestEngineFixes(unittest.TestCase):
 
     def test_l3_reports_valid_channel_count(self):
         a = AnomalyDetector().evaluate_reading(AWSReading(station_id="M", temperature_c=24.0, humidity_pct=60,
-                                                          pressure_hpa=1010))
+                                                          pressure_hpa=1010, pressure_convention="MSL",
+                                                          lat=18.52, lon=73.85))
         self.assertEqual(a.layer_details["multivariate"]["valid_channel_count"], 3)
         self.assertNotEqual(a.canonical_result["layers"]["multivariate"]["status"], "INSUFFICIENT_DATA")
 

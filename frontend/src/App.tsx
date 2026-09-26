@@ -13,6 +13,7 @@ import { fetchStationsGeoJSON, fetchStationDetails, fetchAnomaliesSummary, fetch
 import { HomePage } from './pages/HomePage';
 import { SystemWorkspace } from './workspaces/SystemWorkspace';
 import { mapStatus, useLive } from './services/live';
+import { findNearestStations, AWSNeighbor } from './aws/awsGeo';
 
 /**
  * Maps browser path to Workspace
@@ -68,6 +69,8 @@ export const App: React.FC = () => {
   // the LIVE badge is backed by an actual, visible data age.
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [basemap, setBasemap] = useState<'dark' | 'satellite'>('satellite');
+  const [isGlobeMode, setIsGlobeMode] = useState<boolean>(false);
+  const [neighbors, setNeighbors] = useState<AWSNeighbor[]>([]);
   const [showAnomalyOverlay, setShowAnomalyOverlay] = useState(true);
 
   const [activeLayers, setActiveLayers] = useState<Record<WeatherLayerType, boolean>>({
@@ -161,6 +164,25 @@ export const App: React.FC = () => {
     return { ...stationsGeoJSON, features };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stationsGeoJSON, stationsVersion, statusFilter]);
+
+  // Real nearest-3-neighbor computation (Haversine over actual station
+  // coordinates already in stationsGeoJSON) -- single source of truth,
+  // shared by the map's connection lines and the station panel below.
+  useEffect(() => {
+    if (!selectedStation || !stationsGeoJSON) {
+      setNeighbors([]);
+      return;
+    }
+    setNeighbors(
+      findNearestStations(
+        selectedStation.id,
+        selectedStation.latitude,
+        selectedStation.longitude,
+        stationsGeoJSON.features,
+        3
+      )
+    );
+  }, [selectedStation?.id, selectedStation?.latitude, selectedStation?.longitude, stationsGeoJSON]);
 
   const loadActiveIncidentCounts = async () => {
     try {
@@ -272,6 +294,8 @@ export const App: React.FC = () => {
             activeWorkspace={workspace}
             onNavigate={handleNavigate}
             lastUpdatedAt={lastUpdatedAt}
+            isGlobeMode={isGlobeMode}
+            onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
           />
 
           <main className="ather-workspace-content">
@@ -303,6 +327,9 @@ export const App: React.FC = () => {
                 onToggleAnomalyOverlay={() => setShowAnomalyOverlay((v) => !v)}
                 statusFilter={statusFilter}
                 onSetStatusFilter={setStatusFilter}
+                isGlobeMode={isGlobeMode}
+                onToggleGlobeMode={() => setIsGlobeMode((prev) => !prev)}
+                neighbors={neighbors}
                 summary={summary}
                 onNavigate={handleNavigate}
               />
@@ -328,6 +355,7 @@ export const App: React.FC = () => {
               onClose={handleBackToMap}
               onOpenIncident={handleOpenIncident}
               onSelectStation={handleOpenStationDetails}
+              neighbors={neighbors}
             />
           ) : (
             <div className="workspace-empty-redirect">
@@ -371,3 +399,4 @@ export const App: React.FC = () => {
 </div>
 );
 };
+export default App;

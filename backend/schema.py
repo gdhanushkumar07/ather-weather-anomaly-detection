@@ -133,6 +133,12 @@ class AWSReading(BaseModel):
     #   never silently defaulted to "now".
     # received_timestamp: when ATHER's backend obtained/loaded the value.
     source:                 str                = ObservationSource.UNKNOWN
+    # Which pressure convention `pressure_hpa` is expressed in: "MSL"
+    # (sea-level-reduced), "SURFACE" (station pressure) or None/"UNKNOWN".
+    # Never guessed here: the Multivariate layer derives MSL only for a source
+    # that is known to report it (NWP pressure_msl) and otherwise treats an
+    # undeclared convention as UNKNOWN rather than assuming it is MSL.
+    pressure_convention:    Optional[str]      = None
     observation_timestamp:  Optional[datetime]  = None
     received_timestamp:     datetime            = Field(default_factory=lambda: datetime.now(timezone.utc))
     freshness:               str                = Freshness.UNKNOWN
@@ -544,7 +550,14 @@ def station_dict_to_reading(stn: Dict[str, Any]) -> AWSReading:
     dew_val = _safe_float(stn.get("dewPoint") or stn.get("dew_point"))
 
     # ── Elevation ───────────────────────────────────────────────────
-    elev_val = _safe_float(stn.get("elevation") or stn.get("elevation_m")) or 0.0
+    # Unknown elevation stays None - it is NEVER invented as 0 m. (The old
+    # `... or 0.0` also turned a genuine 0 m / falsy value into "unknown"'s
+    # replacement.) Consumers that need a number (Physics) already default a
+    # None to 0.0 themselves; Spatial uses elevation only when it is known.
+    _elev_raw = stn.get("elevation")
+    if _elev_raw is None:
+        _elev_raw = stn.get("elevation_m")
+    elev_val = _safe_float(_elev_raw)
 
     # ── Provenance ─────────────────────────────────────────────────
     # dataSource / observationTimestamp are populated explicitly by
@@ -593,6 +606,7 @@ def station_dict_to_reading(stn: Dict[str, Any]) -> AWSReading:
             "humidity_pct":  hum_quality,
         },
         source=source,
+        pressure_convention=stn.get("pressureConvention"),
         observation_timestamp=obs_ts,
         received_timestamp=received_ts,
         freshness=freshness,

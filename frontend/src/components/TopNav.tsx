@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Activity, Map as MapIcon, ShieldAlert, HeartPulse, FlaskConical, Radio, ArrowUpRight, Cpu } from 'lucide-react';
+import { Search, Activity, Map as MapIcon, ShieldAlert, HeartPulse, FlaskConical, Radio, ArrowUpRight, Cpu, Globe } from 'lucide-react';
 import { useLive } from '../services/live';
 import { Station, AnomaliesSummary } from '../types/weather';
 import { searchStations } from '../services/api';
@@ -12,6 +12,8 @@ interface TopNavProps {
   activeWorkspace: Workspace;
   onNavigate: (workspace: Workspace) => void;
   lastUpdatedAt?: number | null;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
 }
 
 function formatAge(ms: number): string {
@@ -38,7 +40,9 @@ export const TopNav: React.FC<TopNavProps> = ({
   onSelectStation,
   activeWorkspace,
   onNavigate,
-  lastUpdatedAt = null
+  lastUpdatedAt = null,
+  isGlobeMode = false,
+  onToggleGlobeMode
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState<Station[]>([]);
@@ -134,6 +138,17 @@ export const TopNav: React.FC<TopNavProps> = ({
               </button>
             );
           })}
+          {onToggleGlobeMode && (
+            <button
+              className={`unified-tab-btn ${isGlobeMode ? 'active' : ''}`}
+              onClick={onToggleGlobeMode}
+              title={isGlobeMode ? "Exit 3D Globe to Map" : "Open 3D Satellite Globe"}
+              style={{ borderColor: isGlobeMode ? '#00e5ff' : undefined }}
+            >
+              <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-cyan-300 animate-pulse' : 'text-slate-400'}`} />
+              <span style={{ color: isGlobeMode ? '#00e5ff' : undefined }}>3D Globe</span>
+            </button>
+          )}
         </nav>
 
         {/* Right: Integrated Search + Live State */}

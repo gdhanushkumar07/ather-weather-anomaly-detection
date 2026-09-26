@@ -1,0 +1,19 @@
+{
+  "scenarios_tested": [
+    "A: normal->missing->normal",
+    "A2: multi-missing-tick gap correctly resets",
+    "B: invalid temperature (finding: not caught at schema level)",
+    "C: invalid humidity",
+    "D: invalid pressure",
+    "E: long outage->recovery",
+    "F: anomaly->recovery",
+    "G: frozen->recovery"
+  ],
+  "key_findings": [
+    "Invalid pressure/humidity readings never contaminate history_complete (confirmed).",
+    "Invalid temperature readings are NOT rejected by Layer 2 alone (see timestamp findings) -- caught by Layer 1 in the full pipeline.",
+    "Long outages (12h) correctly force a clean reset+rewarm with no stale-history leakage into the triggering reading's own prediction (Bug 3 fix).",
+    "Recovery from a genuine anomaly returns the score below 0.3 within ~15 steps (150 minutes) when the recovery signal has realistic noise; an exact-constant 'recovery' value spuriously triggers the UNRELATED frozen-sensor rule, which is correct existing behavior, not a Stage 4-6 defect."
+  ],
+  "all_tests_passing": true
+}

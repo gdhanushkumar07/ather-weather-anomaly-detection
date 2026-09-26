@@ -10,6 +10,7 @@ import {
   FreshnessCard, IncidentsSummaryCard, LiveEventFeed, NetworkStatusCard, SystemHealthCard, ThroughputCard,
 } from '../components/live/LivePanels';
 import { Card, SourceBadge } from '../components/live/LiveBits';
+import { AWSNeighbor } from '../aws/awsGeo';
 
 interface MapWorkspaceProps {
   stationsGeoJSON: GeoJSON.FeatureCollection | null;
@@ -26,6 +27,9 @@ interface MapWorkspaceProps {
   onToggleAnomalyOverlay: () => void;
   statusFilter: string | null;
   onSetStatusFilter: (status: string | null) => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
+  neighbors?: AWSNeighbor[];
   isActive: boolean;
   summary: AnomaliesSummary | null;
   onNavigate: (workspace: Workspace) => void;
@@ -53,7 +57,11 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
   onToggleAnomalyOverlay,
   statusFilter,
   onSetStatusFilter,
+  isGlobeMode = false,
+  onToggleGlobeMode,
+  neighbors = [],
   isActive,
+  summary,
   onNavigate
 }, ref) => {
   const [isMapOptionsOpen, setIsMapOptionsOpen] = useState(false);
@@ -95,6 +103,9 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
             onToggleBasemap={onToggleBasemap}
             showAnomalyOverlay={showAnomalyOverlay}
             isActive={isActive}
+            isGlobeMode={isGlobeMode}
+            onToggleGlobeMode={onToggleGlobeMode}
+            neighbors={neighbors}
           />
 
           <button
@@ -119,6 +130,8 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
             onToggleAnomalyOverlay={onToggleAnomalyOverlay}
             statusFilter={statusFilter}
             onSetStatusFilter={onSetStatusFilter}
+            isGlobeMode={isGlobeMode}
+            onToggleGlobeMode={onToggleGlobeMode}
           />
         </div>
 
@@ -128,6 +141,7 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
               station={selectedStation}
               onClose={onClosePreview}
               onViewDetails={onViewStationDetails}
+              onOpenIncident={onOpenIncident}
             />
           ) : (
             <div className="lv-side-stack">

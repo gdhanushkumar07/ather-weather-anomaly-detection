@@ -347,10 +347,10 @@ class TestEngineFixes(unittest.TestCase):
         for i in range(120):  # 2 h at 1-min cadence, RH falling 8 %/h, T rising 1.5 °C/h
             t = now + timedelta(minutes=i)
             temp, rh = 22.0 + 1.5 * i / 60, 85.0 - 8.0 * i / 60
-            nbrs = [AWSReading(station_id=f"N{j}", timestamp=t, temperature_c=temp + 0.3 * j,
+            nbrs = [AWSReading(station_id=f"N{j}", timestamp=t, observation_timestamp=t, temperature_c=temp + 0.3 * j,
                                humidity_pct=rh - 1.0 * j, pressure_hpa=1010.0, lat=12.9 + 0.02 * j, lon=77.5)
                     for j in range(4)]
-            a = det.evaluate_reading(AWSReading(station_id="D1", timestamp=t, temperature_c=temp + 0.4,
+            a = det.evaluate_reading(AWSReading(station_id="D1", timestamp=t, observation_timestamp=t, temperature_c=temp + 0.4,
                                                 humidity_pct=rh + 0.5, pressure_hpa=1010.2, lat=12.91, lon=77.51),
                                      neighbors=nbrs)
         drift = a.layer_details["drift"]
@@ -359,9 +359,10 @@ class TestEngineFixes(unittest.TestCase):
 
     def test_l4_reports_neighbour_count(self):
         det = AnomalyDetector()
-        nbrs = [AWSReading(station_id=f"N{j}", temperature_c=24.0, humidity_pct=60, pressure_hpa=1010,
+        obs_t = datetime.now(timezone.utc)
+        nbrs = [AWSReading(station_id=f"N{j}", observation_timestamp=obs_t, temperature_c=24.0, humidity_pct=60, pressure_hpa=1010,
                            lat=12.9 + 0.01 * j, lon=77.5) for j in range(4)]
-        a = det.evaluate_reading(AWSReading(station_id="S", temperature_c=24.2, humidity_pct=60, pressure_hpa=1010,
+        a = det.evaluate_reading(AWSReading(station_id="S", observation_timestamp=obs_t, temperature_c=24.2, humidity_pct=60, pressure_hpa=1010,
                                             lat=12.91, lon=77.51), neighbors=nbrs)
         self.assertEqual(a.layer_details["spatial"]["neighbor_count"], 4)
         self.assertNotEqual(a.canonical_result["layers"]["spatial"]["status"], "INSUFFICIENT_DATA")

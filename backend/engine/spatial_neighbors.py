@@ -87,8 +87,6 @@ def observation_time(reading: AWSReading) -> Optional[datetime]:
     """
     ts = reading.observation_timestamp
     if ts is None:
-        ts = reading.timestamp
-    if ts is None:
         return None
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)

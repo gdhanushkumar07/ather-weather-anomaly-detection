@@ -141,12 +141,17 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_timeline_incident ON incident_timeline(incident_id);
         """
     )
+    # Additive migration: evidence context captured by the real-time pipeline
+    # (detection id, neighbour values, baseline, NWP reference, layer results).
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(incidents)").fetchall()}
+    if "context_json" not in cols:
+        conn.execute("ALTER TABLE incidents ADD COLUMN context_json TEXT")
     conn.commit()
 
 
 def dict_from_row(row: sqlite3.Row) -> Dict[str, Any]:
     d = dict(row)
-    for json_field in ("evidence_json", "diagnostic_layers_json", "fusion_result_json"):
+    for json_field in ("evidence_json", "diagnostic_layers_json", "fusion_result_json", "context_json"):
         raw = d.pop(json_field, None)
         key = json_field[: -len("_json")]
         if raw:

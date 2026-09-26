@@ -1,6 +1,7 @@
 """
 Global configuration, physical constants, and default hyper-parameters for ATHER.
 """
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -38,9 +39,23 @@ class TemporalThresholds:
     # Frozen / stuck sensor parameters
     frozen_window_size: int = 12  # 12 consecutive readings (~2 hours)
     frozen_variance_threshold: float = 1e-6
+    # A persistence ("stuck sensor") verdict also requires the unchanged run
+    # to span at least this much wall-clock time. A count-only window
+    # silently assumes a 10-minute cadence: at a 1-minute cadence, 12
+    # identical 0.1 hPa barometer readings are normal, not a fault
+    # (WMO-No. 8 / GAW QC persistence checks are time-based).
+    frozen_min_span_minutes: float = float(os.environ.get("ATHER_FROZEN_MIN_SPAN_MIN", "60"))
 
     # Rolling z-score anomaly threshold
     z_score_threshold: float = 3.5
+    # Floor for the MAD in the robust z-score, per channel. During quiet
+    # periods the MAD collapses to the sensor's quantisation step (0.1 °C),
+    # which made a routine 0.6 °C change score z ≈ 4. A deviation smaller
+    # than the instrument's achievable measurement uncertainty (WMO-No. 8,
+    # Annex 1.A: T 0.2 K, P 0.15 hPa, RH ~1 %) cannot be significant.
+    zscore_mad_floor: Dict[str, float] = field(default_factory=lambda: {
+        "temperature_c": 0.2, "pressure_hpa": 0.15, "humidity_pct": 1.0,
+    })
     rolling_window_samples: int = 72  # 12 hours of 10-minute readings
 
 @dataclass

@@ -7,8 +7,8 @@ echo "============================================================"
 echo "          STARTING ATHER METEOROLOGICAL PLATFORM             "
 echo "============================================================"
 
-# 1. Start FastAPI Backend on Port 8000
-echo "[1/2] Launching ATHER Backend (FastAPI on http://localhost:8000)..."
+# 1. Start FastAPI Backend on Port 8001 (the Vite dev proxy targets 8001)
+echo "[1/2] Launching ATHER Backend (FastAPI on http://localhost:8001, real-time pipeline + simulated AWS feed)..."
 python3 "$DIR/backend/run.py" &
 BACKEND_PID=$!
 

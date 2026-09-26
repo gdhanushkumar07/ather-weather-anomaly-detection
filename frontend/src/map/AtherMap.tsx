@@ -135,7 +135,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_dark_base',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'visible' }
+            layout: { visibility: basemap === 'dark' ? 'visible' : 'none' }
           },
           {
             id: 'esri-dark-gray-reference',
@@ -143,7 +143,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_dark_ref',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'visible' }
+            layout: { visibility: basemap === 'dark' ? 'visible' : 'none' }
           },
           {
             id: 'esri-satellite-base',
@@ -151,7 +151,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_sat_base',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'none' }
+            layout: { visibility: basemap === 'satellite' ? 'visible' : 'none' }
           },
           {
             id: 'esri-satellite-reference',
@@ -159,7 +159,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_sat_ref',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'none' }
+            layout: { visibility: basemap === 'satellite' ? 'visible' : 'none' }
           }
         ]
       },

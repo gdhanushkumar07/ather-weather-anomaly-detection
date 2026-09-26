@@ -65,6 +65,9 @@ class MultivariateConsistencyLayer:
 
         detail["valid_channels"] = valid_channels
         detail["n_valid"] = n_valid
+        # Key read by the detector's fusion coverage and canonical L3 card
+        # (previously absent, so L3 was always reported as "0 channels").
+        detail["valid_channel_count"] = n_valid
 
         # ── Insufficient data ──────────────────────────────────────────────
         if n_valid == 0:
@@ -167,6 +170,7 @@ class MultivariateConsistencyLayer:
 
         final_score = max(scores) if scores else 0.0
         detail["status"] = "EVALUATED"
+        detail["test_performed"] = detail.get("method", "bivariate")
 
         reason_str = "; ".join(reasons) if reasons else None
         return final_score, reason_str, detail

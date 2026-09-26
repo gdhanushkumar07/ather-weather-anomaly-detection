@@ -38,6 +38,7 @@ import { EscalationPreviewModal } from '../components/EscalationPreviewModal';
 import { ResolveIncidentModal } from '../components/ResolveIncidentModal';
 import { DismissIncidentModal } from '../components/DismissIncidentModal';
 import { StationHistoricalGraphs } from '../components/StationHistoricalGraphs';
+import { StationLiveSections } from '../components/live/StationLiveSections';
 import { ShieldAlert as IncidentIcon, UserCheck, Search as InvestigateIcon, Siren, ArrowLeft, XCircle } from 'lucide-react';
 
 // Mirrors app/incidents/service.py::VALID_TRANSITIONS — used only to decide
@@ -60,9 +61,11 @@ interface StationPanelProps {
    *  Intelligence workspace (ATHER UI architecture restructure) — same
    *  component, same data, only the outer chrome differs. */
   variant?: 'drawer' | 'page';
+  onOpenIncident?: (incidentId: string) => void;
+  onSelectStation?: (stationId: string) => void;
 }
 
-export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, variant = 'drawer' }) => {
+export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, variant = 'drawer', onOpenIncident, onSelectStation }) => {
   const [history, setHistory] = useState<ObservationHistory | null>(null);
   const [historyHours, setHistoryHours] = useState<number>(24);
   const [isHistoryLoading, setIsHistoryLoading] = useState<boolean>(false);
@@ -232,9 +235,12 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
   const isNwpReference = obsSource === 'NWP_MODEL_REFERENCE';
   const awsTelemetryStatus: string = canonical?.aws_telemetry_status || (isAwsInSitu ? 'TELEMETRY_AVAILABLE' : 'TELEMETRY_UNAVAILABLE');
 
+  const isSimulated = obsSource === 'SIMULATED_AWS';
   const provenanceLabel = isAwsInSitu
     ? 'AWS IN-SITU TELEMETRY'
-    : isNwpReference
+    : isSimulated
+      ? 'SIMULATED AWS TELEMETRY — NOT MEASURED'
+      : isNwpReference
       ? 'NWP MODEL REFERENCE — NOT MEASURED'
       : obsSource === 'MISSING'
         ? 'NO TELEMETRY AVAILABLE'
@@ -243,7 +249,9 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
 
   const observationSourcePillLabel = isAwsInSitu
     ? 'AWS Station Data'
-    : isNwpReference
+    : isSimulated
+      ? 'Simulated AWS Feed'
+      : isNwpReference
       ? 'NWP Model Reference'
       : obsSource === 'MISSING'
         ? 'No Data'
@@ -395,6 +403,11 @@ export const StationPanel: React.FC<StationPanelProps> = ({ station, onClose, va
       </div>
 
       <div className="station-panel-body">
+        {variant === 'page' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
+            <StationLiveSections stationId={currentStation.id} onOpenIncident={onOpenIncident} onSelectStation={onSelectStation} />
+          </div>
+        )}
         {/* 2 & 3. Visual + Current Observations side by side (Phase 13/15) */}
         <div className="station-grid-row">
         <div className="station-visual-card">

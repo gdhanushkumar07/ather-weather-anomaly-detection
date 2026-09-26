@@ -25,8 +25,17 @@ class StationTemporalBuffer:
         self.history_temp:  deque = deque(maxlen=max_len)
         self.history_press: deque = deque(maxlen=max_len)
         self.history_rh:    deque = deque(maxlen=max_len)
+        # Timestamps parallel to each history deque, used by the time-based
+        # persistence (stuck sensor) check.
+        self.ts_temp:  deque = deque(maxlen=max_len)
+        self.ts_press: deque = deque(maxlen=max_len)
+        self.ts_rh:    deque = deque(maxlen=max_len)
         self.last_reading: Optional[AWSReading] = None
         self.readings_total: int = 0
+        # Length of a currently-detected frozen run per channel. When the run
+        # ends, those known-bad samples are purged from the baseline so they
+        # do not poison the rolling statistics after the sensor recovers.
+        self.frozen_len: Dict[str, int] = {}
 
 
 class TemporalPatternLayer:
@@ -123,13 +132,30 @@ class TemporalPatternLayer:
                         f"Abrupt humidity change: {d_rh:.1f}% in {int(dt_seconds)}s"
                     )
 
+        # ── Purge a frozen run that has just ended ─────────────────────────
+        for ch, hist, stamps, val in (
+            ("temperature_c", buf.history_temp, buf.ts_temp, reading.temperature_c),
+            ("pressure_hpa", buf.history_press, buf.ts_press, reading.pressure_hpa),
+            ("humidity_pct", buf.history_rh, buf.ts_rh, reading.humidity_pct),
+        ):
+            n = buf.frozen_len.get(ch, 0)
+            if n and ch_valid(ch) and val is not None and hist and abs(val - hist[-1]) >= self.cfg.frozen_variance_threshold:
+                keep_v, keep_t = list(hist)[:-n], list(stamps)[:-n]
+                hist.clear(); hist.extend(keep_v)
+                stamps.clear(); stamps.extend(keep_t)
+                buf.frozen_len[ch] = 0
+                detail.setdefault("frozen_run_purged", {})[ch] = n
+
         # ── Update rolling histories (VALID readings only) ──────────────────
         if ch_valid("temperature_c") and reading.temperature_c is not None:
             buf.history_temp.append(reading.temperature_c)
+            buf.ts_temp.append(reading.timestamp)
         if ch_valid("pressure_hpa") and reading.pressure_hpa is not None:
             buf.history_press.append(reading.pressure_hpa)
+            buf.ts_press.append(reading.timestamp)
         if ch_valid("humidity_pct") and reading.humidity_pct is not None:
             buf.history_rh.append(reading.humidity_pct)
+            buf.ts_rh.append(reading.timestamp)
 
         buf.last_reading = reading
 
@@ -158,38 +184,73 @@ class TemporalPatternLayer:
         detail["status"] = "EVALUATED"
 
         # ── 2. Frozen / Stuck Sensor Check ─────────────────────────────────
+        # A channel is "frozen" when its trailing run of unchanged values
+        # (range < frozen_variance_threshold) covers BOTH at least
+        # frozen_window_size readings AND at least frozen_min_span_minutes of
+        # observation time — so the verdict means the same thing at a
+        # 1-minute or a 60-minute reporting cadence.
         win_t = self.cfg.frozen_window_size
 
-        if len(buf.history_temp) >= win_t:
-            recent_t = list(buf.history_temp)[-win_t:]
-            if (max(recent_t) - min(recent_t)) < self.cfg.frozen_variance_threshold:
-                scores["temperature_c"] = max(scores["temperature_c"], 0.95)
-                detected_reasons.append(
-                    f"Frozen temperature sensor: constant {recent_t[0]:.2f}°C across {win_t} consecutive readings"
-                )
-                detail["frozen_temp"] = {
-                    "stuck_value": recent_t[0],
-                    "window_size": win_t,
-                    "variance": round(max(recent_t) - min(recent_t), 6),
-                    "score": 0.95
-                }
+        def _frozen_run(values: deque, stamps: deque) -> Optional[Tuple[float, int, float]]:
+            if len(values) < win_t:
+                return None
+            vals, tss = list(values), list(stamps)
+            lo = hi = vals[-1]
+            n = 0
+            for v in reversed(vals):
+                lo, hi = min(lo, v), max(hi, v)
+                if hi - lo >= self.cfg.frozen_variance_threshold:
+                    break
+                n += 1
+            if n < win_t:
+                return None
+            span_min = 0.0
+            if len(tss) == len(vals):
+                try:
+                    span_min = (tss[-1] - tss[-n]).total_seconds() / 60.0
+                except Exception:
+                    span_min = 0.0
+            if span_min < self.cfg.frozen_min_span_minutes:
+                return None
+            return vals[-1], n, span_min
 
-        if len(buf.history_press) >= win_t:
-            recent_p = list(buf.history_press)[-win_t:]
-            if (max(recent_p) - min(recent_p)) < self.cfg.frozen_variance_threshold:
-                scores["pressure_hpa"] = max(scores["pressure_hpa"], 0.95)
-                detected_reasons.append(
-                    f"Frozen pressure sensor: constant {recent_p[0]:.2f} hPa across {win_t} readings"
-                )
+        frozen_t = _frozen_run(buf.history_temp, buf.ts_temp)
+        buf.frozen_len["temperature_c"] = frozen_t[1] if frozen_t else 0
+        if frozen_t:
+            stuck, n, span = frozen_t
+            scores["temperature_c"] = max(scores["temperature_c"], 0.95)
+            detected_reasons.append(
+                f"Frozen temperature sensor: constant {stuck:.2f}°C across {n} consecutive readings ({span:.0f} min)"
+            )
+            detail["frozen_temp"] = {
+                "stuck_value": stuck,
+                "window_size": n,
+                "span_minutes": round(span, 1),
+                "variance": 0.0,
+                "score": 0.95
+            }
 
-        if len(buf.history_rh) >= win_t:
-            recent_rh = list(buf.history_rh)[-win_t:]
-            if ((max(recent_rh) - min(recent_rh)) < self.cfg.frozen_variance_threshold
-                    and recent_rh[0] < 99.5):
-                scores["humidity_pct"] = max(scores["humidity_pct"], 0.95)
-                detected_reasons.append(
-                    f"Frozen humidity sensor: constant {recent_rh[0]:.2f}% across {win_t} readings"
-                )
+        frozen_p = _frozen_run(buf.history_press, buf.ts_press)
+        buf.frozen_len["pressure_hpa"] = frozen_p[1] if frozen_p else 0
+        if frozen_p:
+            stuck, n, span = frozen_p
+            scores["pressure_hpa"] = max(scores["pressure_hpa"], 0.95)
+            detected_reasons.append(
+                f"Frozen pressure sensor: constant {stuck:.2f} hPa across {n} readings ({span:.0f} min)"
+            )
+            detail["frozen_press"] = {"stuck_value": stuck, "window_size": n, "span_minutes": round(span, 1), "score": 0.95}
+
+        frozen_rh = _frozen_run(buf.history_rh, buf.ts_rh)
+        buf.frozen_len["humidity_pct"] = frozen_rh[1] if frozen_rh and frozen_rh[0] < 97.0 else 0
+        # Fog / rain saturation plateaus (≈97–100 % RH) are real and steady;
+        # persistence there is not evidence of a stuck hygrometer.
+        if frozen_rh and frozen_rh[0] < 97.0:
+            stuck, n, span = frozen_rh
+            scores["humidity_pct"] = max(scores["humidity_pct"], 0.95)
+            detected_reasons.append(
+                f"Frozen humidity sensor: constant {stuck:.2f}% across {n} readings ({span:.0f} min)"
+            )
+            detail["frozen_rh"] = {"stuck_value": stuck, "window_size": n, "span_minutes": round(span, 1), "score": 0.95}
 
         # ── 3. Rolling Statistical Z-Score Check ───────────────────────────
         for ch_name, hist, val in [
@@ -202,7 +263,8 @@ class TemporalPatternLayer:
                 arr = np.array(hist)
                 med = np.median(arr)
                 mad = np.median(np.abs(arr - med))
-                if mad > 1e-3:
+                if mad > 1e-3 or len(set(np.round(arr, 6))) > 1:
+                    mad = max(float(mad), self.cfg.zscore_mad_floor.get(ch_name, 0.0))
                     mod_z = 0.6745 * abs(val - med) / mad
                     if mod_z > self.cfg.z_score_threshold:
                         z_score = min(1.0, (mod_z - self.cfg.z_score_threshold) / 3.0 + 0.6)

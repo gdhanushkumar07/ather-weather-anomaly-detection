@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" version="24.7.17" type="device">
+  <diagram id="ather-system-architecture" name="ATHER System Architecture">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="3660" pageHeight="1950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="header_2" value="" style="rounded=1;arcSize=4;fillColor=#0F172A;strokeColor=#1E293B;strokeWidth=2;shadow=1;" vertex="1" parent="1">
+      <mxGeometry x="50" y="30" width="3560" height="95" as="geometry" />
+    </mxCell>
+        <mxCell id="title_3" value="&lt;div style=&#x27;font-size:24px;font-weight:900;color:#F8FAFC;letter-spacing:1px;&#x27;&gt;⚡ ATHER &amp;nbsp;—&amp;nbsp; &lt;span style=&#x27;font-weight:600;color:#38BDF8;&#x27;&gt;SYSTEM ARCHITECTURE &amp;amp; INTELLIGENCE PIPELINE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:12.5px;color:#94A3B8;margin-top:6px;font-weight:500;&#x27;&gt;Automated Telemetry Health &amp;amp; Environmental Reliability &amp;nbsp;•&amp;nbsp; 5-Layer Thermodynamic Physics &amp;amp; Kinematic Anomaly Detection &amp;nbsp;•&amp;nbsp; Conformal Evidence Fusion &amp;amp; Operational Root Cause Diagnostics&lt;/div&gt;" style="text;html=1;align=left;verticalAlign=middle;fontFamily=Helvetica;" vertex="1" parent="1">
+      <mxGeometry x="80" y="42" width="1800" height="70" as="geometry" />
+    </mxCell>
+        <mxCell id="b1_4" value="SMART INDIA HACKATHON" style="rounded=1;whiteSpace=wrap;html=1;arcSize=14;fillColor=#0284C7;strokeColor=none;fontFamily=Helvetica;fontStyle=1;fontSize=11;fontColor=#FFFFFF;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="2700" y="52" width="170" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="b2_5" value="WMO-No. 8 STANDARD" style="rounded=1;whiteSpace=wrap;html=1;arcSize=14;fillColor=#0D9488;strokeColor=none;fontFamily=Helvetica;fontStyle=1;fontSize=11;fontColor=#FFFFFF;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="2890" y="52" width="155" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="b3_6" value="FASTAPI + REACT 19" style="rounded=1;whiteSpace=wrap;html=1;arcSize=14;fillColor=#4F46E5;strokeColor=none;fontFamily=Helvetica;fontStyle=1;fontSize=11;fontColor=#FFFFFF;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="3065" y="52" width="155" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="b4_7" value="SQLITE WAL PERSISTENCE" style="rounded=1;whiteSpace=wrap;html=1;arcSize=14;fillColor=#334155;strokeColor=none;fontFamily=Helvetica;fontStyle=1;fontSize=11;fontColor=#F8FAFC;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="3240" y="52" width="175" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="b5_8" value="PRODUCTION VERIFIED" style="rounded=1;whiteSpace=wrap;html=1;arcSize=14;fillColor=#15803D;strokeColor=none;fontFamily=Helvetica;fontStyle=1;fontSize=11;fontColor=#FFFFFF;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="3435" y="52" width="150" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="col1_9" value="<b>1. DATA SOURCES</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Multi-Source Observational &amp; Reference Inputs</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F0F9FF;strokeColor=#BAE6FD;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#0369A1;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="50" y="155" width="330" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="src1_10" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;REAL-TIME TELEMETRY&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;AWS Telemetry Network&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• 1,950+ Global stations &amp;amp; 296 Indian AWS
+• IMD, WeatherUnion &amp;amp; Regional Mesonets
+• 10-minute cadence surface observations
+• Sensors: PRT Temp, Hygrometer, Barometer, Anemometer&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7DD3FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="220" width="290" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="src2_11" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;MODEL REFERENCE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;Open-Meteo NWP Reference&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Numerical Weather Prediction model output
+• Hourly baseline for global coordinates
+• Reference temperature, wind, pressure
+• Explicitly labeled NWP_MODEL_REFERENCE&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7DD3FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="385" width="290" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="src3_12" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0369A1;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;STANDARDS &amp;amp; LIMITS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;Climatological Baselines&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• WMO-No. 8 physical atmospheric bounds
+• Regional extreme temperature bounds (-45°C to +50°C)
+• Standard sea-level pressure (1013.25 hPa)
+• Barometric lapse rate constants (0.0065 K/m)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7DD3FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="545" width="290" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="src4_13" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;IN-SITU REPO DATA&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;Indian AWS Curated Dataset&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• High-density urban &amp;amp; rural stations
+• Bengaluru (RR Nagar, Whitefield, Peenya)
+• Delhi NCR, Mumbai, Chennai, Pune
+• High-frequency localized microclimates&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7DD3FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="710" width="290" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="src5_14" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;IoT INTEGRATION&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;External Telemetry Streams&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• WeeWX weather station driver streams
+• WOW-BE (Weather Observations Website)
+• Weather Underground API format payloads&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7DD3FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="70" y="870" width="290" height="105" as="geometry" />
+        </mxCell>
+        <mxCell id="col2_15" value="<b>2. INGESTION &amp; DATA QUALITY</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Normalization, Provenance &amp; Quality Labeling</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F8FAFC;strokeColor=#CBD5E1;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#334155;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="410" y="155" width="340" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="ing1_16" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#475569;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;INGESTION ADAPTER&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Multi-Protocol Ingestion Adapter&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Normalizes WeeWX, WOW-BE &amp;amp; Native JSON
+• Unit conversion: °F → °C, inHg → hPa, mph → km/h
+• Strict Pydantic schema validation
+• Ingestion endpoint: POST /api/ingest&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="220" width="300" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ing2_17" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#475569;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;QUALITY LABELING&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Data Quality Guard &amp;amp; Labeler&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Zero-Pressure Policy: &amp;lt; 1 hPa treated as MISSING
+• Zero-Temp check: valid 0°C vs absent data
+• Channels labeled: VALID, MISSING, ZERO_SUBSTITUTED, INVALID, OUT_OF_RANGE
+• Null-preservation: Never substitutes 0 for missing&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="385" width="300" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="ing3_18" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#475569;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;PROVENANCE AUDITING&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Provenance &amp;amp; Freshness Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Source tagging: AWS_IN_SITU vs NWP_REFERENCE
+• Freshness evaluation from real observation time
+• Status classification: LIVE, STALE, UNKNOWN
+• Safeguard: Rejects future timestamps&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="560" width="300" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ing4_19" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#475569;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;IN-MEMORY REGISTRY&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Station Registry &amp;amp; Cache&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• In-memory indexed registry for 1,950+ stations
+• Spatial indexing by lat/lon bounding box
+• 24-hour observation history buffers
+• Micro-caching with TTL invalidation&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="725" width="300" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="col3_20" value="<b>3. PREPROCESSING &amp; FEATURES</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Thermodynamic &amp; Kinematic Feature Pipelines</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F8FAFC;strokeColor=#CBD5E1;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#334155;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="780" y="155" width="350" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="proc1_21" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0F766E;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;HYPSOMETRIC REDUCTION&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Barometric &amp;amp; Altitude Reduction&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Hypsometric barometric reduction to Sea-Level (MSL)
+• SLP = P · (1 - 0.0065 · h / 288.15)^(-5.255)
+• Elevation compensation for cross-station comparisons
+• Detects station installation altitude errors&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="220" width="310" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="proc2_22" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0F766E;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;PSYCHROMETRICS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Psychrometric State Computation&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Magnus-Tetens saturation vapor pressure e_s(T)
+• Dew point derivation T_dew from (T, RH)
+• Wet-bulb temperature approximation T_wb
+• Vapor pressure deficit (VPD) feature calculation&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="390" width="310" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="proc3_23" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0F766E;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;KINEMATIC DERIVATIVES&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Temporal Kinematics Pipeline&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• 1st numerical derivative: Δx / Δt rate-of-change
+• 2nd derivative: rate of acceleration d²x / dt²
+• 72-sample rolling statistics (μ_24h, σ_24h)
+• Interquartile range (IQR) &amp;amp; rolling z-scores&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="560" width="310" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="proc4_24" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0F766E;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;SPATIAL KD-TREE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Spatial KD-Tree Neighbor Search&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Haversine distance matrix for AWS clusters
+• Dynamic k-nearest neighbors selection (d ≤ 50-250km)
+• Elevation difference tracking Δh for lapse adjustment
+• Minimum neighbor threshold enforcement (n ≥ 2)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="730" width="310" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="col4_25" value="<b>4. ATHER INTELLIGENCE ENGINE</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>5-Layer Concurrent Diagnostic &amp; Anomaly Detection Models</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F0FDF4;strokeColor=#86EFAC;strokeWidth=2.5;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#15803D;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="155" width="740" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="l1_26" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LAYER 1 — THERMODYNAMIC INVARIANTS &amp;amp; VETO&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;Layer 1: Physics Validation Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Absolute thermodynamic limits (WMO-No. 8 standards)
+• Temperature operating bounds: [-45°C, +50°C]
+• Barometric limits: [920 hPa, 1065 hPa], RH: [0%, 100%]
+• Clausius-Clapeyron: Dew point cannot exceed Dry bulb (T_dew ≤ T)
+• Wet-bulb survivability threshold: T_wb ≤ 35°C
+• Deterministic Physics VETO (Score = 1.0, bypasses statistical smoothing)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#0284C7;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="220" width="690" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="l2_27" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#4F46E5;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LAYER 2 — KINEMATICS &amp;amp; FROZEN SENSOR DETECTOR&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#3730A3;margin-bottom:4px;&#x27;&gt;Layer 2: Temporal Dynamics Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Diurnal step limits across 10-min interval: |ΔT| ≤ 3.5°C, |ΔP| ≤ 2.5 hPa, |ΔRH| ≤ 15%
+• Instantaneous sensor jump detection (high 1st &amp;amp; 2nd derivatives)
+• Frozen Sensor / Flatline Monitor: Var(X_12_readings) &amp;lt; 1e-6 (2h stuck values)
+• Multi-scale rolling z-scores against diurnal baseline (threshold Z ≥ 3.5)
+• Catches transmission glitches, ADC converter lockups, and electrical spikes&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#3730A3;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="380" width="690" height="135" as="geometry" />
+        </mxCell>
+        <mxCell id="l3_28" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7C3AED;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LAYER 3 — CROSS-SENSOR PSYCHROMETRIC COUPLING&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#5B21B6;margin-bottom:4px;&#x27;&gt;Layer 3: Multivariate Consistency Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Psychrometric cross-channel coupling validation
+• Temperature surge must correlate with Relative Humidity drop: Cov(T, RH) &amp;lt; 0
+• Wind gust to sustained speed ratio: v_gust ≥ v_sustained
+• Detects uncoupled failures (e.g. 100% RH at 38°C with crashing pressure)
+• Identifies broken hygrometer polymer films &amp;amp; mismatched sensor pairs&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#7C3AED;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#5B21B6;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="535" width="690" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="l4_29" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#D97706;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LAYER 4 — ELEVATION-CORRECTED SPATIAL KRIGING&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#B45309;margin-bottom:4px;&#x27;&gt;Layer 4: Spatial Consensus Engine (False-Alarm Killer)&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Elevation-corrected Inverse Distance Weighting (IDW) Gaussian Kriging
+• Local Z-score calculated against k-nearest active AWS (d ≤ 50-250 km)
+• Expected value: T_consensus = Σ (w_i · (T_i - Γ·Δh)) / Σ w_i
+• Disambiguates True Extreme Weather vs Sensor Malfunction:
+  - Heatwave/Microburst: Station &amp;amp; Neighbors ALL elevate (Spatial Score = LOW)
+  - Sensor Glitch: Target elevates in isolation while neighbors stay normal (Spatial Score = HIGH)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#D97706;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#B45309;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="685" width="690" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="l5_30" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#059669;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LAYER 5 — CUSUM DRIFT &amp;amp; HEALTH INDEX&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#065F46;margin-bottom:4px;&#x27;&gt;Layer 5: Sensor Health &amp;amp; Degradation Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Cumulative Sum (CUSUM) residual control charts on running residuals
+• Non-parametric Mann-Kendall monotonic trend test on calibration offset
+• Detects insidious slow drift (+0.2°C/week) undetectable by threshold checks
+• Calculates Sensor Health Index [0-100%] &amp;amp; Estimated Days to Failure
+• Flags aspirator fan dirt buildup, photodiode aging, hygrometer drift&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#059669;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#065F46;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1185" y="845" width="690" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="col5_31" value="<b>5. CONFORMAL EVIDENCE FUSION</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Multi-Evidence Uncertainty &amp; P-Value Calibration</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#FAF5FF;strokeColor=#E9D5FF;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#7E22CE;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="1930" y="155" width="360" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="fus1_32" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7E22CE;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;COMPOSITE AGGREGATOR&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#581C87;margin-bottom:4px;&#x27;&gt;Non-Conformity Aggregator&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Composite score: S = Σ (w_i · Score_i) / Σ w_i
+• Physics: 0.35 | Temporal: 0.25 | Multi: 0.20
+• Spatial: 0.15 | Drift: 0.05
+• Acute layer trigger checks (Score_i ≥ 0.70-0.80)
+• Physics VETO priority bypass (deterministic 0.95)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#581C87;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="220" width="320" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="fus2_33" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7E22CE;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;CONFORMAL CALIBRATOR&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#581C87;margin-bottom:4px;&#x27;&gt;Empirical Conformal Calibrator&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Calibrated non-conformity threshold quantile
+• Target false-alarm rate: α = 0.001 (MAPIE standard)
+• Empirical p-value computation against clean set
+• Rigorous statistical bounds for field escalation&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#581C87;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="395" width="320" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="fus3_34" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7E22CE;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;CALIBRATED CONFIDENCE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#581C87;margin-bottom:4px;&#x27;&gt;Evidence-Quality Confidence Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Dynamic confidence [0.10 - 0.97] without artificial floors
+• Scaled by Layer Coverage Ratio (valid channel fraction)
+• Scaled by Layer Agreement Factor (low inter-layer variance)
+• Scarcity Penalties: spatial neighbor &amp;lt; 3, history &amp;lt; 5
+• Single-layer evidence strictly capped at 0.65&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#581C87;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="570" width="320" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="fus4_35" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7E22CE;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;DECISION SYNTHESIZER&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#581C87;margin-bottom:4px;&#x27;&gt;Severity &amp;amp; Status Synthesizer&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Severity Score: 0.6 · Peak_Layer + 0.4 · Nonconf_Score
+• Three Canonical Anomaly Status States:
+  🟢 NORMAL (Severity &amp;lt; 0.35, Peak &amp;lt; 0.60)
+  🟡 WARNING (Severity ≥ 0.35 or low confidence)
+  🔴 ANOMALY (Severity ≥ 0.60 &amp;amp; Confidence ≥ 0.30)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#581C87;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1950" y="755" width="320" height="165" as="geometry" />
+        </mxCell>
+        <mxCell id="col6_36" value="<b>6. ROOT-CAUSE &amp; SELF-HEALING</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Diagnostic Disambiguation &amp; Telemetry Imputation</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#FFFBEB;strokeColor=#FDE68A;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#B45309;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="2320" y="155" width="400" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="rc1_37" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#D97706;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;FAULT CLASSIFICATION HIERARCHY&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#92400E;margin-bottom:4px;&#x27;&gt;Hierarchical Root Cause Classifier&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Disambiguates 10 confirmed FaultType categories:
+  1. SENSOR_SPIKE (Temporal High + Spatial High)
+  2. FROZEN_SENSOR (Zero variance across 2h window)
+  3. CALIBRATION_DRIFT (Persistent CUSUM accumulation)
+  4. SINGLE_CHANNEL_FAULT (Isolated physical anomaly)
+  5. GENUINE_EXTREME_WEATHER (Spatial consensus corroboration)
+  6. POSSIBLE_WEATHER_CHANGE (Moderate spatial confirmation)
+  7. NOISE_BURST (Isolated statistical fluctuation)
+  8. COMMUNICATION_OUTAGE (Missing telemetry)
+  9. INSUFFICIENT_EVIDENCE (Weak cross-layer signal)
+  10. MODEL_REFERENCE_INCONSISTENCY (NWP anomaly)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#F59E0B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2340" y="220" width="360" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="rc2_38" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#D97706;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;DIAGNOSTIC EXPLAINABILITY&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#92400E;margin-bottom:4px;&#x27;&gt;Plain-English Explainability Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Formats structured diagnostic rationale
+• Primary Signal culprit identification
+• Ranked alternative hypotheses with confidence
+• Specific Field Operator Recommended Actions
+• e.g. &amp;#x27;Inspect thermistor radiation shield for debris&amp;#x27;&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#F59E0B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2340" y="480" width="360" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="rc3_39" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#D97706;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;SELF-HEALING IMPUTATION&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#92400E;margin-bottom:4px;&#x27;&gt;Data Reconstruction / Self-Healing&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Synthesizes physically coherent replacement values
+• Imputation Hierarchy:
+  1. Priority 1: Spatial Neighbor Consensus IDW
+  2. Priority 2: Thermodynamic Magnus-Tetens Inversion
+  3. Priority 3: Temporal Autoregressive Smoothing
+• Maintains Raw Observation + Imputed Corrected Value&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#F59E0B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2340" y="650" width="360" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="rc4_40" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#D97706;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;CANONICAL DIAGNOSIS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#92400E;margin-bottom:4px;&#x27;&gt;Canonical §16 Analysis Object&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Standardized payload for API &amp;amp; Frontend consumption
+• Station metadata, observation provenance, freshness
+• Overall score, threshold, layer breakdown &amp;amp; reasons
+• Audit-ready structured incident snapshot&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#F59E0B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#92400E;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2340" y="830" width="360" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="col7_41" value="<b>7. PERSISTENCE, API &amp; METEOROLOGICAL COMMAND CENTER</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Storage State Machine, FastAPI Endpoints &amp; React 19 / MapLibre Operations</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F8FAFC;strokeColor=#CBD5E1;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#0F172A;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="2750" y="155" width="860" height="940" as="geometry" />
+        </mxCell>
+        <mxCell id="db_box_42" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#334155;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;INCIDENT STATE MACHINE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;SQLite WAL Persistence&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Operational Incidents Table (incidents.db)
+• Incident Timeline Audit Trail
+• State Machine Transitions:
+  NEW → ACKNOWLEDGED → INVESTIGATING
+  → ESCALATED → RESOLVED / DISMISSED
+• Fingerprinting: (station_id, param, fault)
+• Severity Mapping: CRITICAL (P1), WARNING (P2), INFO (P3/P4)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#64748B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2770" y="220" width="260" height="210" as="geometry" />
+        </mxCell>
+        <mxCell id="cache_box_43" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#334155;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;LOCAL DATASTORE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Station Datasets &amp;amp; Caches&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• data/stations.json: 1,950+ stations
+• WeatherUnionInfra.csv (Indian AWS)
+• data/station_history.json: 24h diurnal series
+• .weather_cache.json: Open-Meteo cache
+• Thread-safe sqlite3 WAL lock manager&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#64748B;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2770" y="450" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="api_box_44" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;REST API SERVICES&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;FastAPI REST API Core&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• GET /api/health (Registry &amp;amp; system state)
+• GET /api/stations (Viewport Bounding-Box GeoJSON)
+• GET /api/stations/{id} (Full telemetry &amp;amp; sensors)
+• GET /api/stations/{id}/anomaly (5-Layer scores)
+• GET /api/stations/{id}/debug (End-to-end trace)
+• POST /api/ingest (Multi-protocol ingest)
+• GET/POST /api/incidents (Incident triage &amp;amp; state)
+• GET /api/weather/grid (WebGL meteorological field)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#0284C7;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3050" y="220" width="250" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="grid_box_45" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0284C7;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;VANE GRID SERVICE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0369A1;margin-bottom:4px;&#x27;&gt;Meteorological Field Engine&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Generates scalar 0.25° temperature grid
+• Generates vector wind fields (U, V components)
+• Real-time interpolation for MapLibre WebGL
+• Dynamic Vane visualizer integration&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#0284C7;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0369A1;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3050" y="480" width="250" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_map_46" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#4F46E5;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;MAPLIBRE GPU MAP&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#3730A3;margin-bottom:4px;&#x27;&gt;Interactive 2D Weather Map&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• MapLibre GL GPU-accelerated clustering
+• 1,950+ Global &amp;amp; 296 Indian AWS at 60 FPS
+• Dark Carto &amp;amp; Satellite Basemap switching
+• Dynamic scalar heatmaps &amp;amp; vector wind particles
+• Visual station status: Normal, Warning, Anomaly&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#3730A3;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3320" y="220" width="270" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_drawer_47" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#4F46E5;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;HARDWARE SCHEMATIC&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#3730A3;margin-bottom:4px;&#x27;&gt;Station Intelligence Drawer&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Interactive Hardware Schematic Diagram:
+  Ultrasonic Anemometer, Thermistor,
+  Hygrometer Shield, Barometric Cavity, Pyranometer
+• 24-hour Diurnal Sparklines &amp;amp; History Charts
+• Layer score breakdown &amp;amp; Plain-English explanation&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#3730A3;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3320" y="400" width="270" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_inc_48" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#4F46E5;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;INCIDENT OPERATIONS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#3730A3;margin-bottom:4px;&#x27;&gt;Incident Operations Center&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Severity Triage: P1 Critical → P4 Info
+• Incident state actions: Acknowledge, Escalate, Resolve
+• Operator audit trail with timestamped notes
+• Real-time incident counters &amp;amp; filtering&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#3730A3;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3320" y="580" width="270" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="ui_arch_49" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#4F46E5;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;IN-APP DIAGNOSTICS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#3730A3;margin-bottom:4px;&#x27;&gt;Architecture &amp;amp; Diagnostics Modal&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• In-app interactive architecture visualizer
+• Telemetry trace: Raw → Cleansed → Layer outputs
+• Mathematical formulas &amp;amp; WMO references&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#3730A3;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3320" y="740" width="270" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="test_container_50" value="<b>ATHER TEST LAB — ISOLATED SIMULATION &amp; FAULT INJECTION SANDBOX</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Zero-Risk Verification Environment: Evaluates Synthetic Fault Scenarios using Cloned Production AnomalyDetector (Zero Live Telemetry Pollution)</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#FAF5FF;strokeColor=#A855F7;strokeWidth=2;dashed=1;dashPattern=6 4;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#6B21A8;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="410" y="1130" width="2310" height="450" as="geometry" />
+        </mxCell>
+        <mxCell id="t1_51" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#9333EA;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;FAULT INJECTION CATALOG&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#6B21A8;margin-bottom:4px;&#x27;&gt;Predefined Fault Scenarios&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• TEMPERATURE_SPIKE (+11.5°C step jump)
+• FROZEN_SENSOR (Zero variance stuck values)
+• CALIBRATION_DRIFT (Accumulating +0.3°C/day)
+• IMPOSSIBLE_HUMIDITY (Negative or 110% RH)
+• ASPIRATION_SHIELD_FAILURE (Solar overheating)
+• SEVERE_MICROBURST (Genuine extreme event)
+• COMBINED_SENSOR_FAILURE (Cross-channel)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=1;dashPattern=4 3;fontFamily=Helvetica;fontSize=13;fontColor=#6B21A8;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="1205" width="330" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="t2_52" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#9333EA;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;SYNTHETIC TELEMETRY&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#6B21A8;margin-bottom:4px;&#x27;&gt;Synthetic Scenario Generator&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Baseline reading generator (Default: 32°C, 1013 hPa, 55%)
+• Target station observation sequence synthesis
+• Synthetic neighbor stations with lat/lon offsets
+• Configurable 10-minute cadence step progression&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=1;dashPattern=4 3;fontFamily=Helvetica;fontSize=13;fontColor=#6B21A8;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="1205" width="330" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="t3_53" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#9333EA;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;ISOLATED ENGINE CLONE&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#6B21A8;margin-bottom:4px;&#x27;&gt;Isolated AnomalyDetector Instance&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Fresh, cloned instance of production AnomalyDetector
+• Uses exact same 5 layers &amp;amp; conformal weights
+• Strict isolation: Never writes to real stations
+• Never modifies production detector singleton
+• Simulation incidents isolated with source=TEST_SIMULATION&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=1;dashPattern=4 3;fontFamily=Helvetica;fontSize=13;fontColor=#6B21A8;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="1205" width="360" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="t4_54" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#9333EA;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;VERDICT COMPARATOR&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#6B21A8;margin-bottom:4px;&#x27;&gt;Hypothesis vs Actual Comparator&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Compares engine result with expected hypothesis bucket:
+  - LIKELY_SENSOR_ANOMALY
+  - LIKELY_EXTREME_WEATHER
+  - NORMAL_WEATHER
+• Verifies engine verdict honestly without forced PASS
+• Compares expected root cause hint vs classified cause&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=1;dashPattern=4 3;fontFamily=Helvetica;fontSize=13;fontColor=#6B21A8;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1550" y="1205" width="360" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="t5_55" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#9333EA;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;VALIDATION COCKPIT&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#6B21A8;margin-bottom:4px;&#x27;&gt;Test Lab UI &amp;amp; Validation Metrics&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Interactive TestLabModal with 1-click execution
+• Step-by-step telemetry curve visualization
+• Layer-by-layer score breakdown radar/table
+• Operator training &amp;amp; benchmark verification suite
+• Automated pytest regression suite (86/86 passed)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#C084FC;strokeWidth=1.5;dashed=1;dashPattern=4 3;fontFamily=Helvetica;fontSize=13;fontColor=#6B21A8;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1940" y="1205" width="350" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_box_56" value="<b>ARCHITECTURE CONVENTIONS &amp; SCIENTIFIC FOUNDATION</b><br><span style='font-size:11px;font-weight:normal;color:#475569;'>Implementation Status, Mathematical Principles &amp; WMO Standards</span>" style="swimlane;whiteSpace=wrap;html=1;startSize=40;rounded=1;arcSize=6;fillColor=#F1F5F9;strokeColor=#CBD5E1;strokeWidth=2;dashed=0;fontFamily=Helvetica;fontStyle=1;fontSize=15;fontColor=#1E293B;align=left;spacingLeft=16;shadow=0;" vertex="1" parent="1">
+          <mxGeometry x="2750" y="1130" width="860" height="450" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_card1_57" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#475569;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;CONVENTION&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Implementation Convention&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• ─── SOLID BORDERS: Fully implemented in repository
+  (FastAPI endpoints, 5 layers, conformal fusion, SQLite DB, MapLibre)
+• - - - DASHED BORDERS: Test Lab Isolated Simulation Environment
+• ZERO invented services — all modules map 1:1 to codebase&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2775" y="1205" width="385" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_card2_58" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0F766E;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;MATHEMATICS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Scientific Formulations&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Barometric SLP: P · (1 - 0.0065·h / 288.15)^(-5.255)
+• Clausius-Clapeyron / Magnus: e_s = 6.112 · exp(17.67·T / (T+243.5))
+• Spatial Kriging: T_cons = Σ(w_i · (T_i - Γ·Δh)) / Σ w_i
+• Conformal P-Value: (Σ I(S_cal ≥ S) + 1) / (N_cal + 1)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3185" y="1205" width="400" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_card3_59" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#7E22CE;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;WEIGHT DISTRIBUTION&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Layer Weighting &amp;amp; Conformal Significance&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• Physics Weight: 0.35 (Thermodynamic Invariants)
+• Temporal Weight: 0.25 (Kinematics &amp;amp; Frozen Sensor)
+• Multivariate Weight: 0.20 (Psychrometric Coupling)
+• Spatial Weight: 0.15 (Elevation-Adjusted Consensus)
+• Drift Weight: 0.05 (CUSUM Cumulative Sum Chart)
+• Conformal Significance Level: α = 0.001 (False Alarm Rate)&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="2775" y="1345" width="385" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_card4_60" value="&lt;div style=&#x27;margin-bottom:6px;&#x27;&gt;&lt;span style=&#x27;background-color:#0369A1;color:#ffffff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:4px;&#x27;&gt;STANDARDS&lt;/span&gt;&lt;/div&gt;&lt;div style=&#x27;font-size:13.5px;font-weight:bold;color:#0F172A;margin-bottom:4px;&#x27;&gt;Meteorological Agency Compliance&lt;/div&gt;&lt;div style=&#x27;font-size:11px;color:#475569;line-height:1.35;&#x27;&gt;• World Meteorological Organization (WMO-No. 8 Standard)
+• India Meteorological Department (IMD) AWS Compatibility
+• Automated Telemetry Reliability for National Weather Networks
+• Extreme Convective Events vs Sensor Degradation Triage&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;arcSize=8;fillColor=#FFFFFF;strokeColor=#94A3B8;strokeWidth=1.5;dashed=0;fontFamily=Helvetica;fontSize=13;fontColor=#0F172A;align=left;spacingLeft=14;spacingRight=14;verticalAlign=top;spacingTop=10;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="3185" y="1345" width="400" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_61" value="Raw Telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="src1_10" target="ing1_16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_62" value="Model Ref" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="src2_11" target="ing3_18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_63" value="WMO Bounds" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="src3_12" target="ing2_17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_64" value="Station Registry" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="src4_13" target="ing4_19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_65" value="Normalized Reading" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="ing1_16" target="proc1_21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_66" value="Quality Labeled" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="ing2_17" target="proc2_22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_67" value="Time Series" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.3;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="ing4_19" target="proc3_23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_68" value="Coordinates" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="ing4_19" target="proc4_24">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_69" value="Hypsometric SLP" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc1_21" target="l1_26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_70" value="T &amp; T_dew States" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.3;exitDx=0;exitDy=0;entryX=0.0;entryY=0.7;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc2_22" target="l1_26">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_71" value="Rolling Derivatives" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc3_23" target="l2_27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_72" value="Psychrometric Matrix" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc2_22" target="l3_28">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_73" value="k-NN Neighbors" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc4_24" target="l4_29">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_74" value="Residual History" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.8;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="proc3_23" target="l5_30">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_75" value="Physics Score + VETO" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="l1_26" target="fus1_32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_76" value="Temporal Score" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.6;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="l2_27" target="fus1_32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_77" value="Multivariate Score" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.8;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="l3_28" target="fus1_32">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_78" value="Spatial Consensus &amp; Neighbors" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="l4_29" target="fus3_34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_79" value="Sensor Health Index" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.4;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="l5_30" target="fus4_35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_80" value="Nonconformity" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="fus1_32" target="fus2_33">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_81" value="Empirical P-Value" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="fus2_33" target="fus3_34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_82" value="Calibrated Confidence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="fus3_34" target="fus4_35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_83" value="Anomaly Verdict &amp; Severity" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.3;exitDx=0;exitDy=0;entryX=0.0;entryY=0.3;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="fus4_35" target="rc1_37">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_84" value="Uncertainty Tier" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.7;exitDx=0;exitDy=0;entryX=0.0;entryY=0.6;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="fus3_34" target="rc1_37">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_85" value="Diagnosed Cause" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc1_37" target="rc2_38">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_86" value="Culprit Channel" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc1_37" target="rc3_39">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_87" value="Explanation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc2_38" target="rc4_40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_88" value="Corrected Reading" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=0.5;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc3_39" target="rc4_40">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_89" value="Sync Incident Snapshot" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.3;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc4_40" target="db_box_42">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_90" value="Canonical Evaluation" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.6;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="rc4_40" target="api_box_44">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_91" value="Persistent Store" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.2;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="db_box_42" target="api_box_44">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_92" value="GeoJSON 60 FPS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.3;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="api_box_44" target="ui_map_46">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_93" value="Station Telemetry" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.6;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="api_box_44" target="ui_drawer_47">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_94" value="Incident State" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.8;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="api_box_44" target="ui_inc_48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_95" value="Scalar / Vector Grid" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=0;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.8;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="grid_box_45" target="ui_map_46">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_96" value="Selected Scenario" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="t1_51" target="t2_52">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_97" value="Injected Sequence" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="t2_52" target="t3_53">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_98" value="Engine Verdict" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="t3_53" target="t4_54">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_99" value="PASS / Review" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#475569;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=1.0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.0;entryY=0.5;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#475569;labelBackgroundColor=#FFFFFF;labelBorderColor=#475569;" edge="1" parent="1" source="t4_54" target="t5_55">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_100" value="Open in Test Lab" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9333EA;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=0.5;exitY=1.0;exitDx=0;exitDy=0;entryX=1.0;entryY=0.2;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#9333EA;labelBackgroundColor=#FFFFFF;labelBorderColor=#9333EA;" edge="1" parent="1" source="ui_drawer_47" target="t1_51">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge_101" value="Clones Engine Instance" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9333EA;strokeWidth=2;dashed=1;dashPattern=5 3;endArrow=classic;endFill=1;exitX=0.2;exitY=1.0;exitDx=0;exitDy=0;entryX=0.9;entryY=0.0;entryDx=0;entryDy=0;fontFamily=Helvetica;fontSize=11;fontStyle=1;fontColor=#9333EA;labelBackgroundColor=#FFFFFF;labelBorderColor=#9333EA;" edge="1" parent="1" source="api_box_44" target="t3_53">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

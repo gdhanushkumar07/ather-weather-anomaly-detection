@@ -8,6 +8,8 @@ import {
 import { EscalationPreviewModal } from './EscalationPreviewModal';
 import { ResolveIncidentModal } from './ResolveIncidentModal';
 import { DismissIncidentModal } from './DismissIncidentModal';
+import { IncidentEvidence } from './live/IncidentEvidence';
+import { useLiveEvents } from '../services/live';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   NEW: ['ACKNOWLEDGED', 'DISMISSED'],
@@ -56,6 +58,14 @@ export const IncidentDetail: React.FC<IncidentDetailProps> = ({ incidentId, onBa
 
   useEffect(() => { load(); }, [incidentId]);
 
+  // Live: another operator's transition, or a new observation updating this
+  // incident, refreshes the view without a page reload.
+  useLiveEvents(['INCIDENT_UPDATED'], (e) => {
+    if (e.data?.incident_id === incidentId) {
+      fetchIncidentDetail(incidentId).then(setIncident).catch(() => {});
+    }
+  });
+
   const allowedNext = (target: string) => incident && (VALID_TRANSITIONS[incident.status]?.includes(target) ?? false);
 
   const runAction = async (fn: () => Promise<any>) => {
@@ -100,7 +110,10 @@ export const IncidentDetail: React.FC<IncidentDetailProps> = ({ incidentId, onBa
             <span className="metric-title">INCIDENT</span>
             <div className="incident-detail-id">{incident.incident_id}</div>
           </div>
-          <span className={`anomaly-severity-pill ${isCritical ? 'critical' : 'warning'}`}>{incident.severity}</span>
+          <span className="lv-row">
+            {incident.source === 'SIMULATED_FEED' && <span className="lv-badge lv-badge-sim">SIMULATED FEED</span>}
+            <span className={`anomaly-severity-pill ${isCritical ? 'critical' : 'warning'}`}>{incident.severity}</span>
+          </span>
         </div>
         <div className="incident-detail-title">{incident.parameter} anomaly</div>
         <div className="anomaly-card-location">
@@ -117,6 +130,8 @@ export const IncidentDetail: React.FC<IncidentDetailProps> = ({ incidentId, onBa
           <div><span className="metric-title">CONFIDENCE</span><div className="metric-val">{Math.round((incident.confidence || 0) * 100)}%</div></div>
         </div>
       </div>
+
+      <IncidentEvidence incident={incident} onViewStation={onViewStation} />
 
       {/* Phase 41: Evidence / Observation */}
       <div className="section-card">

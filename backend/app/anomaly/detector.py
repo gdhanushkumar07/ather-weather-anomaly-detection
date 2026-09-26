@@ -6,6 +6,7 @@ with Conformal Evidence Fusion, Root-Cause Diagnosis, Self-Healing Imputation,
 Meteorological Weather Analysis, and Canonical AnalysisResult generation.
 """
 
+import threading
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone
 
@@ -24,6 +25,11 @@ from fusion.conformal_fusion import ConformalEvidenceFusion
 from root_cause.classifier import RootCauseClassifier, DiagnosisResult
 from root_cause.explainability import ExplanationGenerator
 from root_cause.self_healing import SelfHealingImputer
+from engine.layer4_spatial import haversine_distance_km
+
+# Stamped on every DetectionResult for provenance. Bump when layer logic,
+# thresholds or fusion change in a way that alters verdicts.
+ENGINE_VERSION = "ather-engine/2.1.0"
 
 
 class AnomalyDetector:
@@ -51,6 +57,10 @@ class AnomalyDetector:
         self._spatial_pool: Dict[str, AWSReading] = {}
         # Station metadata cache (name, etc.)
         self._station_meta: Dict[str, Dict[str, Any]] = {}
+        # Layers 2 and 5 keep per-station state. The live pipeline worker and
+        # on-demand API paths run on different threads, so evaluation is
+        # serialized (one evaluation is ~1 ms; contention is negligible).
+        self._lock = threading.RLock()
 
     def update_spatial_pool(self, readings: List[AWSReading]):
         """Updates the internal spatial neighbor registry."""
@@ -62,23 +72,31 @@ class AnomalyDetector:
         self._station_meta[station_id] = meta
 
     def get_neighbors_for_reading(self, reading: AWSReading, max_neighbors: int = 8) -> List[AWSReading]:
-        """Finds nearest neighbor readings within spatial radius."""
+        """Finds the nearest neighbor readings within the spatial radius."""
         if not self._spatial_pool:
             return []
 
-        neighbors = []
         lat = reading.lat
         lon = reading.lon
-
-        # Bounding box pre-filter (~3 degrees lat/lon is ~330km)
-        for n in self._spatial_pool.values():
+        candidates = []
+        # Bounding box pre-filter (~3 degrees lat/lon is ~330km). Iterate a
+        # snapshot: the pool is updated from the pipeline worker thread.
+        for n in list(self._spatial_pool.values()):
             if n.station_id == reading.station_id:
                 continue
             if abs(n.lat - lat) <= 3.0 and abs(n.lon - lon) <= 3.0:
-                neighbors.append(n)
-                if len(neighbors) >= max_neighbors:
-                    break
-        return neighbors
+                candidates.append((haversine_distance_km(lat, lon, n.lat, n.lon), n))
+        candidates.sort(key=lambda c: c[0])
+        return [n for _, n in candidates[:max_neighbors]]
+
+    def reset_station_state(self, station_id: str) -> None:
+        """Drops the temporal (L2) and drift (L5) state for one station.
+        Used when a station's observation source changes (e.g. from a NWP
+        reference to a sensor feed), so readings from different sources are
+        never compared as if they were one continuous sensor series."""
+        with self._lock:
+            self.layer2.buffers.pop(station_id, None)
+            self.layer5.trackers.pop(station_id, None)
 
     def evaluate_station(
         self,
@@ -101,12 +119,26 @@ class AnomalyDetector:
         self,
         reading: AWSReading,
         neighbors: Optional[List[AWSReading]] = None,
-        station_data: Optional[Dict[str, Any]] = None
+        station_data: Optional[Dict[str, Any]] = None,
+        background: Optional[Dict[str, Optional[float]]] = None,
     ) -> AnomalyAlert:
         """
         Full 5-layer anomaly evaluation pipeline producing both an AnomalyAlert
         and a Canonical §16 AnalysisResult.
+
+        background: optional NWP values per channel (temperature_c, ...), used
+        by Layer 5 as a drift reference only when no neighbour consensus exists.
         """
+        with self._lock:
+            return self._evaluate_reading_locked(reading, neighbors, station_data, background)
+
+    def _evaluate_reading_locked(
+        self,
+        reading: AWSReading,
+        neighbors: Optional[List[AWSReading]],
+        station_data: Optional[Dict[str, Any]],
+        background: Optional[Dict[str, Optional[float]]] = None,
+    ) -> AnomalyAlert:
         stn_id = reading.station_id
         meta = station_data or self._station_meta.get(stn_id, {})
         stn_name = meta.get("name", f"Station {stn_id}")
@@ -128,7 +160,8 @@ class AnomalyDetector:
         # ── 5. Layer 5: Sensor Drift & Health Tracking (CUSUM & Days to failure) ──
         recent_is_anomaly = bool(veto_fired or score_l1 > 0.7 or score_l2 > 0.7)
         score_l5, health_score, days_to_failure, reason_l5, detail_l5 = self.layer5.evaluate(
-            reading, recent_is_anomaly=recent_is_anomaly
+            reading, recent_is_anomaly=recent_is_anomaly,
+            spatial_consensus=spatial_consensus, background=background,
         )
         # Default to True (assume physical) unless the source is AFFIRMATIVELY
         # known to be a model reference — an UNKNOWN/untagged source (legacy

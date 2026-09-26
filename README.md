@@ -9,7 +9,7 @@
 [![React](https://img.shields.io/badge/React-19.0-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.5-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![MapLibre GL](https://img.shields.io/badge/MapLibre_GL-3.6-2D72D9.svg?style=for-the-badge&logo=maplibre&logoColor=white)](https://maplibre.org/)
-[![Test Suite](https://img.shields.io/badge/Tests-86%2F86%20Passed-success.svg?style=for-the-badge&logo=pytest&logoColor=white)](backend/tests)
+[![Test Suite](https://img.shields.io/badge/Tests-120%2F120%20Passed-success.svg?style=for-the-badge&logo=pytest&logoColor=white)](backend/tests)
 [![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <br />
@@ -75,6 +75,18 @@ flowchart TD
         INC --> UI4["Test Lab Sandbox<br/>(Isolated Fault-Injection Engine)"]
     end
 ```
+
+---
+
+## ⏱️ Real-Time Pipeline
+
+ATHER runs continuously: source adapters → validation & normalization → stream → 5-layer engine + conformal fusion → time-series & incident storage → server-sent events → Command Center. The dashboard loads one snapshot and then only applies live events; it never polls stations.
+
+- **Sources:** a clearly labelled **simulated** AWS feed for the 296 real WeatherUnion locations (with live fault injection), opt-in NOAA ISD, Weather Union (API key) and an IMD push endpoint. Open-Meteo is a **reference layer only**, never an observation.
+- **Two verdict axes:** sensor trust (`nominal / suspect / degraded / anomaly`) and interpretation (`likely sensor fault / likely weather event / communication issue`). Spatially corroborated weather never opens a maintenance incident.
+- **Measured:** 1.4 ms engine time per observation; ~1 s observation-to-dashboard; 99.6 % nominal with 0 false incidents on a healthy 296-station network.
+
+Design decisions, engine findings, configuration and the full API are in **[docs/REALTIME_ARCHITECTURE.md](docs/REALTIME_ARCHITECTURE.md)**.
 
 ---
 
@@ -148,7 +160,7 @@ chmod +x run_ather.sh
 ./run_ather.sh
 ```
 The script will concurrently start:
-- 🚀 **Backend API**: `http://localhost:8000` (Interactive API docs at `/docs`)
+- 🚀 **Backend API**: `http://localhost:8001` (Interactive API docs at `/docs`)
 - 💻 **Frontend Web App**: `http://localhost:3000`
 
 ---
@@ -190,7 +202,7 @@ npm run dev
 The ATHER anomaly engine and incident subsystems are backed by a comprehensive automated test suite.
 
 ```bash
-# Run all 86 unit and integration tests
+# Run all 120 unit and integration tests
 python3 -m pytest backend/tests -v
 ```
 
@@ -200,6 +212,7 @@ python3 -m pytest backend/tests -v
 - `test_incidents.py`: SQLite persistence, incident status transitions, escalation preview generation, idempotency.
 - `test_simulation.py`: Test Lab scenario isolation, simulated injection integrity, non-interference with production stations.
 - `test_provenance.py`: Metadata lineage, WMO reference conformance, telemetry trace validation.
+- `test_realtime.py`: Ingestion, normalization, duplicates, late/stale data, source failure, event broker, incident lifecycle, weather-vs-sensor classification, simulation, replay, and an end-to-end test over real HTTP + SSE.
 
 ---
 
@@ -220,6 +233,13 @@ python3 -m pytest backend/tests -v
 | `GET` | `/api/simulation/scenarios` | List predefined fault-injection scenarios for the Test Lab. |
 | `POST` | `/api/simulation/run` | Execute isolated scenario simulation and return diagnostic verdict. |
 | `GET` | `/api/weather/grid` | Gridded meteorological scalar/vector data matrix for map visualizer. |
+| `GET` | `/api/stream` | Server-sent live events (station updates, anomalies, incidents, source status). |
+| `GET` | `/api/network/state` | Dashboard snapshot with the event id to resume the stream from. |
+| `POST` | `/api/observations` | Validated push ingestion into the real-time pipeline. |
+| `GET` | `/api/stations/{id}/live` · `/timeseries` · `/detections` · `/spatial` | Live diagnosis, persisted history, detection timeline, spatial event analysis. |
+| `POST` | `/api/lab/faults` · `/api/replay` | Inject a fault into the live feed; replay a window through a fresh engine. |
+
+Full real-time API: [docs/REALTIME_ARCHITECTURE.md](docs/REALTIME_ARCHITECTURE.md#8-real-time-api).
 
 ---
 

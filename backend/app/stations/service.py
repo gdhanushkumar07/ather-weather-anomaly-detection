@@ -244,7 +244,7 @@ class StationService:
         )
 
     def get_all_stations(self, limit: Optional[int] = None, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        res = list(self._stations.values())
+        res = list(list(self._stations.values()))
         if status:
             res = [s for s in res if s.get("status", "").upper() == status.upper()]
         if limit:
@@ -263,7 +263,7 @@ class StationService:
         features = []
         count = 0
 
-        for s in self._stations.values():
+        for s in list(self._stations.values()):
             lat = s.get("latitude", 0)
             lon = s.get("longitude", 0)
 
@@ -331,7 +331,7 @@ class StationService:
         if not stn:
             # Fallback check by localityId or without ATHER prefix
             clean_id = station_id.replace("ATHER-IND-", "").replace("ATHER-", "")
-            for s in self._stations.values():
+            for s in list(self._stations.values()):
                 if s.get("localityId") == station_id or s.get("id") == clean_id or s.get("localityId") == clean_id:
                     stn = s
                     break
@@ -364,7 +364,7 @@ class StationService:
 
         return stn
 
-    def _build_incident_snapshot(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> Optional[Dict[str, Any]]:
+    def _build_incident_snapshot(self, stn: Dict[str, Any], source: str = "LIVE_AWS", alert=None) -> Optional[Dict[str, Any]]:
         """
         Builds the normalized evaluation snapshot handed to
         incident_service.upsert_from_evaluation(). Every field is read
@@ -377,7 +377,8 @@ class StationService:
         stn_id = stn.get("id")
         if not stn_id:
             return None
-        alert = detector.get_station_alert(stn_id)
+        if alert is None:
+            alert = detector.get_station_alert(stn_id)
         if alert is None:
             return None
 
@@ -422,11 +423,19 @@ class StationService:
             "source": source,
         }
 
-    def _sync_incident(self, stn: Dict[str, Any], source: str = "LIVE_AWS") -> None:
+    def _sync_incident(self, stn: Dict[str, Any], source: Optional[str] = None) -> None:
         """Best-effort incident upsert — never lets an incident-persistence
         problem break station evaluation/ingestion (Phase 20: incident
         creation is additive to the existing pipeline, not a precondition
-        for it)."""
+        for it).
+
+        Source labelling: a station whose values come from the frozen
+        data/stations.json scrape (freshness UNKNOWN — no verifiable
+        observation time) is filed as STATIC_SNAPSHOT, never LIVE_AWS, so a
+        years-old snapshot is not presented as live operational state."""
+        if source is None:
+            fresh = _enum_val(stn.get("freshness"))
+            source = "STATIC_SNAPSHOT" if fresh in (None, "UNKNOWN", "MISSING") else "LIVE_AWS"
         try:
             snapshot = self._build_incident_snapshot(stn, source=source)
             if snapshot:
@@ -530,7 +539,9 @@ class StationService:
         # Phase 20/27: this is the on-demand "view station" evaluation path —
         # the richest evidence snapshot available (full L1-L5 canonical
         # cards), so it is also an incident sync point.
-        if not is_offline:
+        # Stations fed by the real-time pipeline get their incidents from the
+        # pipeline; viewing them must stay a read-only operation.
+        if not is_offline and not stn.get("liveFeed"):
             self._sync_incident(stn)
 
         return res
@@ -538,7 +549,7 @@ class StationService:
     def search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         q = query.lower().strip()
         matches = []
-        for s in self._stations.values():
+        for s in list(self._stations.values()):
             if (q in s.get("name", "").lower() or 
                 q in s.get("town", "").lower() or 
                 q in s.get("id", "").lower() or
@@ -622,7 +633,7 @@ class StationService:
         warnings = []
         offline_count = 0
         normal_count = 0
-        for s in self._stations.values():
+        for s in list(self._stations.values()):
             st = s.get("status")
             if st == "ANOMALY":
                 anomalies.append(s)
@@ -674,6 +685,7 @@ class StationService:
         stn["observationTimestamp"] = now_iso
         stn["sourceCadenceMinutes"] = 15.0
         stn["awsTelemetryStatus"] = "TELEMETRY_AVAILABLE"
+        stn["freshness"] = Freshness.LIVE
 
         # Re-evaluate with anomaly detector
         status, anomaly = detector.evaluate_station(stn)

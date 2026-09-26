@@ -47,6 +47,7 @@ class ObservationSource(str, Enum):
     AWS_IN_SITU          = "AWS_IN_SITU"           # Measured by a real physical AWS sensor / pushed telemetry
     NWP_MODEL_REFERENCE  = "NWP_MODEL_REFERENCE"   # Open-Meteo (or other) numerical weather model output
     SYNTHETIC_TEST       = "SYNTHETIC_TEST"        # Fabricated data used only in unit tests
+    SIMULATED_AWS        = "SIMULATED_AWS"         # Live simulated AWS feed (demo/dev) — never real measurements
     MISSING              = "MISSING"               # No observation obtained at all
     UNKNOWN              = "UNKNOWN"               # Source could not be determined (legacy path)
 

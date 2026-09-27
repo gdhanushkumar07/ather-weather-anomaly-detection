@@ -12,6 +12,9 @@ const PARAMETER_COLOR_STOPS: Record<ParameterField, ReturnType<typeof toMapLibre
   pressure: toMapLibreColorExpression('pressure', PRESSURE_STOPS),
   humidity: toMapLibreColorExpression('humidity', HUMIDITY_STOPS),
 };
+// NOTE: there are intentionally NO native cluster layers any more. Clusters are drawn as
+// weather-station markers with a small count badge (StationMarkerLayer.tsx); the old
+// cyan circle ('ather-clusters') and its text layer ('ather-cluster-count') were removed.
 export const CLUSTERS_LAYER_ID = 'ather-clusters';
 export const CLUSTER_COUNT_LAYER_ID = 'ather-cluster-count';
 export const ANOMALY_PULSE_LAYER_ID = 'ather-anomaly-pulse';
@@ -32,6 +35,10 @@ export function setupStationLayers(
     map.addSource(STATIONS_SOURCE_ID, {
       type: 'geojson',
       data: data,
+      // MapLibre's built-in (supercluster) hierarchical clustering: clusters split as the
+      // zoom increases, driven purely by station coordinates. Reused unchanged except that
+      // each cluster now also carries how many of its stations are in each status, so the
+      // cluster marker can show its highest severity without losing the individual statuses.
       cluster: true,
       clusterMaxZoom: 11,
       clusterRadius: 45,
@@ -41,6 +48,7 @@ export function setupStationLayers(
       clusterProperties: {
         anomalies: ['+', ['case', ['==', ['get', 'status'], 'ANOMALY'], 1, 0]],
         warnings: ['+', ['case', ['==', ['get', 'status'], 'WARNING'], 1, 0]],
+        normals: ['+', ['case', ['==', ['get', 'status'], 'NORMAL'], 1, 0]],
         offline: ['+', ['case', ['==', ['get', 'status'], 'OFFLINE'], 1, 0]]
       }
     });
@@ -83,9 +91,9 @@ export function setupStationLayers(
         // station, amber for warnings, otherwise the neutral cyan.
         'circle-stroke-color': [
           'case',
-          ['>', ['get', 'anomalies'], 0], '#ef4444',
-          ['>', ['get', 'warnings'], 0], '#f59e0b',
-          '#00e5ff'
+          ['>', ['get', 'anomalies'], 0], '#9B1C24',
+          ['>', ['get', 'warnings'], 0], '#D49A1A',
+          '#111214'
         ],
         'circle-stroke-width': [
           'case',
@@ -133,7 +141,7 @@ export function setupStationLayers(
         'text-ignore-placement': true
       },
       paint: {
-        'text-color': '#fca5a5',
+        'text-color': '#FFFFFF',
         'text-halo-color': 'rgba(8, 12, 20, 0.95)',
         'text-halo-width': 1.6
       }
@@ -175,7 +183,7 @@ export function setupStationLayers(
         'circle-color': 'rgba(239, 68, 68, 0.16)',
         'circle-radius': 14,
         'circle-stroke-width': 1.5,
-        'circle-stroke-color': '#ef4444'
+        'circle-stroke-color': '#9B1C24'
       }
     });
   }
@@ -191,7 +199,7 @@ export function setupStationLayers(
         'circle-color': 'rgba(0, 229, 255, 0.22)',
         'circle-radius': 16,
         'circle-stroke-width': 2,
-        'circle-stroke-color': '#00e5ff'
+        'circle-stroke-color': '#111214'
       }
     });
   }
@@ -209,7 +217,7 @@ export function setupStationLayers(
       source: STATIONS_SOURCE_ID,
       filter: ['literal', false], // disabled until setParameterLayer() activates it
       paint: {
-        'circle-color': '#94a3b8',
+        'circle-color': '#8C8E91',
         'circle-radius': [
           'interpolate',
           ['linear'],
@@ -263,12 +271,12 @@ export function setupStationLayers(
           'match',
           ['get', 'status'],
           'ANOMALY',
-          '#ef4444', // Red
+          '#9B1C24', // Red
           'WARNING',
-          '#f59e0b', // Amber
+          '#D49A1A', // Amber
           'NORMAL',
-          '#10b981', // Green
-          /* default / offline */ '#94a3b8'
+          '#46A477', // Green
+          /* default / offline */ '#8C8E91'
         ],
         'circle-radius': [
           'case',
@@ -310,12 +318,12 @@ export function setupStationLayers(
           'match',
           ['get', 'status'],
           'ANOMALY',
-          '#ef4444',
+          '#9B1C24',
           'WARNING',
-          '#f59e0b',
+          '#D49A1A',
           'NORMAL',
-          '#10b981',
-          '#64748b'
+          '#46A477',
+          '#8C8E91'
         ],
         'circle-radius': 2.0,
         'circle-opacity': 1.0
@@ -326,23 +334,6 @@ export function setupStationLayers(
   // Attach click and hover listeners only once per map instance
   if (!(map as any)._atherStationListenersAttached) {
     (map as any)._atherStationListenersAttached = true;
-
-    // Click handler for clusters: smooth zoom into cluster
-    map.on('click', CLUSTERS_LAYER_ID, (e) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: [CLUSTERS_LAYER_ID] });
-      if (!features.length) return;
-      const clusterId = features[0].properties?.cluster_id;
-      const source = map.getSource(STATIONS_SOURCE_ID) as maplibregl.GeoJSONSource;
-
-      source.getClusterExpansionZoom(clusterId).then((zoom) => {
-        const coords = (features[0].geometry as GeoJSON.Point).coordinates;
-        map.easeTo({
-          center: [coords[0], coords[1]],
-          zoom: zoom + 0.6,
-          duration: 450
-        });
-      });
-    });
 
     // Click handler for individual station: select station
     map.on('click', UNCLUSTERED_RING_LAYER_ID, (e) => {
@@ -394,6 +385,7 @@ export function setupStationLayers(
     });
 
     map.on('mouseleave', CLUSTERS_LAYER_ID, () => { map.getCanvas().style.cursor = ''; clusterPopup.remove(); });
+    // Hover cursor changes
     map.on('mouseenter', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', UNCLUSTERED_RING_LAYER_ID, () => { map.getCanvas().style.cursor = ''; });
   }
@@ -453,8 +445,6 @@ export function updateSelectedStationHalo(map: maplibregl.Map, selectedStationId
 export function setStationLayersVisibility(map: maplibregl.Map, visible: boolean) {
   const vis = visible ? 'visible' : 'none';
   [
-    CLUSTERS_LAYER_ID,
-    CLUSTER_COUNT_LAYER_ID,
     SELECTED_HALO_LAYER_ID,
     UNCLUSTERED_RING_LAYER_ID,
     UNCLUSTERED_BASE_LAYER_ID,
@@ -573,4 +563,178 @@ export function collectIncidentTargets(
       };
     })
     .sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name));
+}
+
+/**
+ * Individual stations are now drawn as animated DOM weather-station markers
+ * (see StationMarkerLayer.tsx / WeatherStationMarker.tsx). The native circle
+ * layers above are kept as an automatic FALLBACK: this excludes the stations
+ * that currently have a DOM marker so nothing is drawn twice, while any
+ * station beyond the DOM-marker cap still gets its circle (and its existing
+ * click handler). Pass an empty array to restore the circles for everyone.
+ * Clusters are never affected.
+ */
+export function setDomMarkedStations(map: maplibregl.Map, markedIds: string[]) {
+  const notCluster: any[] = ['!', ['has', 'point_count']];
+  const notMarked: any[] | null = markedIds.length
+    ? ['!', ['in', ['get', 'id'], ['literal', markedIds]]]
+    : null;
+  const withExclusion = (...extra: any[]) => ['all', notCluster, ...extra, ...(notMarked ? [notMarked] : [])] as any;
+
+  [UNCLUSTERED_RING_LAYER_ID, UNCLUSTERED_BASE_LAYER_ID, UNCLUSTERED_CORE_LAYER_ID].forEach((layerId) => {
+    if (map.getLayer(layerId)) map.setFilter(layerId, withExclusion());
+  });
+  // The static anomaly halo keeps its own predicate; the DOM marker's radar
+  // replaces it for marked stations.
+  if (map.getLayer(ANOMALY_PULSE_LAYER_ID)) {
+    map.setFilter(ANOMALY_PULSE_LAYER_ID, withExclusion(['==', ['get', 'hasAnomaly'], 1]));
+  }
+}
+
+/** Hides the native cyan selection ring when the selected station is drawn as a
+ * DOM marker (the marker carries its own selected glow); restores it otherwise. */
+export function setSelectedHaloSuppressed(map: maplibregl.Map, suppressed: boolean) {
+  if (!map.getLayer(SELECTED_HALO_LAYER_ID)) return;
+  map.setPaintProperty(SELECTED_HALO_LAYER_ID, 'circle-opacity', suppressed ? 0 : 1);
+  map.setPaintProperty(SELECTED_HALO_LAYER_ID, 'circle-stroke-opacity', suppressed ? 0 : 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Three-neighbor validation: connection lines + neighbor highlight markers.
+// Native MapLibre GeoJSON source/layers -- geo-attachment, pan/zoom/rotate
+// tracking, and rendering are all handled by the map itself, exactly like
+// every other station layer above. No separate positioning system.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const NEIGHBOR_LINES_SOURCE_ID = 'ather-neighbor-lines-source';
+export const NEIGHBOR_LINES_GLOW_LAYER_ID = 'ather-neighbor-lines-glow';
+export const NEIGHBOR_LINES_LAYER_ID = 'ather-neighbor-lines';
+export const NEIGHBOR_HIGHLIGHT_SOURCE_ID = 'ather-neighbor-highlight-source';
+export const NEIGHBOR_HIGHLIGHT_LAYER_ID = 'ather-neighbor-highlight';
+
+const NEIGHBOR_LINE_OPACITY = 0.85;
+const NEIGHBOR_LINE_GLOW_OPACITY = 0.14;
+
+export function ensureNeighborLayers(map: maplibregl.Map) {
+  if (!map.getSource(NEIGHBOR_LINES_SOURCE_ID)) {
+    map.addSource(NEIGHBOR_LINES_SOURCE_ID, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+  }
+  if (!map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID)) {
+    map.addSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] }
+    });
+  }
+
+  // Soft glow beneath the crisp line -- thin and understated, not a thick bar.
+  if (!map.getLayer(NEIGHBOR_LINES_GLOW_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_LINES_GLOW_LAYER_ID,
+      type: 'line',
+      source: NEIGHBOR_LINES_SOURCE_ID,
+      paint: {
+        'line-color': '#111214',
+        'line-width': 5,
+        'line-opacity': 0,
+        'line-blur': 3
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' }
+    });
+  }
+  if (!map.getLayer(NEIGHBOR_LINES_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_LINES_LAYER_ID,
+      type: 'line',
+      source: NEIGHBOR_LINES_SOURCE_ID,
+      paint: {
+        'line-color': '#111214',
+        'line-width': 1.5,
+        'line-opacity': 0
+      },
+      layout: { 'line-cap': 'round', 'line-join': 'round' }
+    });
+  }
+  // Neighbor highlight ring -- distinguishes the 3 nearest stations from
+  // every other unclustered marker without replacing the marker itself.
+  if (!map.getLayer(NEIGHBOR_HIGHLIGHT_LAYER_ID)) {
+    map.addLayer({
+      id: NEIGHBOR_HIGHLIGHT_LAYER_ID,
+      type: 'circle',
+      source: NEIGHBOR_HIGHLIGHT_SOURCE_ID,
+      paint: {
+        'circle-color': 'rgba(0, 229, 255, 0.0)',
+        'circle-radius': 12,
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#111214',
+        // Drawn on the DOM marker itself (`is-neighbor`, a thin ground ring) instead of a cyan
+        // circle around it; the layer stays so nothing that references it breaks.
+        'circle-stroke-opacity': 0
+      }
+    });
+  }
+}
+
+export interface NeighborLinePoint {
+  lng: number;
+  lat: number;
+}
+
+/** Draws primary->neighbor connection lines and highlights the neighbor markers. */
+export function updateNeighborConnections(
+  map: maplibregl.Map,
+  primary: NeighborLinePoint,
+  neighbors: NeighborLinePoint[]
+) {
+  ensureNeighborLayers(map);
+
+  const lineFeatures: GeoJSON.Feature[] = neighbors.map((n) => ({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [primary.lng, primary.lat],
+        [n.lng, n.lat]
+      ]
+    }
+  }));
+
+  const pointFeatures: GeoJSON.Feature[] = neighbors.map((n) => ({
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Point', coordinates: [n.lng, n.lat] }
+  }));
+
+  const linesSrc = map.getSource(NEIGHBOR_LINES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  linesSrc?.setData({ type: 'FeatureCollection', features: lineFeatures });
+
+  const highlightSrc = map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  highlightSrc?.setData({ type: 'FeatureCollection', features: pointFeatures });
+
+  animateNeighborLinesIn(map);
+}
+
+export function clearNeighborConnections(map: maplibregl.Map) {
+  const linesSrc = map.getSource(NEIGHBOR_LINES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  linesSrc?.setData({ type: 'FeatureCollection', features: [] });
+  const highlightSrc = map.getSource(NEIGHBOR_HIGHLIGHT_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  highlightSrc?.setData({ type: 'FeatureCollection', features: [] });
+}
+
+/** Subtle "lines drawing outward" fade-in when a primary station is selected. */
+function animateNeighborLinesIn(map: maplibregl.Map, durationMs = 600) {
+  const start = performance.now();
+  function step(now: number) {
+    if (!map.getLayer(NEIGHBOR_LINES_LAYER_ID)) return;
+    // rAF timestamps can precede performance.now(): clamp so opacity is never negative
+    const t = Math.max(0, Math.min(1, (now - start) / durationMs));
+    const eased = 1 - Math.pow(1 - t, 3);
+    map.setPaintProperty(NEIGHBOR_LINES_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_OPACITY * eased);
+    map.setPaintProperty(NEIGHBOR_LINES_GLOW_LAYER_ID, 'line-opacity', NEIGHBOR_LINE_GLOW_OPACITY * eased);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
 }

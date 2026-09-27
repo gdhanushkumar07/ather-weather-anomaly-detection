@@ -1,0 +1,48 @@
+{
+  "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance. NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. NO ground-truth event-evolution labels exist -- this script does NOT and CANNOT measure event-tracking accuracy.",
+  "cadence_disclaimer": "This dataset is HOURLY. The tracker's default gap policy (CONFIG.lstm_temporal.max_gap_minutes, ~10-min AWS cadence) is NOT usable unmodified against hourly data -- this script explicitly overrides it to 90.0 minutes, reusing schema.py's own existing 90-minute NWP-hourly-cadence freshness window (classify_freshness's default), not a new invented number. This override applies to THIS script only.",
+  "method_disclaimer": "Uses GENUINE temporal ordering: real consecutive hourly rows per selected city, in their own real datetime order -- NOT one arbitrary row per city (unlike the S2/S3/S4 validation scripts, which explicitly do not need temporal ordering). No resampling, interpolation, or reordering.",
+  "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+  "source_file_untouched": true,
+  "group_selection_seconds": 22.7,
+  "extract_seconds": 21.15,
+  "run_seconds_per_pass": 74.32,
+  "selected_city_group": [
+    "Karnal",
+    "Ambala",
+    "Roorkee",
+    "Patiala",
+    "Rohtak",
+    "Meerut",
+    "Delhi_North",
+    "Haridwar",
+    "Chandigarh",
+    "New_Delhi",
+    "Dehradun"
+  ],
+  "usable_cities": [
+    "Karnal",
+    "Ambala",
+    "Roorkee",
+    "Patiala",
+    "Rohtak",
+    "Meerut",
+    "Delhi_North",
+    "Haridwar",
+    "Chandigarh",
+    "New_Delhi",
+    "Dehradun"
+  ],
+  "common_sequence_length_hours": 2000,
+  "run_result": {
+    "hours_processed": 2000,
+    "errors": 0,
+    "flags_seen": [
+      "NEW"
+    ],
+    "max_event_duration_minutes": 0.0,
+    "distinct_events_created": 118
+  },
+  "determinism_verified_across_two_full_reruns": true,
+  "note_if_group_too_small": null
+}

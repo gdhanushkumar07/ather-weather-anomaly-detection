@@ -1,0 +1,40 @@
+{
+  "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance (documented as likely model/reanalysis-derived). NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. Used only to audit the S1 spatial neighbor-selection foundation -- not production input, not a regional-event or clustering conclusion.",
+  "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+  "source_file_untouched": true,
+  "extract_seconds": 22.49,
+  "rows_scanned_of_full_file": 46082160,
+  "chunks_read": 47,
+  "chunk_size": 1000000,
+  "note_on_scan_scope": "Only city/lat/lon were read (not the full ~22-column file) -- this audit does not need per-hour observations, only unique geography. A full single pass was required (rather than an early-stop heuristic) because each city's rows are stored as one contiguous block in this file, not interleaved by time; reading only these 3 narrow columns kept the full pass to ~23 seconds.",
+  "unique_locations_found": 175,
+  "invalid_or_missing_coordinate_rows_skipped": 0,
+  "spatial_config_used": {
+    "radius_km_max": 250.0,
+    "k_neighbors": 8,
+    "source": "CONFIG.spatial (production config, unmodified)"
+  },
+  "locations_with_ge_1_neighbor_within_radius": 172,
+  "locations_with_ge_2_neighbors_within_radius": 171,
+  "locations_with_zero_neighbors_within_radius": 3,
+  "neighbor_count_distribution_before_k_cap": {
+    "min": 0,
+    "median": 8,
+    "max": 24,
+    "mean": 9.19
+  },
+  "neighbor_count_distribution_after_k_cap": {
+    "min": 0,
+    "median": 8,
+    "max": 8,
+    "mean": 6.52
+  },
+  "nearest_neighbor_distance_km_distribution": {
+    "min": 0.0,
+    "median": 72.67,
+    "max": 200.4,
+    "mean": 76.84
+  },
+  "k_nearest_selection_determinism_verified": true,
+  "method": "Uses the SAME production select_k_nearest_neighbors()/is_valid_coordinate() implementation from engine/spatial_neighbors.py against each unique location's real AWSReading(lat, lon), and the real CONFIG.spatial radius/K values -- not a separate ad hoc distance calculation."
+}

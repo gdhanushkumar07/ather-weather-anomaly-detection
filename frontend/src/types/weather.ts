@@ -24,6 +24,107 @@ export interface CanonicalLayerCard {
   details?: Record<string, any>;
 }
 
+// ── Temporal layer (layers.temporal) — mirrors backend engine/layer2_temporal.py
+// and lstm_temporal.py output. Fields the backend omits or sets to null are
+// typed optional / nullable: null means "no value", never zero.
+
+export type TemporalChannel = 'temperature_c' | 'pressure_hpa' | 'humidity_pct';
+
+export interface TemporalLSTMDetails {
+  lstm_available: boolean;
+  /** Why the LSTM did not run for this reading, e.g. 'insufficient_valid_history',
+   *  'current_observation_incomplete', 'inference_error', or a model load error. */
+  lstm_skip_reason?: string | null;
+  lstm_predicted_temperature_c?: number | null;
+  lstm_predicted_pressure_hpa?: number | null;
+  lstm_predicted_humidity_pct?: number | null;
+  temperature_residual?: number | null;
+  pressure_residual?: number | null;
+  humidity_residual?: number | null;
+  temperature_abs_residual?: number | null;
+  pressure_abs_residual?: number | null;
+  humidity_abs_residual?: number | null;
+  /** Anomaly-evidence scores in [0,1] — NOT probabilities. */
+  temperature_lstm_score?: number | null;
+  pressure_lstm_score?: number | null;
+  humidity_lstm_score?: number | null;
+  temperature_lstm_raw_score?: number | null;
+  pressure_lstm_raw_score?: number | null;
+  humidity_lstm_raw_score?: number | null;
+  lstm_residual_score?: number | null;
+  recent_lstm_peak?: number | null;
+  recent_lstm_peak_by_channel?: Partial<Record<TemporalChannel, number>>;
+  note?: string;
+}
+
+/** Present in TemporalDetails only when that rule actually triggered. */
+export interface TemporalSpikeEvidence {
+  current: number;
+  previous: number;
+  delta_c?: number;
+  delta_hpa?: number;
+  interval_s: number;
+  max_allowed_c?: number;
+  score: number;
+}
+
+export interface TemporalFrozenEvidence {
+  stuck_value: number;
+  window_size: number;
+  variance: number;
+  score: number;
+}
+
+export interface TemporalZScoreEvidence {
+  current: number;
+  median: number;
+  mad: number;
+  modified_z: number;
+  sample_count: number;
+  score: number;
+}
+
+export interface TemporalDetails {
+  /** 'EVALUATED' | 'INSUFFICIENT_DATA' */
+  status?: string;
+  note?: string;
+  historical_points?: Partial<Record<TemporalChannel, number>>;
+  /** Deepest rule-based per-channel history. */
+  history_points?: number;
+  /** Contiguous jointly-valid observations currently buffered for the LSTM. */
+  lstm_history_points?: number;
+  lstm_required_history_points?: number;
+  lstm?: TemporalLSTMDetails;
+  temp_spike?: TemporalSpikeEvidence;
+  press_spike?: TemporalSpikeEvidence;
+  frozen_temp?: TemporalFrozenEvidence;
+  zscore_temperature_c?: TemporalZScoreEvidence;
+  zscore_pressure_hpa?: TemporalZScoreEvidence;
+  zscore_humidity_pct?: TemporalZScoreEvidence;
+}
+
+export interface EvidenceAvailabilityEntry {
+  available: boolean;
+  reason: string | null;
+}
+
+/** Top-level `evidence_availability`: whether each layer could actually
+ *  assess this observation (distinct from "assessed and normal"). */
+export interface EvidenceAvailability {
+  physics?: EvidenceAvailabilityEntry;
+  temporal?: EvidenceAvailabilityEntry;
+  multivariate?: EvidenceAvailabilityEntry;
+  spatial?: EvidenceAvailabilityEntry;
+  /** Canonical key for the Sensor Health layer (matches `layers.sensor_health`). */
+  sensor_health?: EvidenceAvailabilityEntry;
+  /** @deprecated Legacy key used by older backends; read `sensor_health` instead. */
+  drift?: EvidenceAvailabilityEntry;
+}
+
+export type TemporalLayerCard = Omit<CanonicalLayerCard, 'details'> & {
+  details?: TemporalDetails;
+};
+
 export interface CanonicalDiagnosis {
   primary: string;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'INSUFFICIENT_EVIDENCE' | string;
@@ -118,6 +219,8 @@ export interface StationAnomalyAssessment {
   root_cause: string;
   affected_channels: string[];
   layers: Record<string, any>;
+  /** Which layers could actually assess this observation. */
+  evidence_availability?: EvidenceAvailability;
   reasons: string[];
   explanation: string;
   sensor_health_index: number;
@@ -212,3 +315,63 @@ export interface AnomaliesSummary {
 }
 
 export type WeatherLayerType = 'stations' | 'temperature' | 'wind' | 'pressure' | 'humidity';
+
+export interface LocationCoords {
+  lat: number;
+  lon: number;
+  name?: string;
+  country?: string;
+  admin1?: string;
+  elevation?: number;
+}
+
+export interface AtherStationData {
+  station_id: string;
+  id?: string;
+  name: string;
+  town?: string;
+  country?: string;
+  region?: string;
+  lat: number;
+  lon: number;
+  latitude?: number;
+  longitude?: number;
+  weather: {
+    temperature_c: number;
+    humidity_pct?: number;
+    pressure_hpa?: number;
+    wind_kph?: number;
+    condition?: string;
+  };
+  temperature?: number | null;
+  pressure?: number | null;
+  humidity?: number | null;
+  windSpeed?: number | null;
+  windDirection?: string | null;
+  condition?: string;
+  status: 'NORMAL' | 'WARNING' | 'ANOMALY' | 'OFFLINE';
+  anomaly: {
+    is_anomaly: boolean;
+    severity_score: number;
+    severity_label?: string;
+    root_cause?: string;
+    explanation?: string;
+  };
+  [key: string]: any;
+}
+
+export interface AIAnomalyItem {
+  id: string;
+  station_id?: string;
+  title?: string;
+  name?: string;
+  level?: 'D0' | 'D1' | 'D2' | 'D3' | 'D4' | 'D5';
+  lat: number;
+  lon: number;
+  riskScore: number;
+  category: string;
+  desc: string;
+  atherData?: AtherStationData;
+  [key: string]: any;
+}
+

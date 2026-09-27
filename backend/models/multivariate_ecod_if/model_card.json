@@ -1,0 +1,145 @@
+{
+ "artifact_type": "multivariate_model_card",
+ "schema_version": 1,
+ "model_version": "mv-ecod-if-1.0.0",
+ "created_utc": "2026-09-26T09:20:04.488592+00:00",
+ "source_dataset": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+ "dataset_row_count": 46082160,
+ "valid_row_count": 46082160,
+ "sample_count": {
+  "reference": 250169,
+  "calibration": 149849,
+  "test": 100263
+ },
+ "fit_rows": {
+  "ecod": 100000,
+  "isolation_forest": 250169
+ },
+ "train_period": {
+  "start": "1996-01-01",
+  "end_exclusive": "2016-01-01"
+ },
+ "calibration_period": {
+  "start": "2016-01-01",
+  "end_exclusive": "2021-01-01"
+ },
+ "test_period": {
+  "start": "2021-01-01",
+  "end_exclusive": "2100-01-01"
+ },
+ "feature_names": [
+  "z_temperature",
+  "z_pressure_msl_equivalent",
+  "z_humidity"
+ ],
+ "pressure_source_convention": "SURFACE",
+ "runtime_pressure_convention": "MSL",
+ "pressure_normalization_method": "SURFACE_TO_MSL_EQUIVALENT_CONSTANT_LAPSE_HYPSOMETRIC",
+ "climatological_elevation_proxy_method": "climatological_elevation_proxy: constant-lapse hypsometric inversion at the city's robust median surface pressure and median temperature, P_ref=1013.25 hPa (ICAO)",
+ "baseline_scope": "CITY within 75 km else GLOBAL_FALLBACK",
+ "random_seed": 42,
+ "ecod": {
+  "library": "pyod",
+  "version": "3.6.5",
+  "class_": "pyod.models.ecod.ECOD",
+  "params": {
+   "contamination": 0.01,
+   "n_jobs": 1
+  },
+  "fit_rows": 100000,
+  "raw_score": "decision_function (sum of per-feature tail log-probabilities); higher = more anomalous"
+ },
+ "isolation_forest": {
+  "library": "scikit-learn",
+  "version": "1.6.1",
+  "class_": "sklearn.ensemble.IsolationForest",
+  "params": {
+   "n_estimators": 200,
+   "max_samples": 256,
+   "max_features": 1.0,
+   "bootstrap": false,
+   "contamination": "auto",
+   "random_state": 42,
+   "n_jobs": 1
+  },
+  "fit_rows": 250169,
+  "raw_score": "-score_samples; higher = more anomalous"
+ },
+ "calibration": {
+  "method": "Percentiles of each detector's raw scores on the CLEAN calibration period (2016-2020): P95.0->evidence 0, P99.5->0.5 (operating threshold), P99.95->1.0, linear in between; NOT a probability. No injected anomaly was used.",
+  "percentiles": {
+   "center": 95.0,
+   "threshold": 99.5,
+   "extreme": 99.95
+  },
+  "detectors": {
+   "ecod": {
+    "center": 9.009504486746156,
+    "threshold": 13.062747539766121,
+    "extreme": 17.841519918636365,
+    "calibration_rows": 149849,
+    "calibration_min": 2.086943338284383,
+    "calibration_max": 24.522615352311476
+   },
+   "isolation_forest": {
+    "center": 0.5730614165057706,
+    "threshold": 0.6630040542051926,
+    "extreme": 0.7313485936826003,
+    "calibration_rows": 149849,
+    "calibration_min": 0.3959955245370711,
+    "calibration_max": 0.7759091284631018
+   }
+  }
+ },
+ "ecod_scoring_note": "PyOD's ECOD.decision_function ranks a row against train UNION the rows scored with it, so scores are batch-dependent. Runtime scores one reading at a time (train + 1 row); calibration therefore uses the exact single-row closed form, asserted equal to the library call.",
+ "combination": {
+  "method": "max",
+  "formula": "combined = max(ecod_evidence, isolation_forest_evidence)",
+  "rationale": "Simple and explainable: a joint state is flagged if EITHER detector finds it unusual; the driving detector is reported. Chosen a priori, not tuned on any fault.",
+  "evidence_is_probability": false
+ },
+ "clean_false_positive_rate": {
+  "on_calibration_in_sample": {
+   "ecod": {
+    ">=0.5": 0.0050050384053280305,
+    ">=0.7": 0.002055402438454711,
+    ">=0.75": 0.0015682453670027828
+   },
+   "isolation_forest": {
+    ">=0.5": 0.0050050384053280305,
+    ">=0.7": 0.0022022168983443333,
+    ">=0.75": 0.0017951404413776536
+   },
+   "combined": {
+    ">=0.5": 0.007467517300749421,
+    ">=0.7": 0.00317653104124819,
+    ">=0.75": 0.0025492328944470765
+   }
+  },
+  "on_test_2021_2026": {
+   "ecod": {
+    ">=0.5": 0.006113920389375941,
+    ">=0.7": 0.0025732323987911793,
+    ">=0.75": 0.0019149636456120404
+   },
+   "isolation_forest": {
+    ">=0.5": 0.006443054765965511,
+    ">=0.7": 0.0029023667753807487,
+    ">=0.75": 0.002433599632965301
+   },
+   "combined": {
+    ">=0.5": 0.008986365857794002,
+    ">=0.7": 0.003969560057049959,
+    ">=0.75": 0.0032215273829827554
+   }
+  },
+  "detector_agreement_when_either_ge_0_5": 0.3973362930077691
+ },
+ "libraries": {
+  "python": "3.9.6",
+  "pyod": "3.6.5",
+  "scikit_learn": "1.6.1",
+  "numpy": "2.0.2",
+  "joblib": "1.5.3"
+ }
+}

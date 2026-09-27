@@ -90,9 +90,56 @@ def _row_with_timeline(conn, incident_id: str) -> Optional[Dict[str, Any]]:
     return d
 
 
+def _source_clause(source: Optional[str]) -> tuple:
+    """`source` may be a single value, a comma-separated list
+    ("LIVE_AWS,SIMULATED_FEED"), or ALL/None for every source."""
+    if not source or source.upper() == "ALL":
+        return "", []
+    values = [v.strip() for v in source.split(",") if v.strip()]
+    if len(values) == 1:
+        return "source = ?", values
+    return f"source IN ({','.join('?' * len(values))})", values
+
+
+_SEVERITY_RANK = {"INFO": 0, "WARNING": 1, "CRITICAL": 2}
+
+
 def get(incident_id: str) -> Optional[Dict[str, Any]]:
     conn = get_connection()
-    return _row_with_timeline(conn, incident_id)
+    inc = _row_with_timeline(conn, incident_id)
+    if inc:
+        inc["lifecycle"] = build_lifecycle(inc)
+    return inc
+
+
+def build_lifecycle(inc: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Spec §11 incident narrative: observation -> detection -> escalation ->
+    incident creation -> recommendation -> operator actions -> resolution.
+    Derived only from persisted fields and the timeline."""
+    ctx = inc.get("context") or {}
+    steps: List[Dict[str, Any]] = []
+    first_obs = ctx.get("first_observation_at") or inc.get("observation_timestamp")
+    if first_obs:
+        steps.append({"stage": "OBSERVATION", "at": first_obs,
+                      "detail": f"{inc.get('parameter')} observation received from {inc.get('station_id')} ({inc.get('obs_source') or 'unknown source'})."})
+    steps.append({"stage": "DETECTION", "at": inc.get("detected_at"),
+                  "detail": ctx.get("summary") or f"ATHER engine flagged {inc.get('root_cause')}."})
+    for t in inc.get("timeline", []):
+        if t["event"] == "SEVERITY_ESCALATED":
+            steps.append({"stage": "ESCALATION", "at": t["at"], "detail": t.get("note")})
+        elif t["event"] == "DIAGNOSIS_REVISED":
+            steps.append({"stage": "DIAGNOSIS_REVISED", "at": t["at"], "detail": t.get("note")})
+    steps.append({"stage": "INCIDENT_CREATED", "at": inc.get("created_at"),
+                  "detail": f"Incident {inc['incident_id']} opened ({inc.get('severity')})."})
+    if inc.get("recommended_action"):
+        steps.append({"stage": "RECOMMENDATION", "at": inc.get("created_at"),
+                      "detail": (ctx.get("action_label") + ": " if ctx.get("action_label") else "") + inc["recommended_action"]})
+    for t in inc.get("timeline", []):
+        if t["event"] in ("ACKNOWLEDGED", "INVESTIGATING", "ESCALATED"):
+            steps.append({"stage": t["event"], "at": t["at"], "detail": t.get("note"), "actor": t.get("actor")})
+        elif t["event"] in ("RESOLVED", "DISMISSED"):
+            steps.append({"stage": t["event"], "at": t["at"], "detail": t.get("note"), "actor": t.get("actor")})
+    return steps
 
 
 def list_all(status: Optional[str] = None, source: str = "LIVE_AWS", station_id: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -104,9 +151,10 @@ def list_all(status: Optional[str] = None, source: str = "LIVE_AWS", station_id:
     if status:
         clauses.append("status = ?")
         params.append(status)
-    if source:
-        clauses.append("source = ?")
-        params.append(source)
+    src_sql, src_params = _source_clause(source)
+    if src_sql:
+        clauses.append(src_sql)
+        params.extend(src_params)
     if station_id:
         clauses.append("station_id = ?")
         params.append(station_id)
@@ -120,9 +168,11 @@ def get_active_counts(source: str = "LIVE_AWS") -> Dict[str, int]:
     computed from persisted incident rows, not re-derived independently
     elsewhere."""
     conn = get_connection()
+    src_sql, src_params = _source_clause(source)
+    where = f"WHERE {src_sql}" if src_sql else ""
     rows = conn.execute(
-        "SELECT status, severity, COUNT(*) as n FROM incidents WHERE source = ? GROUP BY status, severity",
-        (source,),
+        f"SELECT status, severity, COUNT(*) as n FROM incidents {where} GROUP BY status, severity",
+        src_params,
     ).fetchall()
     counts = {"active": 0, "critical": 0, "warning": 0, "investigating": 0, "escalated": 0, "acknowledged": 0, "new": 0}
     for r in rows:
@@ -173,17 +223,21 @@ def upsert_from_evaluation(snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]
     severity = _map_severity(snapshot.get("severity"))
     now = _now()
 
+    context_json = json.dumps(snapshot["context"], default=str) if snapshot.get("context") else None
     evidence_json = json.dumps(snapshot.get("evidence") or [])
     layers_json = json.dumps(snapshot["diagnostic_layers"]) if snapshot.get("diagnostic_layers") else None
     fusion_json = json.dumps(snapshot["fusion_result"]) if snapshot.get("fusion_result") else None
 
     conn = get_connection()
     with _write_lock:
+        # Correlate on station + parameter (+ source): one physical problem is
+        # one incident even while the diagnosis evolves (e.g. a first-reading
+        # SENSOR_SPIKE that persists and is re-diagnosed SINGLE_CHANNEL_FAULT).
         existing = conn.execute(
-            """SELECT incident_id FROM incidents
-               WHERE fingerprint = ? AND source = ? AND status NOT IN ('RESOLVED', 'DISMISSED')
+            """SELECT incident_id, severity, root_cause FROM incidents
+               WHERE station_id = ? AND parameter = ? AND source = ? AND status NOT IN ('RESOLVED', 'DISMISSED')
                ORDER BY created_at DESC LIMIT 1""",
-            (fp, incident_source),
+            (station_id, parameter, incident_source),
         ).fetchone()
 
         if existing:
@@ -195,7 +249,8 @@ def upsert_from_evaluation(snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]
                      root_cause_confidence = ?, recommended_action = ?,
                      evidence_json = ?, diagnostic_layers_json = ?, fusion_result_json = ?,
                      observation_count = observation_count + 1,
-                     obs_source = ?, freshness = ?, updated_at = ?
+                     obs_source = ?, freshness = ?, updated_at = ?,
+                     context_json = COALESCE(?, context_json)
                    WHERE incident_id = ?""",
                 (
                     now, snapshot.get("observation_timestamp"), snapshot.get("observed_value"),
@@ -203,9 +258,21 @@ def upsert_from_evaluation(snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]
                     snapshot.get("root_cause_confidence"), snapshot.get("recommended_action"),
                     evidence_json, layers_json, fusion_json,
                     snapshot.get("obs_source"), snapshot.get("freshness"), now,
+                    _merge_context(existing, context_json),
                     incident_id,
                 ),
             )
+            if existing["root_cause"] != anomaly_type:
+                conn.execute(
+                    "UPDATE incidents SET root_cause = ?, anomaly_type = ?, fingerprint = ? WHERE incident_id = ?",
+                    (anomaly_type, anomaly_type, fp, incident_id),
+                )
+                _add_timeline(conn, incident_id, "DIAGNOSIS_REVISED", now, None,
+                              f"Diagnosis revised {existing['root_cause']} -> {anomaly_type} as more evidence arrived.")
+            if _SEVERITY_RANK.get(severity, 0) > _SEVERITY_RANK.get(existing["severity"] or "", 0):
+                _add_timeline(conn, incident_id, "SEVERITY_ESCALATED", now, None,
+                              f"Severity escalated {existing['severity']} -> {severity} "
+                              f"(confidence {round((snapshot.get('confidence') or 0) * 100)}%).")
             conn.commit()
             return _row_with_timeline(conn, incident_id)
 
@@ -218,8 +285,8 @@ def upsert_from_evaluation(snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]
                  observed_value, expected_min, expected_max, unit,
                  anomaly_score, confidence, root_cause, root_cause_confidence, recommended_action,
                  evidence_json, diagnostic_layers_json, fusion_result_json,
-                 observation_count, obs_source, freshness, created_at, updated_at
-               ) VALUES (?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?,?,?)""",
+                 observation_count, obs_source, freshness, created_at, updated_at, context_json
+               ) VALUES (?,?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?, ?,?,?,?,?,?)""",
             (
                 incident_id, fp, station_id, snapshot.get("station_name"), snapshot.get("town"),
                 snapshot.get("region"), snapshot.get("country"),
@@ -230,15 +297,37 @@ def upsert_from_evaluation(snapshot: Dict[str, Any]) -> Optional[Dict[str, Any]]
                 snapshot.get("anomaly_score"), snapshot.get("confidence"), anomaly_type,
                 snapshot.get("root_cause_confidence"), snapshot.get("recommended_action"),
                 evidence_json, layers_json, fusion_json,
-                1, snapshot.get("obs_source"), snapshot.get("freshness"), now, now,
+                1, snapshot.get("obs_source"), snapshot.get("freshness"), now, now, context_json,
             ),
         )
         _add_timeline(conn, incident_id, "ANOMALY_DETECTED", now, None,
                        f"{parameter} anomaly detected at {station_id}.")
         _add_timeline(conn, incident_id, "INCIDENT_CREATED", now, None,
                        "Incident created from validated diagnostic evidence.")
+        if context_json and snapshot.get("recommended_action"):
+            _add_timeline(conn, incident_id, "RECOMMENDATION_ISSUED", now, None, snapshot["recommended_action"])
         conn.commit()
         return _row_with_timeline(conn, incident_id)
+
+
+def _merge_context(existing_row, new_context_json: Optional[str]) -> Optional[str]:
+    """Keeps the FIRST observation time of the incident while refreshing the
+    rest of the evidence context with the latest detection."""
+    if not new_context_json:
+        return None
+    try:
+        conn = get_connection()
+        row = conn.execute("SELECT context_json FROM incidents WHERE incident_id = ?",
+                           (existing_row["incident_id"],)).fetchone()
+        if row and row["context_json"]:
+            old = json.loads(row["context_json"])
+            new = json.loads(new_context_json)
+            if old.get("first_observation_at"):
+                new["first_observation_at"] = old["first_observation_at"]
+            return json.dumps(new, default=str)
+    except Exception:
+        pass
+    return new_context_json
 
 
 def _transition(incident_id: str, new_status: str, actor: Optional[str], note: str,
@@ -260,7 +349,9 @@ def _transition(incident_id: str, new_status: str, actor: Optional[str], note: s
         conn.execute(f"UPDATE incidents SET {set_clause} WHERE incident_id = ?", (*fields.values(), incident_id))
         _add_timeline(conn, incident_id, new_status, now, actor, note)
         conn.commit()
-        return _row_with_timeline(conn, incident_id)
+        inc = _row_with_timeline(conn, incident_id)
+        inc["lifecycle"] = build_lifecycle(inc)
+        return inc
 
 
 def acknowledge(incident_id: str, actor: Optional[str] = "operator") -> Dict[str, Any]:

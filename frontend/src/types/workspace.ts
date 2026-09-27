@@ -1,10 +1,12 @@
 /**
- * ATHER application-level information architecture (UI restructure).
+ * ATHER information architecture.
  *
- * Exactly one workspace is rendered as the main content area at a time.
- * 'station' is reached only by clicking a station on the Map or an
- * anomaly in the Anomalies workspace — it has no standalone top-nav tab,
- * matching the target architecture (Station Intelligence is a child of
- * Map/Anomalies, not a sibling top-level section).
+ * 'home'      public landing page
+ * 'overview'  what is happening across the network right now
+ * 'map'       live map — where is it happening
+ * 'anomalies' investigations (URL /investigations)
+ * 'testlab'   validation environment, separate from operations
+ * 'station'   focused station context (entered from the product)
+ * 'system'    pipeline and data-source health (entered from the live indicator)
  */
-export type Workspace = 'overview' | 'map' | 'station' | 'anomalies' | 'health' | 'testlab';
+export type Workspace = 'home' | 'overview' | 'map' | 'station' | 'anomalies' | 'testlab' | 'system';

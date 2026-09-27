@@ -24,6 +24,9 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from schema import AWSReading, FaultType
+
+# Spatial neighbors must share an observation time with the target (Phase 2 contract).
+_SPATIAL_FIXTURE_OBS = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 from engine.layer1_physics import PhysicsValidationLayer
 from engine.layer2_temporal import TemporalPatternLayer
 from engine.layer3_multivariate import MultivariateConsistencyLayer
@@ -158,13 +161,15 @@ class TestAtherAnomalyEngine(unittest.TestCase):
             elevation_m=300.0,
             temperature_c=41.5,  # Outlier compared to neighbors
             pressure_hpa=1012.0,
-            humidity_pct=50.0
+            humidity_pct=50.0,
+            observation_timestamp=_SPATIAL_FIXTURE_OBS,
         )
 
         # 4 Neighbors reporting ~24.0°C within 50 km
         neighbors = [
             AWSReading(station_id=f"NEIGHBOR_{i}", lat=20.0 + (i * 0.05), lon=75.0 + (i * 0.05), elevation_m=300.0,
-                       temperature_c=24.0 + (i * 0.2), pressure_hpa=1012.0, humidity_pct=52.0)
+                       temperature_c=24.0 + (i * 0.2), pressure_hpa=1012.0, humidity_pct=52.0,
+                       observation_timestamp=_SPATIAL_FIXTURE_OBS)
             for i in range(1, 5)
         ]
 

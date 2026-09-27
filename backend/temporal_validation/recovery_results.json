@@ -1,0 +1,52 @@
+{
+  "temperature_spike": {
+    "recovery_minutes": 70,
+    "recovery_step_offset": 7,
+    "detected": true
+  },
+  "temperature_drop": {
+    "recovery_minutes": 70,
+    "recovery_step_offset": 7,
+    "detected": true
+  },
+  "frozen_temperature": {
+    "recovery_minutes": 60,
+    "recovery_step_offset": 6,
+    "detected": true
+  },
+  "frozen_humidity": {
+    "recovery_minutes": 350,
+    "recovery_step_offset": 35,
+    "detected": true
+  },
+  "pressure_offset": {
+    "recovery_minutes": 380,
+    "recovery_step_offset": 38,
+    "detected": true
+  },
+  "humidity_offset": {
+    "recovery_minutes": 60,
+    "recovery_step_offset": 6,
+    "detected": true
+  },
+  "temperature_drift": {
+    "recovery_minutes": 80,
+    "recovery_step_offset": 8,
+    "detected": true
+  },
+  "noise_burst": {
+    "recovery_minutes": 60,
+    "recovery_step_offset": 6,
+    "detected": true
+  },
+  "missing_observation": {
+    "recovery_minutes": 0,
+    "recovery_step_offset": 0,
+    "detected": false
+  },
+  "stale_packet": {
+    "recovery_minutes": 0,
+    "recovery_step_offset": 0,
+    "detected": false
+  }
+}

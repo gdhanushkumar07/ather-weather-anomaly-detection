@@ -1,0 +1,71 @@
+{
+  "days": 5,
+  "n_steps_per_station": 720,
+  "events": {
+    "LR-SPIKE": {
+      "type": "temperature_spike",
+      "at": 300,
+      "duration": 1,
+      "magnitude": 12.0
+    },
+    "LR-DRIFT": {
+      "type": "temperature_drift",
+      "at": 300,
+      "duration": 25,
+      "rate": 0.4
+    },
+    "LR-FROZEN": {
+      "type": "frozen_temperature",
+      "at": 300,
+      "duration": 14,
+      "magnitude": null
+    },
+    "LR-NOISE": {
+      "type": "noise_burst",
+      "at": 300,
+      "duration": 3,
+      "magnitude": 2.0
+    },
+    "LR-QUIET": {
+      "type": "none",
+      "at": null,
+      "duration": 0,
+      "magnitude": null
+    }
+  },
+  "LR-SPIKE": {
+    "event_type": "temperature_spike",
+    "false_positive_rate_outside_event_gt_0_70": 0.0,
+    "max_score_inside_event_window": 1.0,
+    "steps_to_recovery_after_event_end": 7,
+    "minutes_to_recovery_after_event_end": 70
+  },
+  "LR-DRIFT": {
+    "event_type": "temperature_drift",
+    "false_positive_rate_outside_event_gt_0_70": 0.0,
+    "max_score_inside_event_window": 1.0,
+    "steps_to_recovery_after_event_end": 8,
+    "minutes_to_recovery_after_event_end": 80
+  },
+  "LR-FROZEN": {
+    "event_type": "frozen_temperature",
+    "false_positive_rate_outside_event_gt_0_70": 0.0,
+    "max_score_inside_event_window": 0.95,
+    "steps_to_recovery_after_event_end": 6,
+    "minutes_to_recovery_after_event_end": 60
+  },
+  "LR-NOISE": {
+    "event_type": "noise_burst",
+    "false_positive_rate_outside_event_gt_0_70": 0.0,
+    "max_score_inside_event_window": 1.0,
+    "steps_to_recovery_after_event_end": 5,
+    "minutes_to_recovery_after_event_end": 50
+  },
+  "LR-QUIET": {
+    "event_type": "none",
+    "false_positive_rate_outside_event_gt_0_70": 0.0,
+    "max_score_inside_event_window": null,
+    "steps_to_recovery_after_event_end": null,
+    "minutes_to_recovery_after_event_end": null
+  }
+}

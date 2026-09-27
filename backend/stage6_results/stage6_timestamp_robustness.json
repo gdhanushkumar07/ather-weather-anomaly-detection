@@ -1,0 +1,47 @@
+{
+  "bugs_found_and_fixed": [
+    {
+      "id": 1,
+      "title": "history_complete gap-reset did not catch duplicate/rollback/out-of-order timestamps",
+      "evidence": "A reading timestamped 30min BEFORE the buffer's last entry was silently appended at the END of the deque (confirmed: last entry timestamp became the earlier one), corrupting the chronological-order assumption the LSTM was trained on.",
+      "fix": "engine/layer2_temporal.py: gap-reset condition extended from gap_minutes > max_gap_minutes to (gap_minutes > max_gap_minutes) or (gap_minutes <= 0).",
+      "regression_tests": [
+        "test_09_timestamp_rollback_resets_and_does_not_false_flag",
+        "test_10_duplicate_timestamp_resets_history_complete",
+        "test_11_out_of_order_reading_resets_rather_than_corrupts"
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Step-rate check dt_seconds clamped a rollback to an artificial 1-second floor",
+      "evidence": "A plausible +2.0C change over a true 30-minute (rollback) gap produced dt_seconds=1, max_allowed=1.75C, and a FALSE 'Abrupt temperature change' (score 0.905) that would not have fired had the true 30-minute magnitude been used.",
+      "fix": "engine/layer2_temporal.py: dt_seconds now uses abs() of the timestamp delta before the max(1.0, ...) floor.",
+      "regression_tests": [
+        "test_09_timestamp_rollback_resets_and_does_not_false_flag (checks temp_spike detail is None)"
+      ]
+    },
+    {
+      "id": 3,
+      "title": "The reading that triggers a gap-reset still used the now-stale pre-gap history for its OWN LSTM prediction",
+      "evidence": "The gap/ordering check only ran at APPEND time, after the LSTM had already been evaluated using the pre-reset (stale or misordered) history for that same reading.",
+      "fix": "engine/layer2_temporal.py: the SAME check now runs BEFORE the LSTM call, so the triggering reading itself correctly reports insufficient_valid_history instead of predicting from stale/misordered data; the now-redundant later check at append time was removed.",
+      "regression_tests": [
+        "test_08_large_missing_data_gap_resets_and_rewarms"
+      ]
+    }
+  ],
+  "findings_documented_not_fixed": [
+    {
+      "title": "max_gap_minutes=15 with 10-min cadence means ANY single missed/invalid reading forces a full 144-reading rewarm",
+      "reasoning": "Two valid readings separated by exactly one missed tick are 20 minutes apart, exceeding the 15-minute tolerance by construction. This is a property of the current threshold value, not a code defect -- changing it would be threshold tuning without a Stage-6-scoped measurement basis, so it is reported, not changed."
+    },
+    {
+      "title": "Out-of-range temperature is not caught at the schema.py data_quality level (unlike pressure/humidity)",
+      "reasoning": "TemporalPatternLayer run in isolation treats a physically-impossible temperature as VALID and appends it to history_complete. In the full production pipeline this is still caught by Layer 1 Physics hard-veto before fusion weighs Layer 2 at all. Fixing schema.py is outside Temporal Intelligence ownership and was not done."
+    },
+    {
+      "title": "A spike followed by an instant snap-back to baseline is itself a second abrupt-change event",
+      "reasoning": "Not a bug: both directions of change are independently real per the existing rate-of-change semantics. Full decay of BOTH events combined legitimately takes up to ~2x residual_window, confirmed and documented via test_F."
+    }
+  ]
+}

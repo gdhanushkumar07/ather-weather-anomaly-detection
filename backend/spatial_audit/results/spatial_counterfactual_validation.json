@@ -1,0 +1,67 @@
+{
+  "unit_tests": {
+    "tests_run": 29,
+    "failures": 0,
+    "errors": 0,
+    "all_passed": true
+  },
+  "simulation_scenarios": {
+    "SPATIAL_OUTLIER": {
+      "counterfactual_verification_present": true,
+      "overall_status": "INSUFFICIENT_EVIDENCE",
+      "channels_reported": [
+        "temperature",
+        "pressure",
+        "humidity"
+      ]
+    },
+    "REGIONAL_WEATHER_EVENT": {
+      "counterfactual_verification_present": true,
+      "overall_status": "INSUFFICIENT_EVIDENCE",
+      "channels_reported": [
+        "temperature",
+        "pressure",
+        "humidity"
+      ]
+    },
+    "COMBINED_SENSOR_FAILURE": {
+      "counterfactual_verification_present": true,
+      "overall_status": "CONTRADICTED",
+      "channels_reported": [
+        "temperature",
+        "pressure",
+        "humidity"
+      ]
+    }
+  },
+  "production_shape": {
+    "stations_evaluated": 300,
+    "elapsed_seconds": 0.699,
+    "ms_per_station": 2.329,
+    "overall_statuses_observed": [
+      "CONTRADICTED",
+      "INSUFFICIENT_EVIDENCE",
+      "SUPPORTED"
+    ],
+    "non_finite_evidence_strength_detected": 0,
+    "determinism_verified_repeat_call": true
+  },
+  "historical_computability": {
+    "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance. NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. NO ground-truth labels exist for 'genuinely regional' vs 'genuinely isolated' readings -- this checks computability/determinism only, never real-world verification accuracy.",
+    "method_disclaimer": "One representative (first-row) reading per city -- NOT simultaneous cross-city observations, same scope limitation as the S2/S3/S4 validation scripts (S6 is a single-snapshot mechanism with no temporal dimension of its own, unlike S5).",
+    "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+    "source_file_untouched": true,
+    "extract_seconds": 32.65,
+    "evaluate_seconds": 0.21,
+    "unique_locations": 175,
+    "evaluation_errors": 0,
+    "non_finite_evidence_strength_detected": 0,
+    "overall_statuses_observed": [
+      "CONTRADICTED",
+      "INSUFFICIENT_EVIDENCE",
+      "SUPPORTED"
+    ],
+    "determinism_verified_reversed_pool_order": true
+  },
+  "method": "Runs the REAL production pipeline (S1 KNN + S2 robust stats + S3 attribution + S6 counterfactual verification, all real production code) via AnomalyDetector.evaluate_reading() -- not a reimplemented or simplified pass."
+}

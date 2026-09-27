@@ -1,6 +1,7 @@
 """
 Global configuration, physical constants, and default hyper-parameters for ATHER.
 """
+import os
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -38,9 +39,23 @@ class TemporalThresholds:
     # Frozen / stuck sensor parameters
     frozen_window_size: int = 12  # 12 consecutive readings (~2 hours)
     frozen_variance_threshold: float = 1e-6
+    # A persistence ("stuck sensor") verdict also requires the unchanged run
+    # to span at least this much wall-clock time. A count-only window
+    # silently assumes a 10-minute cadence: at a 1-minute cadence, 12
+    # identical 0.1 hPa barometer readings are normal, not a fault
+    # (WMO-No. 8 / GAW QC persistence checks are time-based).
+    frozen_min_span_minutes: float = float(os.environ.get("ATHER_FROZEN_MIN_SPAN_MIN", "60"))
 
     # Rolling z-score anomaly threshold
     z_score_threshold: float = 3.5
+    # Floor for the MAD in the robust z-score, per channel. During quiet
+    # periods the MAD collapses to the sensor's quantisation step (0.1 °C),
+    # which made a routine 0.6 °C change score z ≈ 4. A deviation smaller
+    # than the instrument's achievable measurement uncertainty (WMO-No. 8,
+    # Annex 1.A: T 0.2 K, P 0.15 hPa, RH ~1 %) cannot be significant.
+    zscore_mad_floor: Dict[str, float] = field(default_factory=lambda: {
+        "temperature_c": 0.2, "pressure_hpa": 0.15, "humidity_pct": 1.0,
+    })
     rolling_window_samples: int = 72  # 12 hours of 10-minute readings
 
 @dataclass
@@ -48,6 +63,25 @@ class SpatialThresholds:
     neighbor_distance_km_max: float = 250.0
     spatial_z_threshold: float = 3.0
     min_neighbors_required: int = 2
+    # S1 — Spatial Neighborhood Foundation (engine/spatial_neighbors.py):
+    # the maximum number of nearest-in-radius stations kept after distance
+    # sorting. Default 8 matches the previous hardcoded
+    # `max_neighbors=8` in AnomalyDetector.get_neighbors_for_reading(), so
+    # existing production/test behavior is unchanged at this default (no
+    # currently exercised scenario has more than 5 neighbors within
+    # radius). Distinct from min_neighbors_required, which is the FLOOR
+    # below which Spatial refuses to draw a conclusion; this is the CEILING
+    # on how many of the nearest candidates are used once there are enough.
+    spatial_k_neighbors: int = 8
+    # Observation-time alignment (Phase 2 spatial validation): a neighbor is
+    # only "simultaneous" evidence for the target if BOTH were observed within
+    # this many minutes of each other (observation_timestamp, never the
+    # processing clock). A neighbor - or target - with no known observation
+    # time cannot be verified as simultaneous and is NOT used.
+    # 30 min is a policy default, not a measured value: 3x the 10-minute AWS
+    # reporting cadence and 2x the ~15-minute cadence at which Open-Meteo's
+    # `current` block updates. Tighten or relax per deployment.
+    neighbor_time_tolerance_minutes: float = 30.0
 
 @dataclass
 class DriftThresholds:
@@ -57,6 +91,27 @@ class DriftThresholds:
     temp_tolerance_c: float = 1.0     # WMO AWS standard accuracy
     humidity_tolerance_pct: float = 3.0
     pressure_tolerance_hpa: float = 0.5
+
+    # ── Sensor Health / CUSUM (Phase 3): parameters that used to be hard-coded
+    # in engine/layer5_drift.py, now explicit. Defaults reproduce the previous
+    # numeric behavior except where a note says otherwise. They are engineering
+    # policy defaults, NOT values calibrated against real sensor data.
+    # The CUSUM runs on a sensor's residual against its OWN recent baseline (an
+    # exponential moving average). Units: channel units (deg C, hPa, %RH);
+    # per-channel multipliers of slack/threshold live in layer5_drift.py
+    # (CHANNEL_CUSUM_SCALE).
+    ema_beta: float = 0.97                    # baseline memory: time constant ~ 1/(1-beta) ~ 33 samples
+    cusum_leak: float = 0.98                  # per-sample decay of each accumulator (bounded memory)
+    cusum_residual_clip_factor: float = 3.0   # residual is clipped to +/- factor*slack (NEW): one outlier
+                                              # can add at most (factor-1)*slack, so drift needs persistence
+    min_samples_for_drift: int = 12           # NEW gate: no drift score/tier below this many valid samples
+                                              # (the module always documented "> 12 samples")
+    reset_gap_minutes: float = 360.0          # NEW: a gap longer than this reinitializes the (stale)
+                                              # baseline; ~ one baseline time constant at 10-min cadence
+    health_error_rate_min_samples: int = 20   # NEW: error-rate denominator floor so 1 flagged reading of
+                                              # the first few cannot dominate the health index
+    plausible_cadence_min_minutes: float = 1.0    # rate-per-day / tolerance projections are only reported when
+    plausible_cadence_max_minutes: float = 60.0   # the observed sampling interval is within this range
 
 @dataclass
 class PINNThresholds:
@@ -89,6 +144,45 @@ class FusionThresholds:
     ensemble_anomaly_threshold: float = 0.55
 
 @dataclass
+class LSTMTemporalConfig:
+    """
+    Stage 4: configuration for the optional LSTM temporal-prediction
+    evidence source inside TemporalPatternLayer (engine/layer2_temporal.py).
+    This ADDS evidence alongside the existing rule-based temporal checks —
+    it never replaces them (see engine/lstm_temporal.py).
+
+    All paths are relative to the backend/ directory.
+    """
+    enabled: bool = True  # if artifacts fail to load, the layer disables itself regardless of this flag
+    model_dir: str = "models/temporal_lstm"
+    calibration_path: str = "models/temporal_lstm/stage3_results/calibration_stats.json"
+    sequence_length: int = 144            # must match the trained Stage 2 model's window length
+    residual_window: int = 6              # rolling recent-peak window, ~60 min at 10-min cadence
+    reason_report_threshold: float = 0.5  # min channel score to mention LSTM evidence in the reason string
+    max_gap_minutes: float = 15.0         # a joint-valid reading arriving after a bigger gap than this
+                                           # resets the LSTM history buffer — Stage 2 trained on strictly
+                                           # contiguous 10-min steps, so a stretched/discontiguous sequence
+                                           # must not be silently fed to the model as if it were 24h of history
+    combined_score_calibration_factor: float = 1.44
+    # STAGE 5 CALIBRATION (measured, not guessed): each channel's raw
+    # residual is normalized by its OWN Stage 3 per-channel P99 (a ~1%
+    # exceedance target for THAT channel alone). But the final evidence
+    # combines 3 channels via max() AND a 6-step rolling max — combining
+    # several ~1%-tail signals via max() inflates the exceedance rate far
+    # past 1% (measured on 75 real Stage 1 normal-validation stations,
+    # 64,800 observations: without this factor, the combined recent-peak
+    # score exceeded 0.70 on 16.3% of genuinely NORMAL readings — enough to
+    # trip fusion's acute_temporal>=0.70 override on roughly 1 in 6 normal
+    # readings). This factor is the measured P99 of the raw (pre-clip)
+    # channel-max + 6-step-rolling-max score on that same normal traffic,
+    # so post-correction ~99% of normal traffic's combined evidence again
+    # falls at or below 1.0 — restoring the ORIGINAL single-channel P99
+    # design's intended rarity to the actual combined quantity fusion sees.
+    # Provenance: backend/stage5_results/normal_calibration_summary.json
+    # (calibration_factor_derivation). Setting this to 1.0 reproduces exact
+    # pre-Stage-5 (Stage 4) behavior.
+
+@dataclass
 class AtherConfig:
     physics: PhysicsThresholds = field(default_factory=PhysicsThresholds)
     temporal: TemporalThresholds = field(default_factory=TemporalThresholds)
@@ -96,6 +190,7 @@ class AtherConfig:
     drift: DriftThresholds = field(default_factory=DriftThresholds)
     fusion: FusionThresholds = field(default_factory=FusionThresholds)
     pinn: PINNThresholds = field(default_factory=PINNThresholds)
+    lstm_temporal: LSTMTemporalConfig = field(default_factory=LSTMTemporalConfig)
 
     # Default AWS Station metadata
     default_station_id: str = "ATHER_AWS_01"

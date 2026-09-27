@@ -8,7 +8,9 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // Override to point a second dev server at another backend (e.g. an
+        // isolated test instance): ATHER_API_TARGET=http://127.0.0.1:8021
+        target: process.env.ATHER_API_TARGET || 'http://127.0.0.1:8001',
         changeOrigin: true,
       }
     }

@@ -1,0 +1,139 @@
+{
+  "per_type": {
+    "temperature_spike": {
+      "n_cases": 20,
+      "n_anomalous_rows": 20,
+      "median_max_rule_score_during_anomaly": 1.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": 1.0,
+      "median_max_recent_peak_during_anomaly": 1.0,
+      "median_max_integrated_score_during_anomaly": 1.0,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "B: LSTM confirms existing rule evidence (both strong, largely redundant)"
+    },
+    "temperature_drop": {
+      "n_cases": 20,
+      "n_anomalous_rows": 20,
+      "median_max_rule_score_during_anomaly": 1.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": 1.0,
+      "median_max_recent_peak_during_anomaly": 1.0,
+      "median_max_integrated_score_during_anomaly": 1.0,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "B: LSTM confirms existing rule evidence (both strong, largely redundant)"
+    },
+    "frozen_temperature": {
+      "n_cases": 20,
+      "n_anomalous_rows": 343,
+      "median_max_rule_score_during_anomaly": 0.95,
+      "median_max_lstm_instantaneous_score_during_anomaly": 0.5158,
+      "median_max_recent_peak_during_anomaly": 0.5291,
+      "median_max_integrated_score_during_anomaly": 0.95,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "C: LSTM contributes little (rules already strong, LSTM weak)"
+    },
+    "frozen_humidity": {
+      "n_cases": 20,
+      "n_anomalous_rows": 373,
+      "median_max_rule_score_during_anomaly": 0.95,
+      "median_max_lstm_instantaneous_score_during_anomaly": 0.31,
+      "median_max_recent_peak_during_anomaly": 0.3952,
+      "median_max_integrated_score_during_anomaly": 0.95,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "C: LSTM contributes little (rules already strong, LSTM weak)"
+    },
+    "temperature_drift": {
+      "n_cases": 20,
+      "n_anomalous_rows": 461,
+      "median_max_rule_score_during_anomaly": 0.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": 0.6303,
+      "median_max_recent_peak_during_anomaly": 0.6378,
+      "median_max_integrated_score_during_anomaly": 0.7635,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "C: LSTM contributes little (neither strong on this median measure)"
+    },
+    "pressure_offset": {
+      "n_cases": 20,
+      "n_anomalous_rows": 853,
+      "median_max_rule_score_during_anomaly": 1.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": 1.0,
+      "median_max_recent_peak_during_anomaly": 1.0,
+      "median_max_integrated_score_during_anomaly": 1.0,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "B: LSTM confirms existing rule evidence (both strong, largely redundant)"
+    },
+    "humidity_offset": {
+      "n_cases": 20,
+      "n_anomalous_rows": 944,
+      "median_max_rule_score_during_anomaly": 0.8239,
+      "median_max_lstm_instantaneous_score_during_anomaly": 1.0,
+      "median_max_recent_peak_during_anomaly": 1.0,
+      "median_max_integrated_score_during_anomaly": 1.0,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "B: LSTM confirms existing rule evidence (both strong, largely redundant)"
+    },
+    "noise_burst": {
+      "n_cases": 20,
+      "n_anomalous_rows": 38,
+      "median_max_rule_score_during_anomaly": 0.7002,
+      "median_max_lstm_instantaneous_score_during_anomaly": 0.8413,
+      "median_max_recent_peak_during_anomaly": 0.8413,
+      "median_max_integrated_score_during_anomaly": 1.0,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "B: LSTM confirms existing rule evidence (both strong, largely redundant)"
+    },
+    "missing_observation": {
+      "n_cases": 20,
+      "n_anomalous_rows": 68,
+      "median_max_rule_score_during_anomaly": 0.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": null,
+      "median_max_recent_peak_during_anomaly": null,
+      "median_max_integrated_score_during_anomaly": 0.4069,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "C: LSTM contributes little (neither strong on this median measure)"
+    },
+    "stale_packet": {
+      "n_cases": 20,
+      "n_anomalous_rows": 99,
+      "median_max_rule_score_during_anomaly": 0.0,
+      "median_max_lstm_instantaneous_score_during_anomaly": 0.1646,
+      "median_max_recent_peak_during_anomaly": 0.4034,
+      "median_max_integrated_score_during_anomaly": 0.4081,
+      "median_lstm_instantaneous_score_on_normal_segment_of_same_scenario": null,
+      "median_rule_score_on_normal_segment_of_same_scenario": null,
+      "classification": "C: LSTM contributes little (neither strong on this median measure)"
+    }
+  },
+  "reason_threshold_sweep_on_anomaly_data": {
+    "0.25": {
+      "anomaly_row_explanation_rate_pct": 89.22025473749612,
+      "normal_row_explanation_rate_pct_within_anomaly_scenarios": 97.4382811693007
+    },
+    "0.4": {
+      "anomaly_row_explanation_rate_pct": 50.51258154706431,
+      "normal_row_explanation_rate_pct_within_anomaly_scenarios": 83.83431463691767
+    },
+    "0.5": {
+      "anomaly_row_explanation_rate_pct": 32.18390804597701,
+      "normal_row_explanation_rate_pct_within_anomaly_scenarios": 72.94442722859209
+    },
+    "0.6": {
+      "anomaly_row_explanation_rate_pct": 20.22367194780988,
+      "normal_row_explanation_rate_pct_within_anomaly_scenarios": 64.68340047515753
+    },
+    "0.75": {
+      "anomaly_row_explanation_rate_pct": 11.835973904939422,
+      "normal_row_explanation_rate_pct_within_anomaly_scenarios": 57.179010432806535
+    }
+  },
+  "n_scenarios_evaluated": 200,
+  "n_rows_evaluated": 41943,
+  "subsample_size_per_type": 20
+}

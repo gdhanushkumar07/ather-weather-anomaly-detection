@@ -1,0 +1,71 @@
+{
+  "provenance_disclaimer": "Historical Indian weather data of UNCERTAIN provenance. NOT confirmed AWS telemetry. NOT confirmed IMD AWS telemetry. This is a COMPUTABILITY/BEHAVIOR check of the S2 robust-statistics pipeline on real magnitudes and real geography, NOT a regional-event or simultaneous-weather-coherence claim, and NOT an accuracy measurement of any kind.",
+  "method_disclaimer": "Each city contributes ONE representative reading (its own first row in the file) -- these are NOT simultaneous cross-city observations. This validates that the robust statistics pipeline runs correctly on real values/real geography, not a claim about real-time regional coherence.",
+  "source_file": "/Users/saicharan/Desktop/sih win/ATHER_DATA/indian_weather_1996_2026/Indian_Weather_Dataset.csv",
+  "source_file_untouched": true,
+  "extract_seconds": 32.79,
+  "unique_locations_extracted": 175,
+  "spatial_config_used": {
+    "radius_km_max": 250.0,
+    "k_neighbors": 8,
+    "min_neighbors_required": 2
+  },
+  "locations_evaluated_with_sufficient_neighbors": 171,
+  "locations_insufficient_neighbors": 4,
+  "non_finite_robust_values_detected": 0,
+  "determinism_verified": true,
+  "per_channel": {
+    "temperature_c": {
+      "channels_computed": 171,
+      "channels_insufficient_valid_neighbors": 0,
+      "mad_zero_fallback_count": 47,
+      "idw_z_distribution": {
+        "min": 0.013,
+        "median": 0.557,
+        "max": 6.341,
+        "mean": 0.782
+      },
+      "robust_z_abs_distribution": {
+        "min": 0.0,
+        "median": 0.65,
+        "max": 7.819,
+        "mean": 1.089
+      }
+    },
+    "pressure_hpa": {
+      "channels_computed": 171,
+      "channels_insufficient_valid_neighbors": 0,
+      "mad_zero_fallback_count": 4,
+      "idw_z_distribution": {
+        "min": 0.009,
+        "median": 0.442,
+        "max": 11.999,
+        "mean": 0.863
+      },
+      "robust_z_abs_distribution": {
+        "min": 0.0,
+        "median": 0.754,
+        "max": 36.011,
+        "mean": 2.901
+      }
+    },
+    "humidity_pct": {
+      "channels_computed": 171,
+      "channels_insufficient_valid_neighbors": 0,
+      "mad_zero_fallback_count": 61,
+      "idw_z_distribution": {
+        "min": 0.001,
+        "median": 0.667,
+        "max": 4.305,
+        "mean": 0.843
+      },
+      "robust_z_abs_distribution": {
+        "min": 0.0,
+        "median": 0.75,
+        "max": 10.5,
+        "mean": 1.004
+      }
+    }
+  },
+  "method": "Runs the REAL production engine.layer4_spatial.SpatialNeighborLayer.evaluate() (which internally uses the real S1 select_k_nearest_neighbors() and the real S2 compute_robust_spatial_evidence()) for each of the 175 real city locations as a target against the other 174 real locations as its candidate neighbor pool, using the real CONFIG.spatial values -- not a reimplemented calculation."
+}

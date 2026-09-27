@@ -1,12 +1,36 @@
-import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { Plus, Minus, Globe, Satellite, Moon, Maximize, ChevronLeft, ChevronRight, ShieldAlert, Crosshair } from 'lucide-react';
 
 import { WeatherLayerType } from '../types/weather';
-import { setupStationLayers, setStationLayersVisibility, updateSelectedStationHalo, setParameterLayer, ParameterField, setAnomalyOverlayVisibility, startAnomalyPulse, collectIncidentTargets } from './StationLayer';
+import {
+  setupStationLayers,
+  setStationLayersVisibility,
+  updateSelectedStationHalo,
+  updateNeighborConnections,
+  clearNeighborConnections,
+  setParameterLayer,
+  ParameterField,
+  setAnomalyOverlayVisibility,
+  startAnomalyPulse,
+  collectIncidentTargets
+} from './StationLayer';
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
+import { AWSNeighbor } from '../aws/awsGeo';
+import { StationMarkerLayer } from './StationMarkerLayer';
+import { CursorCoords } from './CursorCoords';
+import { setupGraticule } from './Graticule';
+
+// Matches --bg-app in index.css, so any not-yet-loaded tile area (network
+// latency during pan/zoom) shows a seamless dark fill instead of a black gap.
+const MAP_BACKGROUND_COLOR = '#080c14';
+
+// Same "close enough to fly to a single station" zoom level already used by
+// the existing "fly to selected station" effect below -- reused here so the
+// 3D AWS model appears exactly when the map itself considers you at
+// station-level zoom, not an arbitrarily different threshold.
 
 export interface MapViewState {
   center: [number, number];
@@ -31,6 +55,9 @@ interface AtherMapProps {
   activeLayers: Record<WeatherLayerType, boolean>;
   basemap: 'dark' | 'satellite';
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
+  isGlobeMode?: boolean;
+  onToggleGlobeMode?: () => void;
+  neighbors?: AWSNeighbor[];
   showAnomalyOverlay?: boolean;
   /** Whether the Map workspace is the one currently visible. Used to skip
    * the fly-to-selected-station animation when nobody can see it (station
@@ -48,6 +75,9 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
   activeLayers,
   basemap,
   onToggleBasemap,
+  isGlobeMode = false,
+  onToggleGlobeMode,
+  neighbors = [],
   showAnomalyOverlay = true,
   isActive = true
 }, ref) => {
@@ -96,6 +126,14 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
       container: mapContainerRef.current,
       style: {
         version: 8,
+        // Globe projection is set once, here, and never toggled again.
+        // MapLibre's own renderer automatically and smoothly blends globe
+        // rendering into flat mercator as the user zooms in (see
+        // GlobeTransform's built-in `_globeness` interpolation) -- forcing a
+        // manual setProjection() switch at a fixed zoom breakpoint fights
+        // against that built-in transition and was the actual cause of the
+        // stutter/sudden-switch/seam artifacts during zoom.
+        projection: { type: 'globe' },
         sources: {
           esri_dark_base: {
             type: 'raster',
@@ -130,12 +168,22 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
         },
         layers: [
           {
+            // Renders beneath everything else. Without this, any screen
+            // area whose raster tile hasn't finished loading yet (network
+            // latency during fast pan/zoom) shows the canvas's own clear
+            // color -- effectively a black gap/flash. A solid fill matching
+            // the app's own background makes that moment invisible instead.
+            id: 'ather-map-background',
+            type: 'background',
+            paint: { 'background-color': MAP_BACKGROUND_COLOR }
+          },
+          {
             id: 'esri-dark-gray-base',
             type: 'raster',
             source: 'esri_dark_base',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'visible' }
+            layout: { visibility: basemap === 'dark' ? 'visible' : 'none' }
           },
           {
             id: 'esri-dark-gray-reference',
@@ -143,7 +191,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_dark_ref',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'visible' }
+            layout: { visibility: basemap === 'dark' ? 'visible' : 'none' }
           },
           {
             id: 'esri-satellite-base',
@@ -151,7 +199,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_sat_base',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'none' }
+            layout: { visibility: basemap === 'satellite' ? 'visible' : 'none' }
           },
           {
             id: 'esri-satellite-reference',
@@ -159,12 +207,13 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             source: 'esri_sat_ref',
             minzoom: 0,
             maxzoom: 19,
-            layout: { visibility: 'none' }
+            layout: { visibility: basemap === 'satellite' ? 'visible' : 'none' }
           }
         ]
       },
-      center: [15, 20],
-      zoom: 1.9,
+      // India-wide network view (the live AWS network); users can still zoom out.
+      center: [80.5, 22.5],
+      zoom: 3.7,
       minZoom: 1.5,
       maxZoom: 18,
       pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
@@ -173,6 +222,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
 
     map.on('load', () => {
+      setupGraticule(map);
       mapRef.current = map;
       setIsMapReady(true);
     });
@@ -235,6 +285,21 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
 
   const currentIncident = incidentTargets[incidentIndex] ?? null;
 
+  // 2c. Fly to World 3D Globe when globe mode is toggled
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    if (isGlobeMode) {
+      map.flyTo({
+        center: [15, 20],
+        zoom: 1.8,
+        duration: 1200,
+        essential: true
+      });
+    }
+  }, [isGlobeMode, isMapReady]);
+
   // 3. Station layer visibility toggle
   useEffect(() => {
     const map = mapRef.current;
@@ -276,6 +341,32 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     updateSelectedStationHalo(map, selectedStationId);
   }, [selectedStationId, isMapReady]);
 
+  // 4b. Three-neighbor validation connection lines + highlight markers.
+  // Native MapLibre line/circle layers -- geo-attachment during pan/zoom/
+  // rotate is handled by the map itself (see StationLayer.ts), same as
+  // every other station layer.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !isMapReady) return;
+
+    if (!selectedStationId || neighbors.length === 0 || !stationsGeoJSON) {
+      clearNeighborConnections(map);
+      return;
+    }
+    const primaryFeature = stationsGeoJSON.features.find((f) => f.properties?.id === selectedStationId);
+    if (!primaryFeature || primaryFeature.geometry.type !== 'Point') {
+      clearNeighborConnections(map);
+      return;
+    }
+    const [pLng, pLat] = primaryFeature.geometry.coordinates;
+    updateNeighborConnections(
+      map,
+      { lng: pLng, lat: pLat },
+      neighbors.map((n) => ({ lng: n.lng, lat: n.lat }))
+    );
+  }, [selectedStationId, neighbors, stationsGeoJSON, isMapReady]);
+
+
   // NOTE: There used to be a "Vane Temperature WebGL Layer" here that fetched
   // a fully synthetic, procedurally generated global temperature field from
   // /api/weather/grid (see backend/app/weather/grid_service.py — a math
@@ -301,7 +392,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
             if (!mapRef.current) return;
             const layer = new VaneParticlesLayer(grid);
             particlesLayerRef.current = layer;
-            const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-dark-gray-reference';
+            const beforeId = map.getLayer('ather-unclustered-ring') ? 'ather-unclustered-ring' : 'esri-dark-gray-reference';
             if (!map.getLayer(layer.id)) {
               map.addLayer(layer, beforeId);
             }
@@ -309,7 +400,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
           .catch((err) => console.error('Failed to load wind field', err));
       } else {
         if (!map.getLayer(particlesLayerRef.current.id)) {
-          const beforeId = map.getLayer('ather-clusters') ? 'ather-clusters' : 'esri-light-gray-reference';
+          const beforeId = map.getLayer('ather-unclustered-ring') ? 'ather-unclustered-ring' : 'esri-light-gray-reference';
           map.addLayer(particlesLayerRef.current, beforeId);
         }
       }
@@ -362,26 +453,47 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     }
   }, [selectedStationId, stationsGeoJSON]);
 
-  const handleZoomIn = () => {
+  const handleZoomIn = useCallback(() => {
     mapRef.current?.zoomIn({ duration: 300 });
-  };
+  }, []);
 
-  const handleZoomOut = () => {
+  const handleZoomOut = useCallback(() => {
     mapRef.current?.zoomOut({ duration: 300 });
-  };
+  }, []);
 
-  const handleResetWorldView = () => {
+  const handleResetWorldView = useCallback(() => {
     mapRef.current?.flyTo({
-      center: [15, 20],
-      zoom: 1.9,
+      // India-wide network view (the live AWS network); users can still zoom out.
+      center: [80.5, 22.5],
+      zoom: 3.7,
       duration: 1200,
       essential: true
     });
-  };
+  }, []);
+
+  // Selected station's real coordinates/status, for the 3D AWS overlay.
+  // Recomputed only when the selection or the underlying data actually
+  // changes -- not on every render.
 
   return (
     <div className="map-viewport">
       <div ref={mapContainerRef} className="maplibre-container" />
+      <CursorCoords map={isMapReady ? mapRef.current : null} />
+
+      {/* Individual stations: animated weather-station markers (SVG/CSS). Clusters,
+          data, camera and selection are unchanged - see StationMarkerLayer.tsx. */}
+      {isMapReady && mapRef.current && (
+        <StationMarkerLayer
+          map={mapRef.current}
+          visible={activeLayers.stations}
+          selectedStationId={selectedStationId}
+          onSelectStation={(id) => onSelectStationRef.current(id)}
+          showAnomalyRadar={showAnomalyOverlay}
+          neighborIds={neighbors.map((n) => n.id)}
+          dataVersion={stationsGeoJSON}
+        />
+      )}
+
 
       {/* Phase 9: Active-Layer Indicator Badge */}
       <div className="active-layer-indicator-pill">
@@ -518,8 +630,12 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
           </button>
         </div>
 
-        <button className="map-control-btn" onClick={handleResetWorldView} title="Reset to Full World View">
-          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+        <button
+          className={`map-control-btn ${isGlobeMode ? 'active-sat' : ''}`}
+          onClick={onToggleGlobeMode || handleResetWorldView}
+          title={isGlobeMode ? "Exit 3D Globe to 2D Map" : "Open 3D Satellite Earth Globe"}
+        >
+          <Globe className={`w-3.5 h-3.5 ${isGlobeMode ? 'text-amber-400' : 'text-cyan-400'}`} />
         </button>
 
         <button

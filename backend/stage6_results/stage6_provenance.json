@@ -1,0 +1,40 @@
+{
+  "stage6_run_timestamp_utc": "2026-09-20T15:51:24.417741+00:00",
+  "seed": 42,
+  "stage2_model_artifact": {
+    "path": "models/temporal_lstm/model.pt",
+    "exists": true,
+    "mtime": "2026-09-20T07:48:40.728605+00:00",
+    "size_bytes": 76157
+  },
+  "stage2_scaler_artifact": {
+    "path": "models/temporal_lstm/scaler.pkl",
+    "exists": true,
+    "mtime": "2026-09-20T07:48:40.730620+00:00",
+    "size_bytes": 522
+  },
+  "stage3_calibration_artifact": {
+    "path": "models/temporal_lstm/stage3_results/calibration_stats.json",
+    "exists": true,
+    "mtime": "2026-09-20T09:57:33.796720+00:00",
+    "size_bytes": 1050
+  },
+  "stage1_dataset": {
+    "path": "data/temporal/synthetic_temporal_normal.csv",
+    "exists": true,
+    "mtime": "2026-09-20T07:15:44.663126+00:00",
+    "size_bytes": 49384746
+  },
+  "combined_score_calibration_factor_unchanged_from_stage5": 1.44,
+  "long_run_config": {
+    "days": 5,
+    "steps_per_station": 720,
+    "stations": 5,
+    "seed": 42
+  },
+  "drift_analysis_config": {
+    "magnitudes_tested": 3,
+    "steps_per_run": 300,
+    "seed": 7
+  }
+}

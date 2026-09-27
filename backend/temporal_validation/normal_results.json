@@ -1,0 +1,34 @@
+{
+  "A_stable_normal": "Covered by the 75-station Stage 1 VALIDATION split \u2014 each station's own AR(1) slow/fast components represent stable, low-variance normal behavior.",
+  "B_diurnal_variation": "Covered inherently \u2014 Stage 1's generator embeds a diurnal sinusoid per station.",
+  "C_gradual_variation": "Covered inherently \u2014 the AR(1) slow component represents gradual drift-free variation.",
+  "D_long_running_stream": "See Stage 6 long-run results (stage6_results/stage6_long_run.json): 5 stations x 5 days x 144/day = 720 steps/station.",
+  "n_stations": 75,
+  "n_observations": 75600,
+  "integrated_median": 0.3535602917777031,
+  "integrated_p95": 0.9192189208851714,
+  "integrated_p99": 1.0,
+  "pct_gt_070": 9.652116402116402,
+  "reason_string_rate_pct": 21.175925925925927,
+  "lstm_availability_pct": 85.71428571428571,
+  "max_continuous_elevated_run_steps": 864,
+  "max_continuous_elevated_run_minutes": 8640,
+  "max_continuous_elevated_run_investigation": {
+    "finding": "The 864-step (full-length) elevated run belongs to exactly ONE station, ATHER-BGW-0215, "
+               "median integrated score 0.952 across its whole evaluable window. Investigated further: "
+               "only 2 of 75 val stations (ATHER-BGW-0215, ATHER-NAM-0110) have a MEDIAN score > 0.70 "
+               "(i.e. are persistently, not just occasionally, elevated). Both are exactly the two "
+               "baseline-humidity-at-the-physical-boundary (0%) stations already identified in Stage 1.5's "
+               "audit as heavily RH-clipped during synthetic generation -- their humidity trajectory is "
+               "erratic/clipped rather than smooth AR(1), so the shared LSTM (trained on the overall "
+               "distribution) produces large, persistent residuals against them. This is a SYNTHETIC-DATA "
+               "GENERATION limitation already documented in Stage 1.5, not a Temporal Intelligence code "
+               "defect -- the layer is correctly reporting a large, real deviation from its learned normal "
+               "pattern for these two specific stations.",
+      "pct_gt_070_all_75_stations": 9.65,
+      "pct_gt_070_excluding_the_2_pathological_stations": 8.54,
+      "pathological_station_fraction": "2/75 (2.7%)",
+      "conclusion": "Not a new correctness problem -- traced to a previously-documented data limitation affecting a small, identifiable, known subset of stations."
+  },
+  "note": "These figures are IDENTICAL to Stage 5/6's already-documented results (median~0.354, P95~0.919, 9.6% >0.70, 21.2% reason-rate) -- reported honestly as known limitations, not changed here (validation-only task)."
+}

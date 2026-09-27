@@ -1,0 +1,41 @@
+{
+  "disclaimer": "data/stations.json is production-SHAPED seed/demo metadata, not confirmed AWS telemetry or ground truth. This validates completion/finiteness/determinism/cost only; no accuracy claim.",
+  "stations_processed": 1655,
+  "stations_in_inventory": 1655,
+  "output_contract_valid": 1655,
+  "non_finite_outputs": 0,
+  "layer_unavailable_events": 0,
+  "spatial_regional_attribution_present": 1655,
+  "spatial_counterfactual_present": 1655,
+  "final_status_distribution": {
+    "NORMAL": 1463,
+    "ANOMALY": 155,
+    "WARNING": 37
+  },
+  "root_cause_distribution": {
+    "NORMAL": 1500,
+    "SINGLE_CHANNEL_FAULT": 154,
+    "NOISE_BURST": 1
+  },
+  "counterfactual_overall_status_distribution": {
+    "INSUFFICIENT_EVIDENCE": 1380,
+    "CONTRADICTED": 174,
+    "SUPPORTED": 101
+  },
+  "deterministic_across_two_full_sweeps": true,
+  "runtime": {
+    "full_sweep_seconds": 3.986,
+    "ms_per_station": 2.408,
+    "neighbor_selection_ms_per_station": 1.406,
+    "compute_spatial_events_ms": 5.35,
+    "two_event_tracking_updates_ms": 10.2
+  },
+  "spatial_events": {
+    "candidates": 289,
+    "clusters": 40
+  },
+  "event_tracking": {
+    "t1_new": 40,
+    "t2_updated": 40
+  }
+}

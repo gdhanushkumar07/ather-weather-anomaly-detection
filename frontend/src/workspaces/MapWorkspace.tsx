@@ -23,6 +23,7 @@ interface MapWorkspaceProps {
   onFiltersChange: (f: MapFilters) => void;
   regions: string[];
   liveCount: number;
+  warmingCount?: number;
   catalogueCount: number;
   selectedStation: Station | null;
   onSelectStation: (stationId: string) => void;
@@ -56,7 +57,7 @@ const RANK: Record<string, number> = { anomaly: 0, suspect: 1, degraded: 2, nomi
  * selecting a station opens its quick view, then the full station page.
  */
 export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
-  stationsGeoJSON, filters, onFiltersChange, regions, liveCount, catalogueCount,
+  stationsGeoJSON, filters, onFiltersChange, regions, liveCount, warmingCount = 0, catalogueCount,
   selectedStation, onSelectStation, onClosePreview, onViewStationDetails,
   activeLayers, onToggleLayer, basemap, onToggleBasemap, showAnomalyOverlay, onToggleAnomalyOverlay,
   isGlobeMode = false, onToggleGlobeMode, neighbors = [], isActive,
@@ -81,7 +82,9 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
         <div className="a-filters">
           <span className="a-filter-label">Network</span>
           <div className="a-filter-group">
-            <button className={filters.network === 'live' ? 'active' : ''} onClick={() => set({ network: 'live' })}>Live AWS · {liveCount}</button>
+            <button className={filters.network === 'live' ? 'active' : ''} onClick={() => set({ network: 'live' })}
+              title={warmingCount ? `${warmingCount} simulated stations are still warming up (history being processed) and join the live feed shortly` : undefined}>
+              Live AWS · {liveCount}{warmingCount ? ` + ${warmingCount} warming up` : ''}</button>
             <button className={filters.network === 'all' ? 'active' : ''} onClick={() => set({ network: 'all' })}
               title="Adds catalogue stations that are not monitored live (static snapshot)">All catalogue · {catalogueCount.toLocaleString()}</button>
           </div>

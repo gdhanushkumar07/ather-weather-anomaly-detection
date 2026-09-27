@@ -159,13 +159,13 @@ function layerStage(key: LayerKey, card: any, availability: EvidenceAvailability
   const tone: StageTone = !ev.assessed ? 'unassessed' : ev.state === 'ANOMALY' ? 'triggered' : ev.state === 'WARNING' ? 'warning' : 'pass';
   const state = !ev.assessed
     ? (ev.state === 'NOT_APPLICABLE' ? 'Not applicable' : ev.state === 'UNAVAILABLE' ? 'Unavailable' : 'Not evaluated')
-    : ev.state === 'ANOMALY' ? (String(card?.status).toUpperCase() === 'VETO' ? 'Veto' : 'Detected') : ev.state === 'WARNING' ? 'Signal' : 'No signal';
+    : ev.state === 'ANOMALY' ? (String(card?.status).toUpperCase() === 'VETO' ? 'Anomalous (veto)' : 'Anomalous') : ev.state === 'WARNING' ? 'Warning' : 'Nominal';
   // A 0.00 evidence score from an assessed layer means "evaluated, found no
   // anomalous evidence" — say that, and keep the number in the details.
   const noEvidence = ev.assessed && tone === 'pass' && (ev.score === null || ev.score === 0);
   const contribution = !ev.assessed
     ? 'excluded from fusion'
-    : noEvidence ? 'no anomalous evidence'
+    : noEvidence ? 'No anomalous evidence'
     : `evidence score ${ev.score !== null ? ev.score.toFixed(2) : '—'}${tone === 'triggered' || tone === 'warning' ? ' · supports anomaly' : ''}`;
   if (ev.assessed && ev.score !== null) rows.unshift(['Evidence score', `${ev.score.toFixed(2)}${noEvidence ? ' (evaluated — no anomalous evidence)' : ''}`]);
   if (card?.evidence_quality && ev.assessed) rows.unshift(['Evidence quality', human(card.evidence_quality)]);
@@ -243,7 +243,7 @@ function build(inp: Input): PipelineModel {
   const fusion: Stage = {
     n: 7, key: 'fusion', name: 'Evidence fusion', checks: 'Combines independent layer evidence into one calibrated decision',
     tone: fu.veto || fu.status === 'ANOMALY' ? 'triggered' : fu.status === 'WARNING' ? 'warning' : 'pass',
-    state: human(fu.status) || '—',
+    state: fu.status === 'ANOMALY' || fu.veto ? 'anomalous' : human(fu.status) || '—',
     finding: fu.veto
       ? 'A physical impossibility (L1 veto) decides the outcome regardless of other layers.'
       : supporting.length
@@ -254,7 +254,9 @@ function build(inp: Input): PipelineModel {
 
   // 8 — decision
   const overall = inp.overall;
-  const decisionState = overall ? human(overall) : human(fu.status);
+  // Decision vocabulary: NOMINAL · WARNING · CRITICAL · DEGRADED (same as the network counts).
+  const DECISION_LABEL: Record<string, string> = { nominal: 'nominal', suspect: 'warning', anomaly: 'critical', degraded: 'degraded' };
+  const decisionState = overall ? (DECISION_LABEL[overall] || human(overall)) : human(fu.status);
   const decRows: [string, string][] = [['Sensor-trust status', decisionState || '—'], ['Engine status', human(fu.status) || '—']];
   if (inp.severity && inp.severity !== 'NONE') decRows.push(['Severity', human(inp.severity)]);
   const decision: Stage = {
@@ -262,7 +264,7 @@ function build(inp: Input): PipelineModel {
     tone: 'decision', state: decisionState || '—',
     finding: inp.watch
       ? 'Single undiagnosed excursion — held as WATCH for one observation before raising (alarm hysteresis).'
-      : overall === 'anomaly' ? 'Anomaly confirmed.' : overall === 'suspect' ? 'Suspect — evidence present but not conclusive.' : overall === 'degraded' ? 'Data degraded — station trusted with limitations.' : 'No anomaly.',
+      : overall === 'anomaly' ? 'Anomaly confirmed.' : overall === 'suspect' ? 'Warning — evidence present but not conclusive.' : overall === 'degraded' ? 'Data degraded — station trusted with limitations.' : 'No anomaly.',
     evidence: decRows, contribution: overall === 'anomaly' || overall === 'suspect' ? 'drives root-cause analysis' : '—', notes: [],
   };
 
@@ -276,8 +278,8 @@ function build(inp: Input): PipelineModel {
   const rootCause: Stage = {
     n: 9, key: 'root_cause', name: 'Root cause', checks: 'What best explains the behaviour — sensor fault, weather, communications, or unknown',
     tone: noFault ? 'pass' : inp.interpretation === 'likely_weather_event' ? 'neutral' : 'triggered',
-    state: noFault ? 'None' : (dg.label || human(dg.rootCause)),
-    finding: dg.primary || (noFault ? 'No fault signature.' : '—'),
+    state: noFault ? 'none' : (dg.label || human(dg.rootCause)),
+    finding: noFault ? 'No fault signature.' : dg.primary || '—',
     evidence: rcRows, contribution: '', notes: [],
   };
 

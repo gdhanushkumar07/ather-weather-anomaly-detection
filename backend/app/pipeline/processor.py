@@ -128,6 +128,10 @@ class ObservationProcessor:
 
         self.pool = SpatialPool()
         self.health: Dict[str, Dict[str, Any]] = {}
+        # Latest full detection per station, set together with `health`.
+        # Detections reach the store at the end of each batch; serving this
+        # keeps a station view's health, layers and action from one observation.
+        self.latest_detection: Dict[str, Dict[str, Any]] = {}
         self._last_observed: Dict[str, float] = {}
         self._station_source: Dict[str, str] = {}
         self._recent_ids: "OrderedDict[str, None]" = OrderedDict()
@@ -174,6 +178,8 @@ class ObservationProcessor:
             try:
                 outcome, det_row = self._evaluate(obs, stn, reading)
                 det_rows.append(det_row)
+                if det_row.get("detail"):
+                    self.latest_detection[obs.station_id] = det_row["detail"]
                 outcomes.append(outcome)
             except Exception as e:  # detector failure isolation
                 self.metrics.errors.add()

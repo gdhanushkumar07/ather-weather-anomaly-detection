@@ -162,7 +162,7 @@ export interface DerivedInsight {
 }
 
 const STATE_WORD: Record<LayerEvidenceState, string> = {
-  PASS: 'pass', WARNING: 'warning', ANOMALY: 'anomaly',
+  PASS: 'nominal', WARNING: 'warning', ANOMALY: 'anomalous',
   INSUFFICIENT: 'insufficient data', NOT_APPLICABLE: 'not applicable', UNAVAILABLE: 'unavailable'
 };
 

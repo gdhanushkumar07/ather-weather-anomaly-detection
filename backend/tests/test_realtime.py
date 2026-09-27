@@ -159,6 +159,13 @@ class TestProcessor(unittest.TestCase):
         self.assertEqual(len(rows), 5)
         self.assertEqual(len(self.proc.health), 8)
 
+    def test_latest_detection_matches_station_health(self):
+        # health and the detection served with it must describe the same observation
+        for k in range(3):
+            self._tick(k)
+        for sid in self.ids:
+            self.assertEqual(self.proc.latest_detection[sid]["detection_id"], self.proc.health[sid]["detection_id"])
+
     def test_duplicate_observation_is_idempotent(self):
         _, batch = self._tick(0)
         again = self.proc.process_batch([batch[0]])

@@ -21,6 +21,7 @@ const STATE_CLASS: Record<string, string> = {
 const DECISION_CLASS: Record<string, string> = {
   nominal: 'lv-status-nominal', suspect: 'lv-status-suspect', degraded: 'lv-status-degraded',
   anomaly: 'lv-status-anomaly', weather: 'lv-status-weather',
+  warning: 'lv-status-suspect', critical: 'lv-status-anomaly',
 };
 
 const StageRow: React.FC<{ s: Stage; open: boolean; onToggle: () => void }> = ({ s, open, onToggle }) => {

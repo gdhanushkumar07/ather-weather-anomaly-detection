@@ -176,7 +176,7 @@ def station_live(station_id: str):
     rt = _rt()
     stn = _station(rt, station_id)
     health = rt.processor.health.get(station_id)
-    latest = rt.store.latest_detection(station_id)
+    latest = rt.processor.latest_detection.get(station_id) or rt.store.latest_detection(station_id)
     from .reference import compare
     obs = {"temperature": stn.get("temperature"), "humidity": stn.get("humidity"),
            "pressure": stn.get("pressure"), "wind_speed": stn.get("windSpeed")}
@@ -320,7 +320,7 @@ def station_spatial(station_id: str, radius_km: float = Query(60.0, gt=1, le=250
         else:
             verdict, text = "isolated", (f"This station changed {my_change:+.1f} while neighbours changed a median "
                                          f"{median:+.1f} — the change is local to the station (sensor fault more likely).")
-    latest = rt.store.latest_detection(station_id) or {}
+    latest = rt.processor.latest_detection.get(station_id) or rt.store.latest_detection(station_id) or {}
     return {
         "station_id": station_id, "parameter": parameter, "radius_km": radius_km, "window_minutes": minutes,
         "station": {"latitude": lat, "longitude": lon, "name": stn.get("name"),

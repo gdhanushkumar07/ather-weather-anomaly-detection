@@ -253,8 +253,13 @@ class PipelineRuntime:
             for i in range(0, len(order), chunk):
                 ids = order[i:i + chunk]
                 t_end = float(int(time.time()))
-                for k in range(cycles, 0, -1):
-                    t = t_end - k * sim.cadence_s
+                times = [t_end - k * sim.cadence_s for k in range(cycles, 0, -1)]
+                while times:
+                    t = times.pop(0)
+                    if not times and time.time() - t >= sim.cadence_s:
+                        # processing took longer than a cadence: keep the simulated
+                        # series continuous up to the present before joining live
+                        times.append(t + sim.cadence_s)
                     norms = []
                     for obs in sim.observations_at(t, [s for s in ids if self.processor._last_observed.get(s, 0.0) < t]):
                         try:
@@ -269,7 +274,8 @@ class PipelineRuntime:
                         outcomes = await asyncio.to_thread(self._process, norms)
                         for o in outcomes:
                             for type_, data in o.get("events", []):
-                                self.broker.publish(type_, data)
+                                if type_.startswith("INCIDENT"):
+                                    self.broker.publish(type_, data)
                         self.warmup["observations_processed"] += len(norms)
                 sim.live_ids.update(ids)
                 # Join the live feed now (normal ingest path, current time),
@@ -315,6 +321,12 @@ class PipelineRuntime:
                                            f"cycle skipped ({self.sim_cycles_skipped} so far).")
             self.simulation._set_state("DEGRADED", self.simulation.status.note)
             return
+        if items and items[0].adapter == self.simulation.name:
+            # Keep the simulated cadence regular: a station that just joined the
+            # live feed at the end of its warm-up is not reported again early.
+            half = 0.5 * self.simulation.cadence_s
+            items = [o for o in items
+                     if o.observed_at.timestamp() - self._last_received.get(o.station_id, 0.0) >= half]
         if items and items[0].adapter == self.simulation.name and self.simulation.status.note.startswith("Processing backlog"):
             self.simulation.status.note = getattr(self, "_sim_note", "")
         await self.ingest(items, block=True)
@@ -450,10 +462,16 @@ class PipelineRuntime:
         qw = self.metrics.queue_wait.snapshot().get("p50_ms")
         return bool(self.stream.depth and qw and qw / 1000.0 > self.simulation.cadence_s)
 
+    def _warming(self, sid: str, h: Dict[str, Any]) -> bool:
+        ids = self.simulation.live_ids
+        return ids is not None and h.get("adapter") == self.simulation.name and sid not in ids
+
     def counts(self) -> Dict[str, int]:
         c = {"live_stations": 0, "nominal": 0, "suspect": 0, "degraded": 0, "anomaly": 0,
              "stale": 0, "watch": 0, "weather_events": 0, "simulated": 0, "measured": 0}
-        for h in list(self.processor.health.values()):
+        for sid, h in list(self.processor.health.items()):
+            if self._warming(sid, h):
+                continue  # history still being warmed; not on the live feed yet
             c["live_stations"] += 1
             c[h.get("overall_status", "nominal")] = c.get(h.get("overall_status", "nominal"), 0) + 1
             c["stale"] += h.get("freshness") == "STALE"
@@ -486,7 +504,9 @@ class PipelineRuntime:
             "counts": self.counts(),
             "sources": [a.status.to_dict() for a in self.adapters],
             "active_faults": len(self.faults.list(active_only=True)),
-            "warmup": self.warmup,
+            "warmup": self.warmup | ({"pending_station_ids": [s for s in self.simulation.station_ids()
+                                                               if s not in self.simulation.live_ids]}
+                                     if self.warmup.get("state") == "RUNNING" and self.simulation.live_ids is not None else {}),
         }
         if not compact:
             try:
@@ -504,7 +524,9 @@ class PipelineRuntime:
             "event_seq": seq,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "counts": self.counts(),
-            "stations": [ObservationProcessor.station_event_payload(h) for h in list(self.processor.health.values())],
+            "stations": [ObservationProcessor.station_event_payload(h) for sid, h in list(self.processor.health.items())
+                         if not self._warming(sid, h)],
+
             "incident_counts": self.incidents.get_active_counts(source="LIVE_AWS,SIMULATED_FEED"),
             "recent_events": self.broker.recent(40, feed_types),
             "system": self.system_health(compact=True),

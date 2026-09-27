@@ -91,7 +91,7 @@ export const App: React.FC = () => {
     fetchStationsGeoJSON().then(setStationsGeoJSON).catch((e) => console.error('stations', e));
   }, []);
 
-  const { stations: liveStations, stationsVersion, counts } = useLive();
+  const { stations: liveStations, stationsVersion, counts, warmingIds } = useLive();
   // The public homepage shows the same live counts as the Overview.
   const summary: AnomaliesSummary | null = counts ? {
     totalStations: counts.live_stations ?? 0, normalCount: counts.nominal ?? 0,
@@ -114,13 +114,16 @@ export const App: React.FC = () => {
     for (const f of stationsGeoJSON.features) {
       const id = String(f.properties?.id ?? '');
       const live = liveStations.get(id);
-      if (filters.network === 'live' && !live) continue;
+      const warming = !live && warmingIds.has(id);
+      // The live view shows the whole simulated network: stations still in
+      // start-up warm-up are drawn neutral ("not live yet"), never hidden.
+      if (filters.network === 'live' && !live && !warming) continue;
       if (filters.region !== 'all' && f.properties?.region !== filters.region) continue;
       if (filters.severity !== 'all' && live?.overall_status !== filters.severity) continue;
       if (filters.finding !== 'all' && live?.interpretation !== filters.finding) continue;
       if (!live) {
         // Catalogue-only station: shown neutral — it is not evaluated live.
-        features.push({ ...f, properties: { ...f.properties, status: 'OFFLINE', hasAnomaly: 0, liveStatus: null } });
+        features.push({ ...f, properties: { ...f.properties, status: 'OFFLINE', hasAnomaly: 0, liveStatus: null, warming: warming ? 1 : 0 } });
         continue;
       }
       const v = live.values || {};
@@ -144,7 +147,7 @@ export const App: React.FC = () => {
     }
     return { ...stationsGeoJSON, features };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stationsGeoJSON, stationsVersion, filters]);
+  }, [stationsGeoJSON, stationsVersion, filters, warmingIds]);
 
   useEffect(() => {
     if (!selectedStation || !stationsGeoJSON) { setNeighbors([]); return; }
@@ -218,6 +221,7 @@ export const App: React.FC = () => {
             onFiltersChange={setFilters}
             regions={regions}
             liveCount={liveStations.size}
+            warmingCount={[...warmingIds].filter((id) => !liveStations.has(id)).length}
             catalogueCount={stationsGeoJSON?.features.length ?? 0}
             selectedStation={selectedStation}
             onSelectStation={selectOnMap}

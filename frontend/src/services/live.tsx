@@ -64,6 +64,8 @@ interface LiveContextValue {
   /** Increments (at most ~1/s) whenever station state changed — cheap memo key. */
   stationsVersion: number;
   counts: Record<string, number> | null;
+  /** Simulated stations still being warmed up (not yet on the live feed). */
+  warmingIds: Set<string>;
   incidentCounts: Record<string, number> | null;
   system: any | null;
   feed: LiveEvent[];
@@ -189,10 +191,14 @@ export const LiveNetworkProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [resyncNonce, resync]);
 
+  // Stations still in start-up warm-up — from the 5 s system heartbeat, so the
+  // set shrinks as each chunk joins the live feed.
+  const warmingIds = useMemo(() => new Set<string>(system?.warmup?.state === 'RUNNING' ? system.warmup.pending_station_ids || [] : []), [system]);
+
   const value = useMemo<LiveContextValue>(() => ({
-    connection, pipelineAvailable, stations: stationsRef.current, stationsVersion, counts, incidentCounts,
+    connection, pipelineAvailable, stations: stationsRef.current, stationsVersion, counts, incidentCounts, warmingIds,
     system, feed, lastEventAt, subscribe, resync,
-  }), [connection, pipelineAvailable, stationsVersion, counts, incidentCounts, system, feed, lastEventAt, subscribe, resync]);
+  }), [connection, pipelineAvailable, stationsVersion, counts, incidentCounts, warmingIds, system, feed, lastEventAt, subscribe, resync]);
 
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 };
@@ -235,7 +241,7 @@ export function formatAge(iso?: string | number | null, now = Date.now()): strin
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  nominal: 'Nominal', suspect: 'Suspect', degraded: 'Degraded', anomaly: 'Anomaly',
+  nominal: 'Nominal', suspect: 'Warning', degraded: 'Degraded', anomaly: 'Critical',
 };
 
 export const INTERPRETATION_LABEL: Record<string, string> = {

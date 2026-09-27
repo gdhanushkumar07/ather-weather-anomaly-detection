@@ -375,10 +375,10 @@ export function setupStationLayers(
         .setLngLat((f.geometry as GeoJSON.Point).coordinates as [number, number])
         .setHTML(
           `<div class="cp-head">${total.toLocaleString()} stations</div>` +
-          row('anomaly', 'Anomaly', anomalies) +
+          row('anomaly', 'Critical', anomalies) +
           row('warning', 'Warning', warnings) +
-          row('normal', 'Normal', normal) +
-          row('offline', 'Offline', offline) +
+          row('normal', 'Healthy', normal) +
+          row('offline', 'Degraded / not live', offline) +
           `<div class="cp-hint">Click to expand</div>`
         )
         .addTo(map);

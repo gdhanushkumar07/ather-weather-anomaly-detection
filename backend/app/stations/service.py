@@ -53,10 +53,38 @@ BASE_DIR = Path(__file__).resolve().parents[2] # backend directory
 DATA_PATH = BASE_DIR.parent / "data" / "stations.json"
 CSV_PATH = BASE_DIR / "WeatherUnionInfra.csv"
 
+def _defer_startup_eval() -> bool:
+    """On Render (which sets RENDER=true) the initial 5-layer pass over every
+    station must not run at import time: it takes minutes on a small
+    instance, so uvicorn never binds $PORT and the deploy times out. Station
+    data still loads immediately; the evaluation runs in a background thread."""
+    import os
+    flag = os.environ.get("ATHER_DEFER_STARTUP_EVAL", "").strip().lower()
+    if flag in ("0", "false", "no"):
+        return False
+    return flag in ("1", "true", "yes") or bool(os.environ.get("RENDER"))
+
+
 class StationService:
     def __init__(self):
         self._stations: Dict[str, Dict[str, Any]] = {}
+        self._defer = _defer_startup_eval()
+        self._pending: List[Any] = []
+        self.startup_evaluation_complete = not self._defer
         self._load_data()
+        if self._defer:
+            import threading
+            threading.Thread(target=self._run_pending, name="ather-startup-eval", daemon=True).start()
+
+    def _run_pending(self) -> None:
+        for fn in self._pending:
+            try:
+                fn()
+            except Exception as e:
+                print(f"Startup evaluation step failed: {e}")
+        self._pending = []
+        self.startup_evaluation_complete = True
+        print("StationService: background startup evaluation complete.")
 
     def _load_data(self):
         if not DATA_PATH.exists():
@@ -90,22 +118,28 @@ class StationService:
         detector.update_spatial_pool(readings)
 
         # 2. Run initial anomaly assessment across stations to populate cache
-        for s in station_list:
-            # Check for genuine OFFLINE station (marked offline or all sensor values missing)
-            is_offline = (
-                s.get("status") == "OFFLINE"
-                or (s.get("temperature") is None and (s.get("pressure") is None or s.get("pressure") == 0.0) and s.get("humidity") is None)
-            )
+        def _evaluate_catalogue(station_list=station_list):
+          for s in station_list:
+              # Check for genuine OFFLINE station (marked offline or all sensor values missing)
+              is_offline = (
+                  s.get("status") == "OFFLINE"
+                  or (s.get("temperature") is None and (s.get("pressure") is None or s.get("pressure") == 0.0) and s.get("humidity") is None)
+              )
 
-            status, anomaly = detector.evaluate_station(s)
+              status, anomaly = detector.evaluate_station(s)
 
-            if is_offline:
-                s["status"] = "OFFLINE"
-                s["anomaly"] = None
-            else:
-                s["status"] = status
-                s["anomaly"] = anomaly
-                self._sync_incident(s)
+              if is_offline:
+                  s["status"] = "OFFLINE"
+                  s["anomaly"] = None
+              else:
+                  s["status"] = status
+                  s["anomaly"] = anomaly
+                  self._sync_incident(s)
+
+        if self._defer:
+            self._pending.append(_evaluate_catalogue)
+        else:
+            _evaluate_catalogue()
 
         # 3. Ingest and normalize Indian AWS stations from WeatherUnionInfra.csv
         self._load_weather_union_csv()
@@ -249,15 +283,21 @@ class StationService:
         # station is judged against all of its (same-source, simultaneous)
         # neighbors in the batch, independent of CSV row order. No values are
         # fabricated: only readings that already exist are pooled.
-        for stn_dict in pending_evaluation:
-            status, anomaly = detector.evaluate_station(stn_dict)
-            stn_dict["status"] = status
-            stn_dict["anomaly"] = anomaly
-            # NOTE: this dataset is NWP-referenced (see dataSource above),
-            # so _sync_incident's own gate will correctly no-op here —
-            # called anyway so this stays correct if the source ever
-            # becomes real AWS telemetry (Phase 3: never incident from NWP).
-            self._sync_incident(stn_dict)
+        def _evaluate_csv(pending_evaluation=pending_evaluation):
+            for stn_dict in pending_evaluation:
+                status, anomaly = detector.evaluate_station(stn_dict)
+                stn_dict["status"] = status
+                stn_dict["anomaly"] = anomaly
+                # NOTE: this dataset is NWP-referenced (see dataSource above),
+                # so _sync_incident's own gate will correctly no-op here —
+                # called anyway so this stays correct if the source ever
+                # becomes real AWS telemetry (Phase 3: never incident from NWP).
+                self._sync_incident(stn_dict)
+
+        if self._defer:
+            self._pending.append(_evaluate_csv)
+        else:
+            _evaluate_csv()
 
         print(
             f"StationService: Ingested {added_count} Indian AWS stations from WeatherUnionInfra.csv "

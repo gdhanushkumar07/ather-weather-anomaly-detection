@@ -86,7 +86,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
           <p className="a-lead">
             ATHER checks every observation through five independent detection layers, fuses the evidence, and explains what it found.
             {obsSource && <> Source: {obsSource.label}, one observation per station every {Math.round(obsSource.cadence_s)} s{lastObs ? `; last processed ${formatAge(lastObs, now)}` : ''}.</>}
-            {warmup?.state === 'RUNNING' && <> Warming up the simulated network: {warmup.stations_ready} of {warmup.stations_total} stations have {warmup.cycles} cycles of simulated history processed by the full engine.</>}
+            {warmup?.state === 'RUNNING' && <> Start-up: {warmup.stations_ready} of {warmup.stations_total} simulated stations live with current telemetry; the {warmup.history_stations ?? ''} stations around the baseline station are being warmed with {warmup.cycles} cycles of simulated history. Other stations build history from live cycles.</>}
           </p>
         </div>
         <div className="lv-row">

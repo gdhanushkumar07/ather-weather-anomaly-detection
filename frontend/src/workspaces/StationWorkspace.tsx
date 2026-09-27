@@ -27,7 +27,7 @@ const CH_LABEL: Record<string, string> = { temperature_c: 'Temperature', pressur
  */
 export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncident, onOpenStation }) => {
   const id = station.id;
-  const { stations, stationsVersion } = useLive();
+  const { stations, stationsVersion, warmingIds } = useLive();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const liveState = useMemo(() => stations.get(id), [stations, stationsVersion, id]);
   const [assessment, setAssessment] = useState<any | null>(null);
@@ -63,6 +63,14 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
     ? fromAssessment(assessment, liveState, live?.latest_detection?.recommended_action)
     : null), [assessment, liveState, live?.latest_detection?.recommended_action]);
   const isLive = !!liveState;
+  // Health, history readiness and source are separate facts: a healthy station
+  // can still be gathering the history some layers need.
+  const warming = !isLive && warmingIds.has(id);
+  const pendingLayers = model ? model.phases[1].stages.filter((s) => s.tone === 'unassessed') : [];
+  const historyPts: number | undefined = assessment?.data_quality?.historical_points;
+  const readiness = !isLive ? null : !model ? '—' : !pendingLayers.length
+    ? 'Ready — all five layers evaluated'
+    : `Warming up — ${pendingLayers.map((s) => s.name).join(', ')} not yet evaluated${typeof historyPts === 'number' ? ` (${historyPts} observation${historyPts === 1 ? '' : 's'} so far)` : ''}`;
   const det = live?.latest_detection;
   const v = liveState?.values || {};
   const dq = assessment?.data_quality;
@@ -94,11 +102,11 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
           <h1 className="a-h1">{station.name}</h1>
           <p className="a-lead lv-mono" style={{ fontSize: '0.76rem' }}>
             {station.latitude?.toFixed(4)}°N, {station.longitude?.toFixed(4)}°E
-            {isLive ? ` · last observation ${formatAge(liveState?.last_observed_at, now)}` : ' · not monitored live'}
+            {isLive ? ` · last observation ${formatAge(liveState?.last_observed_at, now)}` : warming ? ' · warming up — joins the live feed shortly' : ' · not monitored live'}
           </p>
         </div>
         <div className="lv-row">
-          {isLive ? <StatusPill status={liveState!.overall_status} watch={liveState!.watch} /> : <span className="lv-pill lv-status-unknown">Not monitored live</span>}
+          {isLive ? <StatusPill status={liveState!.overall_status} watch={liveState!.watch} /> : <span className="lv-pill lv-status-unknown">{warming ? 'Warming up' : 'Not monitored live'}</span>}
           <SourceBadge source={liveState?.source || assessment?.observation?.source} simulated={liveState?.simulated} />
           {openInc[0] && (
             <button className="lv-btn lv-btn-primary" onClick={() => onOpenIncident(openInc[0].incident_id)}><ShieldAlert size={14} />Open investigation</button>
@@ -106,7 +114,12 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
         </div>
       </div>
       {error && <div className="lv-callout danger">{error}</div>}
-      {!isLive && (
+      {warming && (
+        <div className="lv-callout info">
+          This ATHER station's simulated history is being processed through the full engine at start-up; it joins the live feed within a few minutes. Values below are the catalogue snapshot until then.
+        </div>
+      )}
+      {!isLive && !warming && (
         <div className="lv-callout info">
           This station is in the catalogue but has no live observation feed. Its values are a static snapshot and the assessment below was run once on that snapshot, not continuously.
         </div>
@@ -131,6 +144,7 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
                 <dt>Data quality</dt><dd>{String(dq.status).replace(/_/g, ' ').toLowerCase()}</dd>
                 <dt>Valid channels</dt><dd>{(dq.valid_fields || []).map((c: string) => CH_LABEL[c] || c).join(', ') || 'none'}</dd>
                 <dt>Missing / invalid</dt><dd>{[...(dq.missing_fields || []), ...(dq.zero_substituted_fields || [])].map((c: string) => CH_LABEL[c] || c).join(', ') || 'none'}</dd>
+                {readiness && <><dt>History readiness</dt><dd>{readiness}</dd></>}
                 <dt>Freshness</dt><dd>{liveState?.freshness === 'STALE' ? 'stale — no recent observation' : (liveState?.freshness || assessment?.observation?.freshness || '—').toString().toLowerCase()}</dd>
                 <dt>Suspicious now</dt><dd>{liveState?.triggered_layers?.length ? `evidence from ${liveState.triggered_layers.join(', ')}` : liveState?.watch ? 'single excursion on watch' : 'none'}</dd>
                 {typeof det?.sensor_health_index === 'number' && <><dt>Sensor health index</dt><dd>{det.sensor_health_index} / 100</dd></>}
@@ -181,7 +195,9 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
       {/* history */}
       <Card title="Historical behaviour" icon={<History size={14} />}
         right={<div className="lv-tabs">{[1, 6, 24].map((h) => <button key={h} className={`lv-tab ${hours === h ? 'active' : ''}`} onClick={() => setHours(h)}>{h}h</button>)}</div>}>
-        {!isLive ? <Empty>No recorded telemetry — this station is not monitored live.</Empty> : !series?.points?.length ? <Empty>No telemetry recorded in the last {hours} h.</Empty> : (
+        {!isLive ? <Empty>{warming ? 'History warming up — this station joins the live feed shortly.' : 'No recorded telemetry — this station is not monitored live.'}</Empty>
+          : !series?.points?.length ? <Empty>No telemetry recorded in the last {hours} h.</Empty>
+          : series.points.length < 3 ? <Empty>History warming up — {series.points.length} observation{series.points.length === 1 ? '' : 's'} recorded so far; trend charts and temporal analysis become available after 3 observations.</Empty> : (
           <>
             <div className="lv-grid-2" style={{ gap: 14 }}>
               {PARAMS.filter((p) => available.has(p.key) && (p.key !== 'rainfall' || rainRecorded)).map((p) => (
@@ -203,10 +219,12 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
       {/* anomalies */}
       <div className="lv-grid-2">
         <Card title={`Detected events (${hours} h)`} icon={<ShieldAlert size={14} />}>
-          {!isLive ? <Empty>Not monitored live.</Empty> : !abnormal.length ? <Empty>No suspect, degraded or critical observations in this window.</Empty> : <LayerScoreTable detections={detections} />}
+          {!isLive ? <Empty>{warming ? 'No detected events yet — history is warming up.' : 'Not monitored live.'}</Empty>
+            : !abnormal.length ? <Empty>{pendingLayers.length ? 'No detected events yet. Detection history is still warming up.' : `No anomalies detected — no warning, degraded or critical observations in the last ${hours} h.`}</Empty>
+            : <LayerScoreTable detections={detections} />}
         </Card>
         <Card title="Investigations for this station" icon={<ShieldAlert size={14} />}>
-          {!incidents.length ? <Empty>No investigation has been opened for this station.</Empty> : (
+          {!incidents.length ? <Empty>No active investigation.</Empty> : (
             <table className="lv-table">
               <thead><tr><th>ID</th><th>Finding</th><th>Severity</th><th>Status</th><th>Opened</th></tr></thead>
               <tbody>

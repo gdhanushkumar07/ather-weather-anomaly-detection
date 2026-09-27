@@ -950,13 +950,17 @@ class AnomalyDetector:
             limitations.append(f"Fields with 0.0 treated as missing (not genuine zero): {', '.join(zero_sub)}")
         if missing:
             limitations.append(f"Missing channels: {', '.join(missing)}")
-        if history_pts < 3:
-            limitations.append(f"Limited historical sequence ({history_pts} points); temporal rate-of-change check restricted")
         if neighbors < 2:
             limitations.append(f"Sparse regional coverage ({neighbors} neighbors within radius); spatial consensus check limited")
+        # A short history is not a defect of THIS observation's quality: it is
+        # evaluation readiness (the affected layers already report "not
+        # evaluated — n/required"). It is listed, but does not degrade the input.
+        input_limited = bool(limitations)
+        if history_pts < 3:
+            limitations.append(f"Limited historical sequence ({history_pts} points); temporal rate-of-change check restricted")
 
         dq_status = (
-            "VALID" if len(valid) == 3 and not limitations else
+            "VALID" if len(valid) == 3 and not input_limited else
             "DEGRADED" if len(valid) >= 1 else
             "INSUFFICIENT_DATA"
         )

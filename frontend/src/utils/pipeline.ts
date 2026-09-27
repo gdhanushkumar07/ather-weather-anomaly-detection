@@ -218,7 +218,7 @@ function build(inp: Input): PipelineModel {
   const dqStage: Stage = {
     n: 1, key: 'data_quality', name: 'Data quality', checks: 'Is the input usable? Channel validity, missing values, freshness, provenance',
     tone: dqTone, state: dq.status ? human(dq.status) : 'Not reported',
-    finding: dq.status === 'VALID' && !missing.length ? 'All core channels valid.' : (dq.limitations || []).join('; ') || (missing.length ? `Missing: ${missing.map((c) => CH[c] || c).join(', ')}` : 'Not reported by the backend.'),
+    finding: dq.status === 'VALID' && !missing.length ? ['All core channels valid.', ...(dq.limitations || [])].join(' ') : (dq.limitations || []).join('; ') || (missing.length ? `Missing: ${missing.map((c) => CH[c] || c).join(', ')}` : 'Not reported by the backend.'),
     evidence: dqRows, contribution: missing.length ? 'limits which layers can assess' : 'input accepted', notes: [],
   };
   if (inp.isNwp) dqStage.notes.push('The value is an NWP model reference, not a physical sensor reading — hardware-fault diagnoses are not applicable.');

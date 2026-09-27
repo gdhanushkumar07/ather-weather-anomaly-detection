@@ -456,7 +456,7 @@ class TestSimulationWarmup(unittest.TestCase):
         from app.pipeline.runtime import PipelineRuntime
         tmp = _temp_env(self)
         self.addCleanup(_restore_env, self)
-        env = {"ATHER_SIM_MAX_STATIONS": "10", "ATHER_SIM_WARMUP_CYCLES": "8", "ATHER_SIM_WARMUP_CHUNK": "5"}
+        env = {"ATHER_SIM_MAX_STATIONS": "10", "ATHER_SIM_WARMUP_CYCLES": "8", "ATHER_SIM_HISTORY_STATIONS": "5"}
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
         for k, v in old.items():

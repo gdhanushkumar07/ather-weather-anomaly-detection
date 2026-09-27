@@ -172,11 +172,23 @@ def _layer_results(alert: AnomalyAlert, include_details: bool) -> Dict[str, Any]
     return out
 
 
+_LAYER_NAME = {"L1": "Physics", "L2": "Temporal", "L3": "Multivariate", "L4": "Spatial", "L5": "Sensor health"}
+
+
 def _summary(status: str, confidence: float, interp: str, layer_results: Dict[str, Any]) -> str:
     triggered = [f"{c}: {layer_results[c]['reason']}" for c, _ in LAYER_KEYS if layer_results[c]["triggered"]]
     head = f"{status.upper()} — {round(confidence * 100)}% confidence"
     if status == "nominal" and interp == "nominal":
-        return f"{head}. All five layers within nominal envelopes."
+        # Say only what was actually assessed: a layer still gathering history
+        # did not pass — it did not run.
+        pending = [c for c, _ in LAYER_KEYS if layer_results[c].get("status") not in ("PASS", "WARNING", "ANOMALY", "VETO")]
+        if not pending:
+            return f"{head}. All five layers within nominal envelopes."
+        names = ", ".join(_LAYER_NAME.get(c, c) for c in pending)
+        warming = all(layer_results[c].get("status") == "INSUFFICIENT_DATA" for c in pending)
+        return (f"{head}. {5 - len(pending)} of 5 layers assessed, all within nominal envelopes; "
+                + (f"intelligence history warming up ({names} not yet evaluated)." if warming
+                   else f"not evaluated: {names}."))
     tail = {
         "likely_sensor_fault": "Therefore likely a sensor fault.",
         "likely_weather_event": "Neighbouring stations show the same change — therefore likely a genuine weather event, not a sensor fault.",

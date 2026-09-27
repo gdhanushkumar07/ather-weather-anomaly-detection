@@ -210,11 +210,13 @@ class OpenMeteoService:
     def get_batch_weather(
         self,
         coords: List[Any],
-        chunk_size: int = 50
+        chunk_size: int = 50,
+        cache_only: bool = False
     ) -> List[Optional[Dict[str, Any]]]:
         """
         Fetches current weather for a list of (lat, lon) coordinates in chunks of up to 50
         using Open-Meteo multi-coordinate API. Returns list matching input order.
+        If cache_only is True, returns cached entries (fresh or stale) and never makes network calls.
         """
         ctx = self._ctx
 
@@ -230,13 +232,13 @@ class OpenMeteoService:
             if cache_key in self.cache:
                 results[idx] = with_pressure_provenance(self.cache[cache_key]["data"])
                 # Only re-fetch if older than TTL
-                if now - self.cache[cache_key]["cached_at"] >= self.cache_ttl:
+                if not cache_only and (now - self.cache[cache_key]["cached_at"] >= self.cache_ttl):
                     indices_to_fetch.append(idx)
-            else:
+            elif not cache_only:
                 indices_to_fetch.append(idx)
 
         report["to_fetch"] = len(indices_to_fetch)
-        if not indices_to_fetch:
+        if cache_only or not indices_to_fetch:
             return results
 
         # Fetch in chunks with pacing

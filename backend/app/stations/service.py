@@ -168,12 +168,17 @@ class StationService:
 
                 valid_rows.append((row, locality_id, lat, lon))
 
-        # Batch-fetch live weather from Open-Meteo for all valid Indian AWS stations
+        # Non-blocking cache lookup for weather values (background pipeline warms cache)
         coords = [(item[2], item[3]) for item in valid_rows]
         weather_list = []
         try:
             from ..weather.open_meteo import open_meteo_service
-            weather_list = open_meteo_service.get_batch_weather(coords, chunk_size=50)
+            try:
+                # cache_only=True prevents blocking startup with network calls on fresh environments (e.g. Render)
+                weather_list = open_meteo_service.get_batch_weather(coords, chunk_size=50, cache_only=True)
+            except TypeError:
+                # Fallback for test stubs / mocks that only accept (coords, chunk_size)
+                weather_list = open_meteo_service.get_batch_weather(coords, chunk_size=50)
         except Exception as e:
             print(f"Warning: Could not batch-fetch Open-Meteo weather: {e}")
             weather_list = [None] * len(valid_rows)

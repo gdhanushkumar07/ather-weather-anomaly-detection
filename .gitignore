@@ -22,6 +22,7 @@ data/ather_timeseries.db-shm
 # Runtime caches
 *.cache.json
 .weather_cache.json
+!backend/app/weather/.weather_cache.json
 
 # Generated synthetic temporal dataset (Stage 1) — reproducible from
 # temporal_dataset/ + data/stations.json + a fixed seed, not source.

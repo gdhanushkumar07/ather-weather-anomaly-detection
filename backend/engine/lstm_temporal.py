@@ -90,6 +90,15 @@ class LSTMTemporalEvidence:
             self.load_error = "disabled_by_config"
             return
 
+        from engine.layer1_physics import _torch_allowed
+        if not _torch_allowed():
+            print("LSTM temporal evidence disabled for this deployment (set ATHER_ENABLE_TORCH=1 to enable).")
+            self.load_error = "disabled_by_config"
+            self.predictor = None
+            self.calibration = None
+            self.available = False
+            return
+
         try:
             # Imported lazily so a missing/broken torch install can never
             # break the rest of ATHER at process startup — only this

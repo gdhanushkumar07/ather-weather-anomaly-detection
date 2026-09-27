@@ -48,7 +48,22 @@ try:
 except ImportError:
     METPY_AVAILABLE = False
 
+import os as _os
+
+def _torch_allowed() -> bool:
+    # torch adds several hundred MB of RAM. On Render's 512 MB instances it
+    # gets the process OOM-killed (HTTP 502), so it is off there unless
+    # explicitly enabled; the PINN/LSTM evidence falls back gracefully.
+    flag = _os.environ.get("ATHER_ENABLE_TORCH", "").strip().lower()
+    if flag in ("1", "true", "yes"):
+        return True
+    if flag in ("0", "false", "no"):
+        return False
+    return not _os.environ.get("RENDER")
+
 try:
+    if not _torch_allowed():
+        raise ImportError("torch disabled for this deployment (set ATHER_ENABLE_TORCH=1 to enable)")
     import torch
     import torch.nn as nn
     TORCH_AVAILABLE = True

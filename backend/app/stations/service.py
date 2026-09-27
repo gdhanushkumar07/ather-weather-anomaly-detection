@@ -77,6 +77,15 @@ class StationService:
             threading.Thread(target=self._run_pending, name="ather-startup-eval", daemon=True).start()
 
     def _run_pending(self) -> None:
+        import os
+        # On Render the live pipeline evaluates the monitored network itself;
+        # re-evaluating the whole static catalogue there only costs memory.
+        skip = os.environ.get("ATHER_SKIP_STARTUP_EVAL", "").strip().lower()
+        if skip in ("1", "true", "yes") or (os.environ.get("RENDER") and skip not in ("0", "false", "no")):
+            self._pending = []
+            self.startup_evaluation_complete = True
+            print("StationService: startup catalogue evaluation skipped (live pipeline evaluates monitored stations).")
+            return
         for fn in self._pending:
             try:
                 fn()

@@ -91,9 +91,9 @@ export function setupStationLayers(
         // station, amber for warnings, otherwise the neutral cyan.
         'circle-stroke-color': [
           'case',
-          ['>', ['get', 'anomalies'], 0], '#ef4444',
-          ['>', ['get', 'warnings'], 0], '#f59e0b',
-          '#00e5ff'
+          ['>', ['get', 'anomalies'], 0], '#9B1C24',
+          ['>', ['get', 'warnings'], 0], '#D49A1A',
+          '#111214'
         ],
         'circle-stroke-width': [
           'case',
@@ -141,7 +141,7 @@ export function setupStationLayers(
         'text-ignore-placement': true
       },
       paint: {
-        'text-color': '#fca5a5',
+        'text-color': '#FFFFFF',
         'text-halo-color': 'rgba(8, 12, 20, 0.95)',
         'text-halo-width': 1.6
       }
@@ -183,7 +183,7 @@ export function setupStationLayers(
         'circle-color': 'rgba(239, 68, 68, 0.16)',
         'circle-radius': 14,
         'circle-stroke-width': 1.5,
-        'circle-stroke-color': '#ef4444'
+        'circle-stroke-color': '#9B1C24'
       }
     });
   }
@@ -199,7 +199,7 @@ export function setupStationLayers(
         'circle-color': 'rgba(0, 229, 255, 0.22)',
         'circle-radius': 16,
         'circle-stroke-width': 2,
-        'circle-stroke-color': '#00e5ff'
+        'circle-stroke-color': '#111214'
       }
     });
   }
@@ -217,7 +217,7 @@ export function setupStationLayers(
       source: STATIONS_SOURCE_ID,
       filter: ['literal', false], // disabled until setParameterLayer() activates it
       paint: {
-        'circle-color': '#94a3b8',
+        'circle-color': '#8C8E91',
         'circle-radius': [
           'interpolate',
           ['linear'],
@@ -271,12 +271,12 @@ export function setupStationLayers(
           'match',
           ['get', 'status'],
           'ANOMALY',
-          '#ef4444', // Red
+          '#9B1C24', // Red
           'WARNING',
-          '#f59e0b', // Amber
+          '#D49A1A', // Amber
           'NORMAL',
-          '#10b981', // Green
-          /* default / offline */ '#94a3b8'
+          '#46A477', // Green
+          /* default / offline */ '#8C8E91'
         ],
         'circle-radius': [
           'case',
@@ -318,12 +318,12 @@ export function setupStationLayers(
           'match',
           ['get', 'status'],
           'ANOMALY',
-          '#ef4444',
+          '#9B1C24',
           'WARNING',
-          '#f59e0b',
+          '#D49A1A',
           'NORMAL',
-          '#10b981',
-          '#64748b'
+          '#46A477',
+          '#8C8E91'
         ],
         'circle-radius': 2.0,
         'circle-opacity': 1.0
@@ -636,7 +636,7 @@ export function ensureNeighborLayers(map: maplibregl.Map) {
       type: 'line',
       source: NEIGHBOR_LINES_SOURCE_ID,
       paint: {
-        'line-color': '#00e5ff',
+        'line-color': '#111214',
         'line-width': 5,
         'line-opacity': 0,
         'line-blur': 3
@@ -650,7 +650,7 @@ export function ensureNeighborLayers(map: maplibregl.Map) {
       type: 'line',
       source: NEIGHBOR_LINES_SOURCE_ID,
       paint: {
-        'line-color': '#00e5ff',
+        'line-color': '#111214',
         'line-width': 1.5,
         'line-opacity': 0
       },
@@ -668,7 +668,7 @@ export function ensureNeighborLayers(map: maplibregl.Map) {
         'circle-color': 'rgba(0, 229, 255, 0.0)',
         'circle-radius': 12,
         'circle-stroke-width': 2,
-        'circle-stroke-color': '#00e5ff',
+        'circle-stroke-color': '#111214',
         // Drawn on the DOM marker itself (`is-neighbor`, a thin ground ring) instead of a cyan
         // circle around it; the layer stays so nothing that references it breaks.
         'circle-stroke-opacity': 0

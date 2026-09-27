@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FlaskConical, History, ListChecks, Play, Radio, Square, Syringe } from 'lucide-react';
-import { cancelFault, fetchFaultTypes, fetchFaults, injectFault, startReplay } from '../services/api';
+import { cancelFault, fetchFaultTypes, fetchFaults, fetchStationLive, injectFault, startReplay } from '../services/api';
 import { INTERPRETATION_LABEL, useLive, useLiveEvents } from '../services/live';
 import { Card, Empty, LayerStrip, StatusPill, fmt, fmtTime, pct } from '../components/live/LiveBits';
-import { TestLabModal } from '../components/TestLabModal';
+import { ScenarioSuite } from '../components/intel/ScenarioSuite';
+import { IntelligencePipeline } from '../components/intel/IntelligencePipeline';
+import { fromDetection } from '../utils/pipeline';
 
 interface Props {
   stations: { id: string; name: string }[];
@@ -163,6 +165,8 @@ const LiveInjection: React.FC<{ types: any; onOpenIncident: (id: string) => void
         </Card>
       )}
 
+      {watch?.firstAlarm && <FinalDetection stationId={watch.fault.station_id} fault={watch.fault} />}
+
       <Card title="Injected faults" icon={<FlaskConical size={14} />}>
         {!faults.length ? <Empty>No faults injected yet.</Empty> : (
           <div className="lv-table-wrap">
@@ -185,6 +189,26 @@ const LiveInjection: React.FC<{ types: any; onOpenIncident: (id: string) => void
         )}
       </Card>
     </div>
+  );
+};
+
+/** Expected behaviour vs the engine's actual trace for the injected fault. */
+const FinalDetection: React.FC<{ stationId: string; fault: any }> = ({ stationId, fault }) => {
+  const [det, setDet] = useState<any | null>(null);
+  useEffect(() => { fetchStationLive(stationId).then((l) => setDet(l.latest_detection)).catch(() => setDet(null)); }, [stationId]);
+  useLiveEvents(['STATION_UPDATED'], (e) => {
+    if (e.data?.station_id === stationId) fetchStationLive(stationId).then((l) => setDet(l.latest_detection)).catch(() => {});
+  });
+  return (
+    <Card title="Expected vs actual — latest observation" icon={<ListChecks size={14} />}>
+      <div className="lv-kv" style={{ marginBottom: 12 }}>
+        <dt>Injected</dt><dd>{fault.label} · {fault.parameter || 'station'} · {fault.severity}</dd>
+        <dt>Expected layers</dt><dd>{fault.expected_layers?.length ? fault.expected_layers.join(', ') : 'freshness / data-quality checks'}</dd>
+        <dt>Expected interpretation</dt><dd>{INTERPRETATION_LABEL[fault.expected_interpretation] || fault.expected_interpretation}</dd>
+        <dt>Actual</dt><dd>{det ? `${det.overall_status} · ${INTERPRETATION_LABEL[det.interpretation] || det.interpretation} · evidence from ${det.triggered_layers?.join(', ') || 'no layer'}` : '—'}</dd>
+      </div>
+      {det ? <IntelligencePipeline model={fromDetection(det)} /> : <Empty>Waiting for the station's next observation…</Empty>}
+    </Card>
   );
 };
 
@@ -344,8 +368,8 @@ const ReplayPanel: React.FC<{ types: any; catalogue: { id: string; name: string 
 };
 
 // ── workspace ────────────────────────────────────────────────────────────
-export const TestLabWorkspace: React.FC<Props> = ({ stations, onOpenIncident, onViewStation, onClose }) => {
-  const [tab, setTab] = useState<'live' | 'replay' | 'suite'>('live');
+export const TestLabWorkspace: React.FC<Props> = ({ stations, onOpenIncident, onViewStation }) => {
+  const [tab, setTab] = useState<'suite' | 'live' | 'replay'>('suite');
   const [types, setTypes] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { fetchFaultTypes().then(setTypes).catch((e) => setError(e.message)); }, []);
@@ -354,19 +378,26 @@ export const TestLabWorkspace: React.FC<Props> = ({ stations, onOpenIncident, on
     <div className="lv-page">
       <div className="lv-page-head">
         <div>
-          <div className="lv-page-title">ATHER Test Lab</div>
-          <div className="lv-page-sub">Inject realistic sensor failures into the running network, replay a window step by step, or run the curated scenario suite — and watch ATHER detect, explain and escalate them.</div>
+          <div className="a-eyebrow">Test Lab · validation environment</div>
+          <h1 className="a-h1">Does the intelligence engine behave as designed?</h1>
+          <p className="a-lead">Controlled cases with a known ground truth, run through the same five layers, fusion and root-cause logic as production.
+            For each case: input → expected behaviour → layer responses → fusion → final detection → root cause.</p>
         </div>
         <div className="lv-tabs">
-          <button className={`lv-tab ${tab === 'live' ? 'active' : ''}`} onClick={() => setTab('live')}><Syringe size={13} />Live injection</button>
-          <button className={`lv-tab ${tab === 'replay' ? 'active' : ''}`} onClick={() => setTab('replay')}><History size={13} />Replay</button>
           <button className={`lv-tab ${tab === 'suite' ? 'active' : ''}`} onClick={() => setTab('suite')}><ListChecks size={13} />Scenario suite</button>
+          <button className={`lv-tab ${tab === 'live' ? 'active' : ''}`} onClick={() => setTab('live')}><Syringe size={13} />Live fault injection</button>
+          <button className={`lv-tab ${tab === 'replay' ? 'active' : ''}`} onClick={() => setTab('replay')}><History size={13} />Replay</button>
         </div>
       </div>
+      <div className="a-lab-banner">
+        <FlaskConical size={16} />
+        <span><b>Not operational data.</b> Scenario and replay runs use an isolated engine instance and never create real investigations.
+          Live injection alters only the clearly-labelled simulated feed.</span>
+      </div>
       {error && tab !== 'suite' && <div className="lv-callout danger">Real-time pipeline unavailable: {error}</div>}
+      {tab === 'suite' && <ScenarioSuite />}
       {tab === 'live' && types && <LiveInjection types={types} onOpenIncident={onOpenIncident} onViewStation={onViewStation} />}
       {tab === 'replay' && types && <ReplayPanel types={types} catalogue={stations} />}
-      {tab === 'suite' && <TestLabModal variant="page" isOpen onClose={onClose} stations={stations} />}
     </div>
   );
 };

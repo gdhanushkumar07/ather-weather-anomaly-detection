@@ -1,5 +1,5 @@
 import React from 'react';
-import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Filter, Layers, Check, Globe } from 'lucide-react';
+import { Thermometer, Gauge, Droplets, Radio, X, ShieldAlert, Layers, Check, Globe } from 'lucide-react';
 import { WeatherLayerType } from '../types/weather';
 
 interface LayerControlsProps {
@@ -11,8 +11,6 @@ interface LayerControlsProps {
   onToggleBasemap: (mode: 'dark' | 'satellite') => void;
   showAnomalyOverlay: boolean;
   onToggleAnomalyOverlay: () => void;
-  statusFilter: string | null;
-  onSetStatusFilter: (status: string | null) => void;
   isGlobeMode?: boolean;
   onToggleGlobeMode?: () => void;
 }
@@ -26,8 +24,6 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
   onToggleBasemap,
   showAnomalyOverlay,
   onToggleAnomalyOverlay,
-  statusFilter,
-  onSetStatusFilter,
   isGlobeMode = false,
   onToggleGlobeMode
 }) => {
@@ -158,28 +154,6 @@ export const LayerControls: React.FC<LayerControlsProps> = ({
           </span>
         </div>
 
-        <div className="display-row-divider" />
-
-        <div className="display-row-label">
-          <Filter className="w-3 h-3" /> Filter Status
-        </div>
-        <div className="status-filter-chip-row">
-          {(['NORMAL', 'WARNING', 'ANOMALY'] as const).map((s) => (
-            <button
-              key={s}
-              className={`status-filter-chip ${s.toLowerCase()} ${statusFilter === s ? 'active' : ''}`}
-              onClick={() => onSetStatusFilter(statusFilter === s ? null : s)}
-              title={`Show only ${s} stations`}
-            >
-              {s}
-            </button>
-          ))}
-          {statusFilter && (
-            <button className="status-filter-chip clear" onClick={() => onSetStatusFilter(null)} title="Clear filter">
-              ALL
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Group 3: BASEMAP */}

@@ -1,193 +1,75 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { mapStatus, useLive, formatAge } from '../services/live';
-import { SourceBadge } from './live/LiveBits';
-import { X, ArrowRight, Thermometer, Gauge, Droplets, ShieldAlert, CheckCircle2, AlertTriangle, Radio } from 'lucide-react';
-import { Station, StationAnomalyAssessment } from '../types/weather';
-import { fetchStationAnomaly } from '../services/api';
+import React, { useMemo } from 'react';
+import { ArrowRight, X } from 'lucide-react';
+import { Station } from '../types/weather';
+import { formatAge, INTERPRETATION_LABEL, useLive } from '../services/live';
+import { SourceBadge, StatusPill, fmt, pct } from './live/LiveBits';
+import { CONFIDENCE_NOTE } from '../utils/pipeline';
 
 interface StationPreviewPanelProps {
   station: Station;
   onClose: () => void;
   onViewDetails: (stationId: string) => void;
-  onOpenIncident?: (incidentId: string) => void;
 }
 
-export const StationPreviewPanel: React.FC<StationPreviewPanelProps> = ({
-  station,
-  onClose,
-  onViewDetails,
-}) => {
-  const [anomalyData, setAnomalyData] = useState<StationAnomalyAssessment | null>(null);
-  const [isLoadingAnomaly, setIsLoadingAnomaly] = useState<boolean>(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (station.id) {
-      setIsLoadingAnomaly(true);
-      fetchStationAnomaly(station.id)
-        .then((data) => {
-          if (isMounted) {
-            setAnomalyData(data);
-            setIsLoadingAnomaly(false);
-          }
-        })
-        .catch(() => {
-          if (isMounted) setIsLoadingAnomaly(false);
-        });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [station.id]);
-
-  // Live pipeline state wins; otherwise the (read-only) cached assessment.
-  // No invented fallback numbers: missing values render as "—".
-  const { stations: liveStations, stationsVersion } = useLive();
-  const live = useMemo(() => liveStations.get(station.id), [liveStations, stationsVersion, station.id]);
-
-  const liveStatus = live ? mapStatus(live.overall_status) : null;
-  const statusLabel = liveStatus || (anomalyData?.status as string) || station.status || 'NORMAL';
-  const isAnomaly = statusLabel === 'ANOMALY';
-  const isWarning = statusLabel === 'WARNING';
-
-  const severity = live?.severity || anomalyData?.overall?.severity || station.anomaly?.severity || 'NONE';
-  const anomalyScore: number | null = anomalyData?.overall?.score ?? anomalyData?.anomaly_score ?? null;
-  const confidence: number | null = live?.confidence ?? anomalyData?.overall?.confidence ?? anomalyData?.confidence ?? null;
-  const confidencePct = confidence == null ? '—' : Math.round(confidence * 100);
-
-  const reason =
-    live?.summary ||
-    anomalyData?.explanation ||
-    station.anomaly?.reason ||
-    (isLoadingAnomaly ? 'Loading diagnosis…' : 'No diagnosis available for this station.');
-
-  const values = live?.values;
-  const temperature = values ? values.temperature : station.temperature;
-  const pressure = values ? values.pressure : station.pressure;
-  const humidity = values ? values.humidity : station.humidity;
-
-  const locationStr = [station.town, station.region, station.country]
-    .filter(Boolean)
-    .join(', ') || 'AWS Station Site';
+/**
+ * Map quick view: enough to decide whether to open the station — identity,
+ * current state, what ATHER found, and the values it found it on. Read-only;
+ * everything comes from the live pipeline store (or the catalogue, labelled).
+ */
+export const StationPreviewPanel: React.FC<StationPreviewPanelProps> = ({ station, onClose, onViewDetails }) => {
+  const { stations, stationsVersion } = useLive();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const live = useMemo(() => stations.get(station.id), [stations, stationsVersion, station.id]);
+  const v = live?.values;
+  const values: [string, number | null | undefined, number, string][] = [
+    ['Temperature', v ? v.temperature : station.temperature, 1, ' °C'],
+    ['Humidity', v ? v.humidity : station.humidity, 0, ' %'],
+    ['Pressure', v ? v.pressure : station.pressure, 1, ' hPa'],
+    ['Wind', v ? v.wind_speed : station.windSpeed, 1, ' km/h'],
+  ];
+  const location = station.town && station.region && String(station.town).includes(station.region)
+    ? station.town : [station.town, station.region].filter(Boolean).join(' · ');
 
   return (
-    <div className="station-preview-panel" role="region" aria-label={`Preview for ${station.id}`}>
-      {/* Header */}
-      <div className="preview-header">
-        <div className="preview-title-group">
-          <div className="preview-id-badge">
-            <Radio className="w-3.5 h-3.5 text-blue-600" />
-            <span className="preview-station-id">{station.id}</span>
-          </div>
-          <h3 className="preview-station-name">{station.name}</h3>
-          <p className="preview-station-loc">{locationStr}</p>
-          <div className="lv-row" style={{ marginTop: 4 }}>
-            <SourceBadge source={live?.source || (anomalyData?.observation?.source as string)} simulated={live?.simulated} />
-            {live?.last_observed_at && <span className="lv-muted">observed {formatAge(live.last_observed_at)}</span>}
-          </div>
+    <section className="lv-card" style={{ flex: 1, minHeight: 0 }}>
+      <header className="lv-card-head" style={{ alignItems: 'flex-start' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="a-eyebrow">{station.id}</div>
+          <div style={{ fontWeight: 800, fontSize: '1.02rem', marginTop: 2 }}>{station.name}</div>
+          <div className="lv-muted">{location || '—'} · {station.latitude?.toFixed(3)}°, {station.longitude?.toFixed(3)}°</div>
         </div>
-        <button
-          className="preview-close-btn"
-          onClick={onClose}
-          aria-label="Close station preview"
-          title="Close preview"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Status & Severity Banner */}
-      <div className={`preview-status-banner ${statusLabel.toLowerCase()}`}>
-        <div className="status-badge-left">
-          {isAnomaly ? (
-            <ShieldAlert className="w-4 h-4 text-red-600" />
-          ) : isWarning ? (
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-          ) : (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          )}
-          <span className="status-badge-text">● {statusLabel}</span>
-        </div>
-        {severity !== 'NONE' && (
-          <span className={`severity-tag ${severity.toLowerCase()}`}>
-            {severity} SEVERITY
-          </span>
+        <button className="lv-btn" style={{ padding: 6 }} onClick={onClose} aria-label="Close"><X size={14} /></button>
+      </header>
+      <div className="lv-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', flex: 1 }}>
+        {live ? (
+          <>
+            <div className="lv-row">
+              <StatusPill status={live.overall_status} watch={live.watch} />
+              {live.interpretation && live.interpretation !== 'nominal' && (
+                <span className={`lv-pill ${live.interpretation === 'likely_weather_event' ? 'lv-status-weather' : 'lv-status-unknown'}`}>{INTERPRETATION_LABEL[live.interpretation]}</span>
+              )}
+              <SourceBadge source={live.source} simulated={live.simulated} />
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', lineHeight: 1.5 }}>{live.summary}</p>
+            <div className="lv-kv">
+              <dt>Evidence from</dt><dd>{live.triggered_layers?.length ? live.triggered_layers.join(', ') : 'no layer'}</dd>
+              <dt>Confidence*</dt><dd>{pct(live.confidence)}</dd>
+              <dt>Observed</dt><dd>{formatAge(live.last_observed_at)}{live.freshness === 'STALE' ? ' — stale' : ''}</dd>
+            </div>
+          </>
+        ) : (
+          <div className="lv-callout info">Not monitored live. Values below come from the static catalogue snapshot and are not evaluated continuously.</div>
         )}
-      </div>
-
-      {/* Weather Parameters Grid */}
-      <div className="preview-metrics-grid">
-        <div className="preview-metric-card">
-          <div className="metric-header">
-            <Thermometer className="w-3.5 h-3.5 text-orange-500" />
-            <span>Temperature</span>
-          </div>
-          <div className="metric-value">
-            {temperature != null ? `${Number(temperature).toFixed(1)} °C` : '—'}
-          </div>
+        <div className="lv-stats" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          {values.map(([l, val, d, u]) => (
+            <div key={l} className="lv-stat"><span className="lv-stat-lbl">{l}</span><span className="lv-stat-val" style={{ fontSize: '1.1rem' }}>{typeof val === 'number' ? fmt(val, d, u) : '—'}</span></div>
+          ))}
         </div>
-
-        <div className="preview-metric-card">
-          <div className="metric-header">
-            <Gauge className="w-3.5 h-3.5 text-blue-500" />
-            <span>Pressure</span>
-          </div>
-          <div className="metric-value">
-            {pressure != null ? `${Number(pressure).toFixed(1)} hPa` : '—'}
-          </div>
-        </div>
-
-        <div className="preview-metric-card">
-          <div className="metric-header">
-            <Droplets className="w-3.5 h-3.5 text-teal-500" />
-            <span>Humidity</span>
-          </div>
-          <div className="metric-value">
-            {humidity != null ? `${Number(humidity).toFixed(1)} %` : '—'}
-          </div>
+        {live && <p className="a-note" style={{ margin: 0 }}>* {CONFIDENCE_NOTE}</p>}
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button className="lv-btn lv-btn-primary" onClick={() => onViewDetails(station.id)}>Open station <ArrowRight size={14} /></button>
         </div>
       </div>
-
-      {/* ATHER Intelligence Metrics */}
-      <div className="preview-intelligence-card">
-        <div className="intelligence-row">
-          <div className="intelligence-col">
-            <span className="intel-label">Anomaly Score</span>
-            <span className={`intel-val ${anomalyScore == null ? 'normal' : anomalyScore >= 0.7 ? 'critical' : anomalyScore >= 0.4 ? 'warning' : 'normal'}`}>
-              {anomalyScore == null ? '—' : anomalyScore.toFixed(2)}
-            </span>
-          </div>
-          <div className="intelligence-divider" />
-          <div className="intelligence-col">
-            <span className="intel-label">Confidence</span>
-            <span className="intel-val normal">{confidencePct}{confidence == null ? '' : '%'}</span>
-          </div>
-          <div className="intelligence-divider" />
-          <div className="intelligence-col">
-            <span className="intel-label">Coordinates</span>
-            <span className="intel-val-sub">
-              {station.latitude?.toFixed(2)}°, {station.longitude?.toFixed(2)}°
-            </span>
-          </div>
-        </div>
-
-        {/* Why / Explanation section */}
-        <div className="preview-why-section">
-          <span className="why-title">Why?</span>
-          <p className="why-text">{reason}</p>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="preview-actions-bar">
-        <button
-          className="preview-view-details-btn"
-          onClick={() => onViewDetails(station.id)}
-        >
-          <span>VIEW DETAILS</span>
-          <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    </section>
   );
 };

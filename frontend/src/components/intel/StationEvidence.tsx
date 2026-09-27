@@ -4,16 +4,16 @@ import {
   fetchStationDetections, fetchStationLive, fetchStationSpatial, fetchStationTimeseries,
 } from '../../services/api';
 import { INTERPRETATION_LABEL, formatAge, useLiveEvents } from '../../services/live';
-import { Card, Empty, SourceBadge, StatusPill, fmt, fmtDateTime, fmtTime, pct } from './LiveBits';
-import { useNow } from './LivePanels';
+import { Card, Empty, SourceBadge, StatusPill, fmt, fmtDateTime, fmtTime, pct } from '../live/LiveBits';
+import { useNow } from '../live/LivePanels';
 
 /**
- * Live sections of the Station workspace (spec §10/§12/§13/§16).
- * Everything is fetched on demand for THIS station only (time-window
- * queries), then kept current by STATION_UPDATED events for this station.
+ * Station evidence views: telemetry charts, detection status strip, layer
+ * score history and the spatial (neighbour) analysis. Data is fetched on
+ * demand for one station by the Station workspace.
  */
 
-const PARAMS: { key: string; label: string; unit: string; digits: number }[] = [
+export const PARAMS: { key: string; label: string; unit: string; digits: number }[] = [
   { key: 'temperature', label: 'Temperature', unit: '°C', digits: 1 },
   { key: 'humidity', label: 'Relative humidity', unit: '%', digits: 1 },
   { key: 'pressure', label: 'Pressure', unit: 'hPa', digits: 2 },
@@ -23,7 +23,7 @@ const PARAMS: { key: string; label: string; unit: string; digits: number }[] = [
 ];
 
 // ── single-series chart with crosshair tooltip ───────────────────────────
-const MiniChart: React.FC<{ points: any[]; param: typeof PARAMS[number]; markers?: number[] }> = ({ points, param, markers = [] }) => {
+export const MiniChart: React.FC<{ points: any[]; param: typeof PARAMS[number]; markers?: number[] }> = ({ points, param, markers = [] }) => {
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const W = 520, H = 120, PL = 44, PR = 8, PT = 8, PB = 18;
@@ -89,7 +89,7 @@ const MiniChart: React.FC<{ points: any[]; param: typeof PARAMS[number]; markers
 };
 
 // ── detection status strip ───────────────────────────────────────────────
-const StatusStrip: React.FC<{ detections: any[] }> = ({ detections }) => {
+export const StatusStrip: React.FC<{ detections: any[] }> = ({ detections }) => {
   const [hover, setHover] = useState<any | null>(null);
   if (!detections.length) return <Empty>No detections recorded in this window.</Empty>;
   const step = Math.max(1, Math.ceil(detections.length / 240));
@@ -116,7 +116,7 @@ const StatusStrip: React.FC<{ detections: any[] }> = ({ detections }) => {
 };
 
 // ── L5 drift / layer score timeline ──────────────────────────────────────
-const LayerScoreTable: React.FC<{ detections: any[] }> = ({ detections }) => {
+export const LayerScoreTable: React.FC<{ detections: any[] }> = ({ detections }) => {
   const flagged = detections.filter((d) => d.overall_status !== 'nominal').slice(-12).reverse();
   if (!flagged.length) return <p className="lv-muted">No suspect, degraded or anomalous detections in this window.</p>;
   return (
@@ -144,7 +144,7 @@ const LayerScoreTable: React.FC<{ detections: any[] }> = ({ detections }) => {
 };
 
 // ── spatial event analysis ───────────────────────────────────────────────
-const SpatialPanel: React.FC<{ stationId: string; refreshKey: number; onSelectStation?: (id: string) => void }> = ({ stationId, refreshKey, onSelectStation }) => {
+export const SpatialPanel: React.FC<{ stationId: string; refreshKey: number; onSelectStation?: (id: string) => void }> = ({ stationId, refreshKey, onSelectStation }) => {
   const [param, setParam] = useState('temperature');
   const [data, setData] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -234,208 +234,3 @@ const SpatialPanel: React.FC<{ stationId: string; refreshKey: number; onSelectSt
   );
 };
 
-// ── main ─────────────────────────────────────────────────────────────────
-export const StationLiveSections: React.FC<{
-  stationId: string;
-  onOpenIncident?: (id: string) => void;
-  onSelectStation?: (id: string) => void;
-}> = ({ stationId, onOpenIncident, onSelectStation }) => {
-  const [live, setLive] = useState<any | null>(null);
-  const [series, setSeries] = useState<any | null>(null);
-  const [detections, setDetections] = useState<any[]>([]);
-  const [hours, setHours] = useState(6);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const now = useNow();
-  const lastFetch = useRef(0);
-
-  const loadLive = useCallback(() => fetchStationLive(stationId).then(setLive).catch((e) => setError(e.message)), [stationId]);
-  const loadHistory = useCallback(() => {
-    fetchStationTimeseries(stationId, hours, 360).then(setSeries).catch(() => {});
-    fetchStationDetections(stationId, hours).then((d) => setDetections(d.detections || [])).catch(() => {});
-  }, [stationId, hours]);
-
-  useEffect(() => { setLive(null); setError(null); loadLive(); }, [loadLive]);
-  useEffect(() => { loadHistory(); }, [loadHistory]);
-
-  // New observation for THIS station -> refresh its live card at once and its
-  // history at most every 10 s (the rest of the network is ignored here).
-  useLiveEvents(['STATION_UPDATED'], (e) => {
-    if (e.data?.station_id !== stationId) return;
-    loadLive();
-    if (Date.now() - lastFetch.current > 10000) {
-      lastFetch.current = Date.now();
-      loadHistory();
-      setRefreshKey((k) => k + 1);
-    }
-  });
-
-  if (error) return <Card title="Live pipeline" icon={<Activity size={14} />}><Empty>{error}</Empty></Card>;
-  if (!live) return <Card title="Live pipeline" icon={<Activity size={14} />}><Empty>Loading live state…</Empty></Card>;
-
-  const det = live.latest_detection;
-  const h = live.health;
-  if (!live.live_feed || !det) {
-    return (
-      <Card title="Live pipeline" icon={<Activity size={14} />}>
-        <div className="lv-callout info">
-          This station is in the catalogue but has <b>no live observation feed</b>, so ATHER is not processing it continuously.
-          Values shown elsewhere on this page come from the static catalogue snapshot or the NWP reference, and are labelled as such.
-        </div>
-      </Card>
-    );
-  }
-
-  const markers = detections.filter((d) => d.overall_status === 'anomaly').map((d) => d.observed_at);
-  const available = new Set(series?.parameters_available || []);
-  const ref = live.reference_comparison;
-
-  return (
-    <>
-      {/* 1. Current diagnosis */}
-      <Card
-        title="Live detection"
-        icon={<Activity size={14} />}
-        right={<span className="lv-row"><SourceBadge source={h?.source} simulated={h?.simulated} /><span className="lv-muted">observed {formatAge(h?.last_observed_at, now)}</span></span>}
-      >
-        <div className="lv-row" style={{ marginBottom: 8 }}>
-          <StatusPill status={det.overall_status} watch={det.watch} />
-          <span className="lv-pill lv-status-unknown">{pct(det.confidence)} confidence</span>
-          <span className={`lv-pill ${det.interpretation === 'likely_weather_event' ? 'lv-status-weather' : det.interpretation === 'likely_sensor_fault' ? 'lv-status-anomaly' : 'lv-status-unknown'}`}>
-            {INTERPRETATION_LABEL[det.interpretation] || det.interpretation}
-          </span>
-          {h?.active_incident_id && (
-            <button className="lv-btn lv-btn-danger" onClick={() => onOpenIncident?.(h.active_incident_id)}>Open incident {h.active_incident_id}</button>
-          )}
-        </div>
-        <p style={{ fontSize: '0.84rem', margin: '0 0 10px', lineHeight: 1.5 }}>{det.summary}</p>
-        <div className="lv-table-wrap">
-          <table className="lv-table">
-            <thead><tr><th>Layer</th><th>Status</th><th>Score</th><th>Evidence quality</th><th>Why</th></tr></thead>
-            <tbody>
-              {['L1', 'L2', 'L3', 'L4', 'L5'].map((c) => {
-                const r = det.layer_results[c];
-                return (
-                  <tr key={c}>
-                    <td><b>{c}</b> {r.name}</td>
-                    <td><span className={`lv-pill lv-pill-sm ${r.triggered ? (r.status === 'WARNING' ? 'lv-status-suspect' : 'lv-status-anomaly') : /INSUFF|LIMITED|NOT_APP/.test(r.status) ? 'lv-status-unknown' : 'lv-status-nominal'}`}>{r.status}</span></td>
-                    <td>{fmt(r.score, 2)}</td>
-                    <td className="lv-muted">{r.evidence_quality}</td>
-                    <td style={{ maxWidth: 460 }}>{r.reason}</td>
-                  </tr>
-                );
-              })}
-              <tr>
-                <td><b>Fusion</b> Conformal</td>
-                <td><span className={`lv-pill lv-pill-sm ${det.engine_status === 'ANOMALY' ? 'lv-status-anomaly' : det.engine_status === 'WARNING' ? 'lv-status-suspect' : 'lv-status-nominal'}`}>{det.engine_status}</span></td>
-                <td>{fmt(det.anomaly_score, 2)}</td>
-                <td className="lv-muted">p = {fmt(det.layer_results.fusion?.p_value, 3)}</td>
-                <td>Nonconformity {fmt(det.layer_results.fusion?.nonconformity_score, 3)} · {det.layer_results.fusion?.meaningful_layer_count ?? 0} layer(s) with evidence{det.layer_results.fusion?.veto ? ' · physics veto' : ''}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        {det.overall_status !== 'nominal' && (
-          <div className="lv-callout info" style={{ marginTop: 10 }}>
-            <b>Diagnosis:</b> {det.diagnosis.rca_label} ({det.diagnosis.confidence}). <b>Action — {det.recommended_action.label}:</b> {det.recommended_action.detail}
-          </div>
-        )}
-      </Card>
-
-      {/* 2. Telemetry history */}
-      <Card
-        title="Telemetry history"
-        icon={<LineChart size={14} />}
-        right={<div className="lv-tabs">{[1, 6, 24].map((hh) => <button key={hh} className={`lv-tab ${hours === hh ? 'active' : ''}`} onClick={() => setHours(hh)}>{hh}h</button>)}</div>}
-      >
-        {!series?.points?.length ? <Empty>No telemetry recorded in the last {hours} h.</Empty> : (
-          <>
-            <div className="lv-grid-2" style={{ gap: 12 }}>
-              {PARAMS.filter((p) => available.has(p.key)).map((p) => (
-                <div key={p.key}>
-                  <div className="lv-spread"><span className="lv-card-title" style={{ fontSize: '0.66rem' }}>{p.label} ({p.unit}){p.key === 'dew_point' && series.points.some((x: any) => x.dew_point_derived) ? ' · derived' : ''}</span></div>
-                  <MiniChart points={series.points} param={p} markers={markers} />
-                </div>
-              ))}
-            </div>
-            <p className="lv-muted" style={{ marginTop: 6 }}>
-              {series.points.length} points{series.downsampled ? ' (time-bucket means)' : ''} · dashed red lines mark anomaly detections ·
-              <SourceBadge source={series.source} simulated={series.source === 'SIMULATED_AWS'} />
-            </p>
-          </>
-        )}
-      </Card>
-
-      {/* 3. Detection timeline */}
-      <Card title="Detection timeline & drift" icon={<ShieldCheck size={14} />}>
-        <StatusStrip detections={detections} />
-        <div style={{ marginTop: 12 }}><LayerScoreTable detections={detections} /></div>
-        {det.layer_results.L5?.details?.channel_drift && (
-          <div className="lv-table-wrap" style={{ marginTop: 12 }}>
-            <table className="lv-table">
-              <thead><tr><th>Channel</th><th>Drift reference</th><th>CUSUM tier</th><th>Est. bias</th><th>Rate / day</th><th>Mann-Kendall</th><th>Samples</th></tr></thead>
-              <tbody>
-                {Object.entries(det.layer_results.L5.details.channel_drift).map(([ch, d]: [string, any]) => (
-                  <tr key={ch}>
-                    <td>{ch.replace('_c', '').replace('_hpa', '').replace('_pct', '')}</td>
-                    <td>{d.reference_mode === 'SPATIAL' ? 'vs neighbour consensus' : d.reference_mode === 'BACKGROUND' ? 'vs NWP background' : 'own history (no reference)'}</td>
-                    <td>{d.drift_tier}</td>
-                    <td>{fmt(d.estimated_bias, 2)}</td>
-                    <td>{fmt(d.drift_rate_per_day, 2)}</td>
-                    <td>{d.mann_kendall?.tau != null ? `τ ${d.mann_kendall.tau.toFixed(2)} · p ${d.mann_kendall.p_value}` : '—'}</td>
-                    <td>{d.samples_tracked}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-
-      {/* 4. Spatial event analysis */}
-      <SpatialPanel stationId={stationId} refreshKey={refreshKey} onSelectStation={onSelectStation} />
-
-      {/* 5. NWP reference + provenance */}
-      <div className="lv-grid-2">
-        <Card title="Observed vs NWP reference" icon={<Satellite size={14} />} right={<span className="lv-badge lv-badge-nwp">MODEL / REFERENCE DATA</span>}>
-          {!ref?.available ? <Empty>{ref?.reason || 'Reference source unavailable'}</Empty> : (
-            <>
-              <table className="lv-table">
-                <thead><tr><th>Parameter</th><th>Observed</th><th>NWP reference</th><th>Difference</th></tr></thead>
-                <tbody>
-                  {Object.entries(ref.parameters || {}).map(([k, v]: [string, any]) => (
-                    <tr key={k}><td>{k.replace('_', ' ')}</td><td>{fmt(v.observed, 1, ` ${v.unit}`)}</td><td>{fmt(v.reference, 1, ` ${v.unit}`)}</td>
-                      <td style={{ fontWeight: 700 }}>{v.difference == null ? '—' : `${v.difference > 0 ? '+' : ''}${v.difference.toFixed(1)} ${v.unit}`}</td></tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="lv-muted" style={{ marginTop: 6 }}>
-                Model time {ref.model_time || '—'} · fetched {formatAge(ref.fetched_at, now)}{ref.stale ? ' (stale)' : ''}. {ref.note}
-              </p>
-            </>
-          )}
-        </Card>
-
-        <Card title="Provenance" icon={<FileSearch size={14} />}>
-          <dl className="lv-kv">
-            <dt>Data source</dt><dd className="lv-row"><SourceBadge source={det.provenance.data_source} simulated={det.provenance.simulated} /> via {det.provenance.adapter}</dd>
-            <dt>Observation time</dt><dd>{fmtDateTime(det.provenance.observation_timestamp)}</dd>
-            <dt>Received</dt><dd>{fmtDateTime(det.provenance.received_timestamp)}</dd>
-            <dt>Processed</dt><dd>{fmtDateTime(det.provenance.processing_timestamp)} ({fmt(det.provenance.processing_ms, 1)} ms)</dd>
-            <dt>Freshness</dt><dd>{det.provenance.freshness}</dd>
-            <dt>Detector</dt><dd>{det.provenance.detector_version} · {det.provenance.pipeline_version}</dd>
-            <dt>Reference model</dt><dd>{det.provenance.reference_model || '—'}</dd>
-            <dt>Input parameters</dt><dd className="lv-mono" style={{ fontSize: '0.7rem' }}>{Object.entries(det.provenance.input_parameters || {}).map(([k, v]) => `${k}=${v}`).join(' · ')}</dd>
-            <dt>Neighbours used</dt><dd>{det.provenance.neighbor_count}</dd>
-            <dt>Triggered rules</dt><dd>{det.provenance.triggered_rules?.length ? det.provenance.triggered_rules.join('; ') : 'none'}</dd>
-            <dt>Detection id</dt><dd className="lv-mono">{det.detection_id}</dd>
-            {det.provenance.injected_fault && (<><dt>Injected fault</dt><dd>{det.provenance.injected_fault.label} ({det.provenance.injected_fault.severity})</dd></>)}
-          </dl>
-        </Card>
-      </div>
-      {live.active_faults?.length > 0 && (
-        <div className="lv-callout warn">Test Lab fault active on this station: {live.active_faults.map((f: any) => `${f.label} (${f.parameter || 'station'}, ${f.severity})`).join(', ')}.</div>
-      )}
-    </>
-  );
-};

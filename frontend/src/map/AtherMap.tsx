@@ -19,10 +19,7 @@ import {
 import { VaneParticlesLayer, WindGridData } from './vane/ParticlesLayer';
 import { fetchWeatherGrid } from '../services/api';
 import { AWSNeighbor } from '../aws/awsGeo';
-import { AWSStationOverlay } from '../aws/AWSStationOverlay';
 import { StationMarkerLayer } from './StationMarkerLayer';
-import { StarField } from './StarField';
-import { SunLayer } from './SunLayer';
 import { CursorCoords } from './CursorCoords';
 import { setupGraticule } from './Graticule';
 
@@ -34,7 +31,6 @@ const MAP_BACKGROUND_COLOR = '#080c14';
 // the existing "fly to selected station" effect below -- reused here so the
 // 3D AWS model appears exactly when the map itself considers you at
 // station-level zoom, not an arbitrarily different threshold.
-const AWS_MODEL_ZOOM_THRESHOLD = 8.0;
 
 export interface MapViewState {
   center: [number, number];
@@ -215,8 +211,9 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
           }
         ]
       },
-      center: [15, 20],
-      zoom: 1.9,
+      // India-wide network view (the live AWS network); users can still zoom out.
+      center: [80.5, 22.5],
+      zoom: 3.7,
       minZoom: 1.5,
       maxZoom: 18,
       pixelRatio: Math.min(window.devicePixelRatio || 1, 2)
@@ -369,25 +366,6 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
     );
   }, [selectedStationId, neighbors, stationsGeoJSON, isMapReady]);
 
-  // 4c. Track whether we're at close/station-level zoom, for gating the 3D
-  // AWS model overlay. A boolean, updated only when it actually crosses the
-  // threshold -- not on every zoom tick -- to avoid re-rendering on every
-  // scroll frame.
-  const [isCloseZoom, setIsCloseZoom] = React.useState(false);
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !isMapReady) return;
-
-    const checkZoom = () => {
-      const close = map.getZoom() >= AWS_MODEL_ZOOM_THRESHOLD;
-      setIsCloseZoom((prev) => (prev !== close ? close : prev));
-    };
-    checkZoom();
-    map.on('zoom', checkZoom);
-    return () => {
-      map.off('zoom', checkZoom);
-    };
-  }, [isMapReady]);
 
   // NOTE: There used to be a "Vane Temperature WebGL Layer" here that fetched
   // a fully synthetic, procedurally generated global temperature field from
@@ -485,8 +463,9 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
 
   const handleResetWorldView = useCallback(() => {
     mapRef.current?.flyTo({
-      center: [15, 20],
-      zoom: 1.9,
+      // India-wide network view (the live AWS network); users can still zoom out.
+      center: [80.5, 22.5],
+      zoom: 3.7,
       duration: 1200,
       essential: true
     });
@@ -495,18 +474,9 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
   // Selected station's real coordinates/status, for the 3D AWS overlay.
   // Recomputed only when the selection or the underlying data actually
   // changes -- not on every render.
-  const selectedFeature = React.useMemo(() => {
-    if (!selectedStationId || !stationsGeoJSON) return null;
-    const f = stationsGeoJSON.features.find((feat) => feat.properties?.id === selectedStationId);
-    if (!f || f.geometry.type !== 'Point') return null;
-    const [lng, lat] = f.geometry.coordinates;
-    return { lng, lat, status: f.properties?.status || 'NORMAL', name: f.properties?.name || selectedStationId };
-  }, [selectedStationId, stationsGeoJSON]);
 
   return (
     <div className="map-viewport">
-      <StarField map={isMapReady ? mapRef.current : null} />
-      <SunLayer map={isMapReady ? mapRef.current : null} />
       <div ref={mapContainerRef} className="maplibre-container" />
       <CursorCoords map={isMapReady ? mapRef.current : null} />
 
@@ -524,18 +494,6 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
         />
       )}
 
-      {/* Realistic 3D AWS model -- only the selected station, only at close
-          zoom. At most one 3D scene ever exists at a time. */}
-      {isMapReady && mapRef.current && isCloseZoom && selectedFeature && (
-        <AWSStationOverlay
-          map={mapRef.current}
-          stationId={selectedStationId as string}
-          stationName={selectedFeature.name}
-          lng={selectedFeature.lng}
-          lat={selectedFeature.lat}
-          status={selectedFeature.status}
-        />
-      )}
 
       {/* Phase 9: Active-Layer Indicator Badge */}
       <div className="active-layer-indicator-pill">

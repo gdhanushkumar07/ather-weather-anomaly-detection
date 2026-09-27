@@ -318,8 +318,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
           <div className="home-nav-actions">
             <button
               className="home-cta-button primary nav-cta-btn"
-              onClick={() => onLaunchPlatform('map')}
-              title="Launch the operational ATHER weather map"
+              onClick={() => onLaunchPlatform('overview')}
+              title="Open the ATHER operational overview"
             >
               <span>LAUNCH ATHER</span>
               <ArrowRight className="cta-gold-arrow w-3.5 h-3.5" />
@@ -387,7 +387,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 className="home-cta-button primary full-width"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  onLaunchPlatform('map');
+                  onLaunchPlatform('overview');
                 }}
               >
                 <span>LAUNCH ATHER</span>
@@ -428,8 +428,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               <div className="hero-cta-group">
                 <button
                   className="home-cta-button primary large hero-primary-cta"
-                  onClick={() => onLaunchPlatform('map')}
-                  title="Launch the operational ATHER weather map"
+                  onClick={() => onLaunchPlatform('overview')}
+                  title="Open the ATHER operational overview"
                 >
                   <span>LAUNCH ATHER</span>
                   <ArrowRight className="cta-gold-arrow w-4 h-4" />
@@ -480,7 +480,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                   </div>
                   <div className="console-status-live demo-badge">
                     <span className="demo-beacon" />
-                    <span>DEMO ANALYSIS</span>
+                    <span>ILLUSTRATIVE EXAMPLE</span>
                   </div>
                 </div>
 
@@ -601,7 +601,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                   {/* Console Action Footer */}
                   <div className="console-action-row">
                     <div className="console-meta-text">
-                      DEMO SCENARIO · AWS-178
+                      ILLUSTRATIVE EXAMPLE · NOT LIVE DATA
                     </div>
                     <button
                       type="button"
@@ -1470,7 +1470,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               </div>
               <div className="mock-nav-tabs">
                 <span className="mock-tab active">2D Map</span>
-                <span className="mock-tab">Anomalies ({summary?.anomalyCount ?? 12})</span>
+                <span className="mock-tab">Anomalies ({summary?.anomalyCount ?? '—'})</span>
                 <span className="mock-tab">Sensor Health</span>
                 <span className="mock-tab">Test Lab</span>
               </div>
@@ -1539,19 +1539,19 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
 
                 <div className="feed-metrics-bottom">
                   <div className="feed-stat">
-                    <span className="num">{summary?.totalStations ?? 150}</span>
+                    <span className="num">{summary?.totalStations ?? '—'}</span>
                     <span className="lbl">Stations</span>
                   </div>
                   <div className="feed-stat">
-                    <span className="num text-green-500">{summary?.normalCount ?? 134}</span>
+                    <span className="num text-green-500">{summary?.normalCount ?? '—'}</span>
                     <span className="lbl">Normal</span>
                   </div>
                   <div className="feed-stat">
-                    <span className="num text-amber-500">{summary?.warningCount ?? 8}</span>
+                    <span className="num text-amber-500">{summary?.warningCount ?? '—'}</span>
                     <span className="lbl">Warning</span>
                   </div>
                   <div className="feed-stat">
-                    <span className="num text-red-500">{summary?.anomalyCount ?? 8}</span>
+                    <span className="num text-red-500">{summary?.anomalyCount ?? '—'}</span>
                     <span className="lbl">Anomaly</span>
                   </div>
                 </div>
@@ -1667,7 +1667,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                   href="#health"
                   onClick={(e) => {
                     e.preventDefault();
-                    onLaunchPlatform('health');
+                    onLaunchPlatform('overview');
                   }}
                 >
                   Sensor Health

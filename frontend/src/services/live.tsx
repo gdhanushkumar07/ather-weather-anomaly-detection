@@ -168,7 +168,8 @@ export const LiveNetworkProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setStationsVersion((v) => v + 1);
 
         esRef.current?.close();
-        const es = new EventSource(`/api/stream?since=${snap.event_seq}`);
+        const streamBase = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '');
+        const es = new EventSource(`${streamBase}/api/stream?since=${snap.event_seq}`);
         esRef.current = es;
         es.onopen = () => !cancelled && setConnection('live');
         es.onerror = () => !cancelled && setConnection(es.readyState === EventSource.CLOSED ? 'offline' : 'reconnecting');

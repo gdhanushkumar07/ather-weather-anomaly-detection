@@ -1,6 +1,6 @@
 import { Station, ObservationHistory, AnomaliesSummary, OpenMeteoWeather } from '../types/weather';
 
-const API_BASE = '/api';
+const API_BASE = (import.meta.env.VITE_API_BASE || '').replace(/\/+$/, '') + '/api';
 
 export async function fetchStationsGeoJSON(params?: {
   minLon?: number;

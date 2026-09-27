@@ -440,6 +440,42 @@ def _free_port():
     return p
 
 
+class TestSimulationWarmup(unittest.TestCase):
+    """Start-up warm-up: simulated history goes through the REAL processor,
+    so temporal / drift / data-quality history exists before a station joins
+    the live feed, and nothing is marked stale or opened as an incident."""
+
+    def test_warmup_gives_real_history_and_no_false_incidents(self):
+        from app.pipeline.runtime import PipelineRuntime
+        tmp = _temp_env(self)
+        self.addCleanup(_restore_env, self)
+        env = {"ATHER_SIM_MAX_STATIONS": "10", "ATHER_SIM_WARMUP_CYCLES": "8", "ATHER_SIM_WARMUP_CHUNK": "5"}
+        old = {k: os.environ.get(k) for k in env}
+        os.environ.update(env)
+        for k, v in old.items():
+            self.addCleanup(os.environ.pop, k, None) if v is None else self.addCleanup(os.environ.__setitem__, k, v)
+        rt = PipelineRuntime(detector=AnomalyDetector(), station_service=station_service,
+                             incident_service=incident_service, store=TimeSeriesStore(path=os.path.join(tmp, "w.db")),
+                             sim_enabled=True, reference_enabled=False, sim_interval_s=600)
+        rt.simulation.live_ids = set()
+        asyncio.run(rt._simulation_warmup())
+        self.assertEqual(rt.warmup["state"], "COMPLETE")
+        self.assertEqual(rt.warmup["stations_ready"], 10)
+        self.assertIsNone(rt.simulation.live_ids)
+        rt.started_at = time.time() - 7200
+        rt.check_staleness(time.time())
+        sid = rt.warmup["demo_station_id"]
+        self.assertNotEqual(rt.processor.health[sid]["freshness"], "STALE")
+        self.assertGreaterEqual(len(rt.store.recent_station_observations(sid, 20)), 8)
+        det = rt.store.latest_detection(sid)
+        # history-dependent layers were genuinely evaluated by the engine
+        self.assertGreaterEqual(det["data_quality"]["historical_points"], 8)
+        self.assertEqual(det["layer_results"]["L2"]["status"], "PASS")
+        self.assertIn(det["layer_results"]["L5"]["status"], ("PASS", "WARNING", "ANOMALY"))
+        # a normal simulated network opens no investigations
+        self.assertEqual(incident_service.list_all(source="ALL"), [])
+
+
 class TestEndToEndOverHTTP(unittest.TestCase):
     """observation -> ingestion -> 5-layer engine -> anomaly result ->
     incident -> persisted state -> API -> live SSE event."""

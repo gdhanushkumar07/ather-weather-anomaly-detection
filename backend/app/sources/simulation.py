@@ -506,6 +506,10 @@ class SimulationAdapter(SourceAdapter):
         self.max_stations = max_stations
         self.reference_lookup = reference_lookup or (lambda s: None)
         self.network: Optional[SyntheticNetwork] = None
+        # Stations whose simulated history has been processed (start-up
+        # warm-up). None = all stations are live. Live cycles only emit for
+        # these, so a live observation never precedes its station's history.
+        self.live_ids: Optional[set] = None
         self.status.note = (f"Simulated telemetry for real WeatherUnion AWS locations, one observation per "
                             f"station every {int(interval_s)} s. Not measured data.")
 
@@ -524,12 +528,35 @@ class SimulationAdapter(SourceAdapter):
     def station_ids(self) -> List[str]:
         return list(self.ensure_network().stations)
 
-    async def poll(self) -> List[ObservationIn]:
+    def demo_station_id(self) -> Optional[str]:
+        """The simulated station with the densest neighbourhood (most
+        stations within 25 km): the best-supported baseline for a demo."""
         net = self.ensure_network()
-        now = float(int(time.time()))
-        observed = datetime.fromtimestamp(now, tz=timezone.utc)
+        st = list(net.stations.values())
+        if not st:
+            return None
+        from engine.layer4_spatial import haversine_distance_km
+        def n_near(s):
+            return sum(1 for o in st if o is not s and haversine_distance_km(s.lat, s.lon, o.lat, o.lon) <= 25.0)
+        return max(st, key=lambda s: (n_near(s), s.station_id)).station_id
+
+    def warmup_order(self, first: Optional[str]) -> List[str]:
+        """Stations ordered by distance from the demo station, so the demo
+        region (and its spatial neighbours) is warmed first."""
+        net = self.ensure_network()
+        if not first or first not in net.stations:
+            return list(net.stations)
+        from engine.layer4_spatial import haversine_distance_km
+        c = net.stations[first]
+        return sorted(net.stations, key=lambda sid: haversine_distance_km(c.lat, c.lon, net.stations[sid].lat, net.stations[sid].lon))
+
+    def observations_at(self, t: float, station_ids: Optional[List[str]] = None) -> List[ObservationIn]:
+        """One simulated reporting cycle at time t (the same generator for
+        live cycles and for start-up history)."""
+        net = self.ensure_network()
+        observed = datetime.fromtimestamp(t, tz=timezone.utc)
         items = []
-        for sid, (values, metas) in net.generate(now, self.faults).items():
+        for sid, (values, metas) in net.generate(t, self.faults, station_ids=station_ids).items():
             if values is None:
                 continue  # communication dropout: nothing transmitted
             meta = {"injected_fault": metas[0] if len(metas) == 1 else metas} if metas else {}
@@ -539,3 +566,9 @@ class SimulationAdapter(SourceAdapter):
                 meta=meta, **values,
             ))
         return items
+
+    async def poll(self) -> List[ObservationIn]:
+        ids = None if self.live_ids is None else [s for s in self.ensure_network().stations if s in self.live_ids]
+        if ids == []:
+            return []
+        return self.observations_at(float(int(time.time())), ids)

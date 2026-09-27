@@ -160,9 +160,14 @@ function layerStage(key: LayerKey, card: any, availability: EvidenceAvailability
   const state = !ev.assessed
     ? (ev.state === 'NOT_APPLICABLE' ? 'Not applicable' : ev.state === 'UNAVAILABLE' ? 'Unavailable' : 'Not evaluated')
     : ev.state === 'ANOMALY' ? (String(card?.status).toUpperCase() === 'VETO' ? 'Veto' : 'Detected') : ev.state === 'WARNING' ? 'Signal' : 'No signal';
+  // A 0.00 evidence score from an assessed layer means "evaluated, found no
+  // anomalous evidence" — say that, and keep the number in the details.
+  const noEvidence = ev.assessed && tone === 'pass' && (ev.score === null || ev.score === 0);
   const contribution = !ev.assessed
     ? 'excluded from fusion'
+    : noEvidence ? 'no anomalous evidence'
     : `evidence score ${ev.score !== null ? ev.score.toFixed(2) : '—'}${tone === 'triggered' || tone === 'warning' ? ' · supports anomaly' : ''}`;
+  if (ev.assessed && ev.score !== null) rows.unshift(['Evidence score', `${ev.score.toFixed(2)}${noEvidence ? ' (evaluated — no anomalous evidence)' : ''}`]);
   if (card?.evidence_quality && ev.assessed) rows.unshift(['Evidence quality', human(card.evidence_quality)]);
   return { n: meta.n, key, name: meta.name, checks: meta.checks, tone, state, finding: ev.reason || '—', evidence: rows, contribution, notes };
 }

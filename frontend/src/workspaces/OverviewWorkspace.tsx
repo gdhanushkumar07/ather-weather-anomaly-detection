@@ -64,6 +64,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
   const obsSource = system?.sources?.find((s: any) => s.kind === 'OBSERVATION' && s.state === 'ACTIVE');
   const lastObs = system?.metrics?.last_processed_at;
   const openInv = incidentCounts?.active ?? 0;
+  const warmup = system?.warmup;
   const critical = c.anomaly || 0;
   const warning = c.suspect || 0;
   const degraded = c.degraded || 0;
@@ -85,10 +86,15 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
           <p className="a-lead">
             ATHER checks every observation through five independent detection layers, fuses the evidence, and explains what it found.
             {obsSource && <> Source: {obsSource.label}, one observation per station every {Math.round(obsSource.cadence_s)} s{lastObs ? `; last processed ${formatAge(lastObs, now)}` : ''}.</>}
+            {warmup?.state === 'RUNNING' && <> Warming up the simulated network: {warmup.stations_ready} of {warmup.stations_total} stations have {warmup.cycles} cycles of simulated history processed by the full engine.</>}
           </p>
         </div>
         <div className="lv-row">
           {obsSource?.simulated && <SourceBadge simulated />}
+          {warmup?.demo_station_id && (
+            <button className="lv-btn" title="Simulated station with the densest neighbourhood — the baseline for a normal-operation walkthrough"
+              onClick={() => onOpenStation(warmup.demo_station_id)}>Baseline station</button>
+          )}
           <button className="lv-btn" onClick={() => onNavigate('anomalies')}><ShieldAlert size={14} />Investigations</button>
           <button className="lv-btn lv-btn-primary" onClick={() => onNavigate('map')}><MapPinned size={14} />Open live map</button>
         </div>

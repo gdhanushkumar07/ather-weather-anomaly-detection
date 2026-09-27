@@ -98,6 +98,11 @@ class TimeSeriesStore:
             CREATE INDEX IF NOT EXISTS idx_det_time ON detections(observed_at);
             """
         )
+        # Additive migration: the source's declared pressure convention
+        # (MSL / SURFACE / NULL = undeclared), needed by Layer 3 on warm-up/replay.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(observations)").fetchall()}
+        if "pressure_convention" not in cols:
+            conn.execute("ALTER TABLE observations ADD COLUMN pressure_convention TEXT")
         conn.commit()
 
     # ── writes (pipeline worker thread) ─────────────────────────────────
@@ -121,7 +126,7 @@ class TimeSeriesStore:
                 o["observation_id"], o["station_id"], o["observed_at"], o["received_at"],
                 o["source"], o.get("adapter"),
                 *[o["values"].get(c) for c in _OBS_COLUMNS],
-                json.dumps(o.get("flags") or []), 1 if o.get("late") else 0,
+                json.dumps(o.get("flags") or []), 1 if o.get("late") else 0, o.get("pressure_convention"),
             )
             for o in observations
         ]
@@ -140,8 +145,8 @@ class TimeSeriesStore:
             conn.executemany(
                 f"""INSERT OR IGNORE INTO observations (
                       observation_id, station_id, observed_at, received_at, source, adapter,
-                      {", ".join(_OBS_COLUMNS)}, flags, late
-                    ) VALUES (?,?,?,?,?,?,{",".join("?" * len(_OBS_COLUMNS))},?,?)""",
+                      {", ".join(_OBS_COLUMNS)}, flags, late, pressure_convention
+                    ) VALUES (?,?,?,?,?,?,{",".join("?" * len(_OBS_COLUMNS))},?,?,?)""",
                 obs_rows,
             )
             inserted = conn.total_changes - before
@@ -208,7 +213,7 @@ class TimeSeriesStore:
             return []
         marks = ",".join("?" * len(station_ids))
         rows = self._conn().execute(
-            f"""SELECT observation_id, station_id, observed_at, source, {", ".join(_OBS_COLUMNS)}
+            f"""SELECT observation_id, station_id, observed_at, source, pressure_convention, {", ".join(_OBS_COLUMNS)}
                 FROM observations WHERE station_id IN ({marks}) AND observed_at BETWEEN ? AND ? AND late = 0
                 ORDER BY observed_at""",
             (*station_ids, since, until),
@@ -258,7 +263,7 @@ class TimeSeriesStore:
 
     def recent_station_observations(self, station_id: str, limit: int) -> List[Dict[str, Any]]:
         rows = self._conn().execute(
-            f"""SELECT observation_id, observed_at, source, {", ".join(_OBS_COLUMNS)} FROM observations
+            f"""SELECT observation_id, observed_at, source, pressure_convention, {", ".join(_OBS_COLUMNS)} FROM observations
                 WHERE station_id = ? AND late = 0 ORDER BY observed_at DESC LIMIT ?""",
             (station_id, limit),
         ).fetchall()

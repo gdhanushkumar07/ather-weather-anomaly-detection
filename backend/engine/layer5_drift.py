@@ -46,6 +46,9 @@ from schema import AWSReading, DataQuality
 
 REFERENCE_CADENCE_S = 600.0     # the cadence v2's per-sample constants assumed
 MK_MIN_SAMPLES = 12
+# Minimum VALID samples a channel's CUSUM needs before its drift tier means
+# anything (the same threshold drift_tier() has always used).
+MIN_SAMPLES_FOR_DRIFT = 6
 MK_P_THRESHOLD = 0.01
 
 
@@ -145,7 +148,7 @@ class ChannelDriftState:
     @property
     def drift_tier(self) -> str:
         """Maps current CUSUM state to a human-readable drift tier."""
-        if self.sample_count < 6:
+        if self.sample_count < MIN_SAMPLES_FOR_DRIFT:
             return "INSUFFICIENT_DATA"
         max_s     = max(self.s_pos, self.s_neg)
         threshold = self.threshold
@@ -340,6 +343,28 @@ class SensorDriftHealthLayer:
         detail["max_drift_score"]   = round(max_drift_score, 3)
         detail["worst_drift_tier"]  = worst_tier
         detail["samples_in_radius"] = tracker.total_readings
+
+        # Canonical layer status (the contract the detector's availability
+        # check and fusion rely on). EVALUATED only when at least one channel
+        # actually has a meaningful drift assessment (>= MIN_SAMPLES_FOR_DRIFT
+        # valid samples, not suspended for saturation); otherwise the real
+        # reason is reported. Previously no status was emitted at all, so the
+        # layer was reported unavailable for every station.
+        assessed = {ch: d.get("samples_tracked", 0) for ch, d in detail["channel_drift"].items()
+                    if d.get("reference_mode") != "SUSPENDED_SATURATION"}
+        best = max(assessed.values(), default=0)
+        if best >= MIN_SAMPLES_FOR_DRIFT:
+            detail["status"] = "EVALUATED"
+            detail["channels_assessed"] = [ch for ch, n in assessed.items() if n >= MIN_SAMPLES_FOR_DRIFT]
+        else:
+            detail["status"] = "INSUFFICIENT_DATA"
+            if not detail["channel_drift"]:
+                detail["note"] = "no valid channel to track for drift"
+            elif not assessed:
+                detail["note"] = "drift tracking suspended: humidity at saturation"
+            else:
+                detail["note"] = (f"insufficient history for drift assessment "
+                                  f"({best}/{MIN_SAMPLES_FOR_DRIFT} valid samples)")
 
         reason_str = "; ".join(reasons) if reasons else None
         return max_drift_score, health_score, min_days_to_failure, reason_str, detail

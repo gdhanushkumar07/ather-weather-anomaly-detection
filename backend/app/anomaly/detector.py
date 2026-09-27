@@ -1126,10 +1126,12 @@ class AnomalyDetector:
             # detail["samples_in_radius"] is actually total readings processed
             # for this station (a misleading name, but the right scalar here).
             s_cnt = d5.get("samples_in_radius", 0)
-            if s_cnt < 5:
+            # The layer's own canonical status decides assessability (same
+            # signal the availability check uses), not a separate threshold.
+            if d5.get("status") != "EVALUATED":
                 l5_status = "INSUFFICIENT_DATA"
                 l5_conf = "INSUFFICIENT_DATA"
-                l5_reason = f"Drift monitoring initializing ({s_cnt} samples tracked)"
+                l5_reason = d5.get("note") or f"Drift monitoring initializing ({s_cnt} samples tracked)"
             elif layer_scores["drift"] >= 0.70:
                 l5_status = "ANOMALY"
                 l5_conf = "HIGH" if s_cnt >= 20 else "MEDIUM"

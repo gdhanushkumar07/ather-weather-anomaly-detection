@@ -110,6 +110,7 @@ def normalize(
         flags=flags,
         meta=dict(obs.meta),
         cadence_s=cadence_s,
+        pressure_convention=obs.pressure_convention if values.get("pressure") is not None else None,
     )
 
 

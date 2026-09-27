@@ -53,6 +53,11 @@ class ObservationIn(BaseModel):
     source: str = Field(..., max_length=40)
     adapter: str = Field("push", max_length=40)
 
+    # Pressure convention DECLARED by the source's data contract:
+    # "MSL" (sea-level reduced) or "SURFACE" (station pressure). None = the
+    # source does not define it (UNKNOWN). Never inferred from magnitude.
+    pressure_convention: Optional[str] = None
+
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     pressure: Optional[float] = None
@@ -86,6 +91,15 @@ class ObservationIn(BaseModel):
             raise ValueError(f"corrupt magnitude: {f}")
         return f
 
+    @field_validator("pressure_convention", mode="before")
+    @classmethod
+    def _known_convention(cls, v: Any) -> Optional[str]:
+        if v is None or (isinstance(v, str) and v.strip().upper() in ("", "UNKNOWN")):
+            return None
+        if isinstance(v, str) and v.strip().upper() in ("MSL", "SURFACE"):
+            return v.strip().upper()
+        raise ValueError(f"pressure_convention must be MSL, SURFACE or UNKNOWN, got {v!r}")
+
     @field_validator("units")
     @classmethod
     def _known_unit_keys(cls, v: Dict[str, str]) -> Dict[str, str]:
@@ -109,6 +123,7 @@ class NormalizedObservation:
     flags: List[str] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
     cadence_s: float = 300.0
+    pressure_convention: Optional[str] = None  # MSL | SURFACE | None (undeclared)
     enqueued_at: Optional[float] = None  # monotonic time, set by the stream
 
     @staticmethod

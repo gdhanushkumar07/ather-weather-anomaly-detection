@@ -82,6 +82,7 @@ def legacy_payload_to_observation(stn_id: str, norm: Dict[str, Any], raw: Dict[s
         station_id=stn_id, observed_at=observed_at, source="AWS_IN_SITU", adapter="push",
         temperature=norm.get("temperature"), humidity=norm.get("humidity"), pressure=norm.get("pressure"),
         wind_speed=norm.get("windSpeed"), station=station,
+        pressure_convention=norm.get("pressureConvention"),
     )
 
 

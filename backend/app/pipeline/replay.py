@@ -121,6 +121,7 @@ class ReplayService:
                 if values is None:
                     continue
                 o = ObservationIn(station_id=sid, observed_at=obs_at, source="SIMULATED_AWS", adapter="replay",
+                                  pressure_convention=net.stations[sid].p_convention,
                                   meta={"injected_fault": metas[0]} if metas else {}, **values)
                 batch.append(normalize(o, received_at=obs_at + timedelta(seconds=2), cadence_s=step_s))
             end = onset + p["fault_duration_minutes"] * 60.0
@@ -139,7 +140,8 @@ class ReplayService:
                 values = {k: r.get(k) for k in ("temperature", "humidity", "pressure", "wind_speed",
                                                   "wind_direction", "rainfall", "dew_point")}
                 o = ObservationIn(station_id=r["station_id"], observed_at=datetime.fromtimestamp(t, tz=timezone.utc),
-                                  source=r["source"], adapter="replay", **values)
+                                  source=r["source"], adapter="replay",
+                                  pressure_convention=r.get("pressure_convention"), **values)
                 batch.append(normalize(o, received_at=datetime.fromtimestamp(t + 2, tz=timezone.utc),
                                        cadence_s=self.rt.simulation.cadence_s))
             yield t, batch, False

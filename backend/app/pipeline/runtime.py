@@ -102,8 +102,9 @@ class PipelineRuntime:
     @staticmethod
     def _reference_for(stn: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         from app.weather.open_meteo import open_meteo_service
+        from app.weather.open_meteo import with_pressure_provenance
         e = open_meteo_service.cache.get(f"{round(stn['latitude'], 3)}_{round(stn['longitude'], 3)}")
-        return e["data"] if e else None
+        return with_pressure_provenance(e["data"]) if e else None
 
     def _reference_coords(self):
         return [(s["latitude"], s["longitude"]) for s in self.simulation.catalogue()]

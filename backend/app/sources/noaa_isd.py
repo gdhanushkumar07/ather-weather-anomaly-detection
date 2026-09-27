@@ -97,6 +97,7 @@ def parse_isd_record(rec: Dict[str, Any]) -> Optional[ObservationIn]:
         dew_point=td,
         humidity=_rh(t, td),
         pressure=slp,
+        pressure_convention="MSL" if slp is not None else None,  # ISD SLP = sea-level pressure
         wind_speed=wspd,
         wind_direction=wdir,
         station={

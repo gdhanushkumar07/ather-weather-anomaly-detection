@@ -296,6 +296,9 @@ class SimStation:
     offset_t: float
     offset_td: float
     offset_p: float
+    # Convention of the generated pressure (the generator's data contract):
+    # inherited from the reference it is built on, never guessed.
+    p_convention: Optional[str] = None
 
 
 class SyntheticNetwork:
@@ -359,7 +362,15 @@ class SyntheticNetwork:
             t_mean = t_ref - SyntheticNetwork.DIURNAL_AMPLITUDE_C * _diurnal(h_ref)
             td = _dew_point(t_ref, rh_ref)
             p_ref = ref.get("pressure")
-            p_ref = 1009.0 if p_ref is None or p_ref < 900 else float(p_ref)
+            if p_ref is None or p_ref < 900:
+                # No usable reference: the generator's own synthetic baseline,
+                # which is a sea-level value by construction.
+                p_ref, p_conv = 1009.0, "MSL"
+            else:
+                # Built on the reference value, so it carries the reference's
+                # RECORDED convention (Open-Meteo pressure_msl -> MSL, surface
+                # fallback -> SURFACE, indeterminable -> None/UNKNOWN).
+                p_ref, p_conv = float(p_ref), ref.get("pressureConvention")
             p_base = p_ref - SyntheticNetwork.TIDE_AMPLITUDE_HPA * _tide(h_ref)
             r = random.Random(_seed("offsets", s["id"]))
             out.append(SimStation(
@@ -369,6 +380,7 @@ class SyntheticNetwork:
                 wind_mean=float(ref.get("windSpeed") or 8.0), wind_dir=float(ref.get("windDirectionDeg") or 240.0),
                 precip=float(ref.get("precipitation") or 0.0),
                 offset_t=r.uniform(-0.6, 0.6), offset_td=r.uniform(-0.8, 0.8), offset_p=r.uniform(-0.3, 0.3),
+                p_convention=p_conv,
             ))
         return SyntheticNetwork(out)
 
@@ -523,6 +535,7 @@ class SimulationAdapter(SourceAdapter):
             meta = {"injected_fault": metas[0] if len(metas) == 1 else metas} if metas else {}
             items.append(ObservationIn(
                 station_id=sid, observed_at=observed, source=SIM_SOURCE, adapter=self.name,
+                pressure_convention=net.stations[sid].p_convention,
                 meta=meta, **values,
             ))
         return items

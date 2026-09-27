@@ -215,6 +215,7 @@ class ObservationProcessor:
                 obs = NormalizedObservation(
                     observation_id=row["observation_id"], station_id=sid, observed_at=observed,
                     received_at=observed, source=row["source"], adapter="warm-up", values=values,
+                    pressure_convention=row.get("pressure_convention"),
                 )
                 reading = self._to_reading(obs, stn)
                 self.pool.put(reading, source_class(row["source"]), row["observed_at"])
@@ -270,6 +271,7 @@ class ObservationProcessor:
             lon=float(stn.get("longitude") or 0.0),
             elevation_m=float(stn.get("elevation") or 0.0),
             source=obs.source,
+            pressure_convention=obs.pressure_convention,
             observation_timestamp=obs.observed_at,
             received_timestamp=obs.received_at,
             freshness=freshness,
@@ -286,6 +288,7 @@ class ObservationProcessor:
             "values": obs.values,
             "flags": obs.flags,
             "late": late,
+            "pressure_convention": obs.pressure_convention,
         }
 
     def _baseline(self, station_id: str, consensus: Dict[str, Any]) -> Dict[str, Any]:

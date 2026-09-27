@@ -166,6 +166,13 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
               {model.headline.confidence !== null && <span className="lv-muted" title={CONFIDENCE_NOTE}>confidence {pct(model.headline.confidence)}*</span>}
             </div>
             {model.headline.summary && <p style={{ margin: '0 0 14px', fontSize: '0.86rem', lineHeight: 1.5 }}>{model.headline.summary}</p>}
+            {liveState?.freshness === 'STALE' && (
+              <div className="lv-callout warn" style={{ marginBottom: 12 }}>
+                Telemetry is stale: the newest observation is from {formatAge(liveState.last_observed_at, now)}. The layer
+                evidence below is historical — it belongs to the observation of {fmtDateTime(liveState.last_observed_at)},
+                not to the station's current state.
+              </div>
+            )}
             <IntelligencePipeline model={model} />
           </>
         )}

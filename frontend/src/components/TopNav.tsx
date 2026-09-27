@@ -21,7 +21,7 @@ const TABS: { id: Workspace; label: string; also?: Workspace[] }[] = [
 ];
 
 export const TopNav: React.FC<TopNavProps> = ({ activeWorkspace, onNavigate, onSelectStation }) => {
-  const { connection, lastEventAt, incidentCounts } = useLive();
+  const { connection, lastEventAt, incidentCounts, system } = useLive();
   const [q, setQ] = useState('');
   const [results, setResults] = useState<Station[]>([]);
   const [open, setOpen] = useState(false);
@@ -40,9 +40,19 @@ export const TopNav: React.FC<TopNavProps> = ({ activeWorkspace, onNavigate, onS
     return () => document.removeEventListener('mousedown', close);
   }, []);
 
-  const age = lastEventAt ? Math.round((now - lastEventAt) / 1000) : null;
-  const live = connection === 'live' && age !== null && age < 30;
-  const label = connection === 'offline' ? 'OFFLINE' : connection !== 'live' ? 'CONNECTING' : live ? 'LIVE' : 'NO RECENT DATA';
+  // Two separate facts: is the server reachable (SSE heartbeat every 5 s),
+  // and is TELEMETRY fresh (age of the newest processed observation vs the
+  // source cadence). "LIVE" requires both; a connected server with old data
+  // says STALE DATA and how old it is.
+  const hbAge = lastEventAt ? Math.round((now - lastEventAt) / 1000) : null;
+  const connected = connection === 'live' && hbAge !== null && hbAge < 30;
+  const newest = system?.metrics?.newest_observation_epoch as number | null | undefined;
+  const cadence = Math.max(60, ...((system?.sources || []).filter((s: any) => s.kind !== 'REFERENCE' && (s.state === 'ACTIVE' || s.state === 'DEGRADED')).map((s: any) => s.cadence_s || 0)));
+  const age = newest ? Math.max(0, Math.round(now / 1000 - newest)) : null;
+  const fresh = age !== null && age <= 3 * cadence;
+  const live = connected && fresh;
+  const label = connection === 'offline' ? 'OFFLINE' : connection !== 'live' ? 'CONNECTING' : !connected ? 'NO RECENT DATA' : age === null ? 'NO TELEMETRY' : fresh ? 'LIVE' : 'STALE DATA';
+  const ageText = age === null ? '' : age < 120 ? `${age}s` : age < 7200 ? `${Math.round(age / 60)}m` : `${Math.round(age / 3600)}h`;
   const open_ = incidentCounts?.active ?? 0;
 
   return (
@@ -85,9 +95,9 @@ export const TopNav: React.FC<TopNavProps> = ({ activeWorkspace, onNavigate, onS
             </div>
           )}
         </div>
-        <button className="a-live" onClick={() => onNavigate('system')} title="Pipeline and data-source health">
+        <button className="a-live" onClick={() => onNavigate('system')} title="Telemetry freshness = age of the newest processed observation (expected every source cadence). Click for pipeline and data-source health.">
           <span className={`lv-live-dot ${live ? '' : connection === 'offline' ? 'off' : 'wait'}`} />
-          {label}{age !== null && connection === 'live' ? ` · ${age}s` : ''}
+          {label}{connected && age !== null ? ` · data ${ageText} old` : ''}
         </button>
       </div>
     </header>

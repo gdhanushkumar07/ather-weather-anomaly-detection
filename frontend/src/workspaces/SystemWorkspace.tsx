@@ -9,7 +9,7 @@ const ms = (v?: number | null) => (v === null || v === undefined ? '—' : v >= 
 
 const STATE_CLASS: Record<string, string> = {
   ACTIVE: 'lv-status-nominal', RUNNING: 'lv-status-nominal', OK: 'lv-status-nominal',
-  DEGRADED: 'lv-status-suspect', STARTING: 'lv-status-suspect', WARMING_UP: 'lv-status-suspect', IDLE: 'lv-status-suspect',
+  DEGRADED: 'lv-status-suspect', BACKLOG: 'lv-status-suspect', STARTING: 'lv-status-suspect', WARMING_UP: 'lv-status-suspect', IDLE: 'lv-status-suspect',
   DOWN: 'lv-status-anomaly', ERROR: 'lv-status-anomaly',
   NOT_CONFIGURED: 'lv-status-unknown', DISABLED: 'lv-status-unknown',
 };

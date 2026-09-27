@@ -330,6 +330,23 @@ def _merge_context(existing_row, new_context_json: Optional[str]) -> Optional[st
     return new_context_json
 
 
+def record_event(incident_id: str, event: str, note: str) -> Optional[Dict[str, Any]]:
+    """Adds a system timeline entry to an OPEN incident without changing its
+    lifecycle state (e.g. TELEMETRY_RESTORED). Returns None if closed/missing."""
+    conn = get_connection()
+    with _write_lock:
+        row = conn.execute("SELECT status FROM incidents WHERE incident_id = ?", (incident_id,)).fetchone()
+        if not row or row["status"] in ("RESOLVED", "DISMISSED"):
+            return None
+        now = _now()
+        _add_timeline(conn, incident_id, event, now, None, note)
+        conn.execute("UPDATE incidents SET updated_at = ? WHERE incident_id = ?", (now, incident_id))
+        conn.commit()
+        inc = _row_with_timeline(conn, incident_id)
+    inc["lifecycle"] = build_lifecycle(inc)
+    return inc
+
+
 def _transition(incident_id: str, new_status: str, actor: Optional[str], note: str,
                  extra_fields: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     conn = get_connection()

@@ -568,6 +568,97 @@ class TestEndToEndOverHTTP(unittest.TestCase):
         incs = incident_service.list_all(source="LIVE_AWS", station_id=sid)
         self.assertTrue(any(i["root_cause"] == "COMMUNICATION_OUTAGE" for i in incs))
 
+    # ── operational correctness: freshness, recovery, de-duplication ────
+    def _stale_station(self, sid):
+        station_service._stations[sid] = {"id": sid, "name": sid, "latitude": 22.3, "longitude": 88.2,
+                                          "elevation": 5.0, "country": "India", "region": "Test", "town": "Test"}
+        self.addCleanup(station_service._stations.pop, sid, None)
+
+    def _one(self, rt, sid, at):
+        rt.process_now([ObservationIn(station_id=sid, observed_at=at, source="AWS_IN_SITU", adapter="push",
+                                      temperature=28.0, humidity=70.0, pressure=1006.0, pressure_convention="MSL")])
+
+    def _comm(self, sid):
+        return [i for i in incident_service.list_all(source="LIVE_AWS", station_id=sid)
+                if i["root_cause"] == "COMMUNICATION_OUTAGE"]
+
+    def test_A_fresh_telemetry_is_not_stale_and_age_is_reported(self):
+        from app.pipeline.runtime import get_runtime
+        rt, sid = get_runtime(), "OPS-A"
+        self._stale_station(sid)
+        rt.started_at = time.time() - 3600
+        self._one(rt, sid, datetime.now(UTC) - timedelta(seconds=30))
+        rt.check_staleness(time.time())
+        self.assertNotEqual(rt.processor.health[sid]["freshness"], "STALE")
+        self.assertEqual(self._comm(sid), [])
+        age = rt.metrics.snapshot()["telemetry_age_s"]
+        self.assertIsNotNone(age)
+        self.assertLess(age, 120)
+
+    def test_B_C_D_E_outage_recovery_evidence_and_dedup(self):
+        from app.pipeline.runtime import get_runtime
+        rt, sid = get_runtime(), "OPS-B"
+        self._stale_station(sid)
+        rt.started_at = time.time() - 3600
+        old = datetime.now(UTC) - timedelta(minutes=40)
+        self._one(rt, sid, old)
+        # B: telemetry stops -> STALE + one communication incident
+        rt.check_staleness(time.time())
+        h = rt.processor.health[sid]
+        self.assertEqual(h["freshness"], "STALE")
+        self.assertEqual(h["overall_status"], "degraded")
+        # D: the evidence stays tied to the observation it came from
+        self.assertEqual(datetime.fromisoformat(h["last_observed_at"]).timestamp(), old.timestamp())
+        # E: repeated monitor cycles never duplicate the incident
+        for _ in range(3):
+            rt.check_staleness(time.time())
+        comm = self._comm(sid)
+        self.assertEqual(len(comm), 1)
+        # C: telemetry resumes -> station fresh again, incident annotated, not auto-closed
+        self._one(rt, sid, datetime.now(UTC) - timedelta(seconds=10))
+        rt.check_staleness(time.time())
+        self.assertNotEqual(rt.processor.health[sid]["freshness"], "STALE")
+        inc = incident_service.get(comm[0]["incident_id"])
+        self.assertIn("TELEMETRY_RESTORED", [t["event"] for t in inc["timeline"]])
+        self.assertNotIn(inc["status"], ("RESOLVED", "DISMISSED"))
+        # a second outage while the first incident is still open updates it (no duplicate)
+        rt._last_received[sid] = time.time() - 3600
+        rt.processor.health[sid]["last_observed_epoch"] = time.time() - 3600
+        rt.check_staleness(time.time())
+        self.assertEqual(len(self._comm(sid)), 1)
+
+    def test_queued_but_received_data_is_not_a_communication_outage(self):
+        from app.pipeline.runtime import get_runtime
+        rt, sid = get_runtime(), "OPS-Q"
+        self._stale_station(sid)
+        rt.started_at = time.time() - 3600
+        self._one(rt, sid, datetime.now(UTC) - timedelta(seconds=30))
+        # processed state lags 40 min behind (backlog), but newer data was received and sits in the queue
+        rt.processor.health[sid]["last_observed_epoch"] = time.time() - 2400
+        rt._last_received[sid] = time.time() - 20
+        rt.check_staleness(time.time())
+        self.assertNotEqual(rt.processor.health[sid]["freshness"], "STALE")
+        self.assertEqual(self._comm(sid), [])
+
+    def test_simulator_cycle_skipped_under_backlog(self):
+        from app.pipeline.runtime import get_runtime
+        rt = get_runtime()
+        real = rt.stream
+
+        class Full:
+            depth = 10_000
+        rt.stream = Full()
+        try:
+            items = [ObservationIn(station_id="X", observed_at=datetime.now(UTC), source="AWS_IN_SITU",
+                                   adapter=rt.simulation.name, temperature=20.0)] * 4
+            before = rt.sim_cycles_skipped
+            asyncio.run(rt._emit(items))
+            self.assertEqual(rt.sim_cycles_skipped, before + 1)
+            self.assertEqual(rt.simulation.status.state, "DEGRADED")
+            self.assertIn("backlog", rt.simulation.status.note.lower())
+        finally:
+            rt.stream = real
+
     def test_replay_is_isolated_and_reports_markers(self):
         from app.pipeline.runtime import get_runtime
         from app.pipeline.replay import ReplayService

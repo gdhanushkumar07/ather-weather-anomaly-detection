@@ -446,6 +446,8 @@ class ObservationProcessor:
         self.metrics.ingestion_latency.add((obs.received_at - obs.observed_at).total_seconds() * 1000.0)
         self.metrics.processed.add()
         self.metrics.last_processed_at = now
+        if observed_epoch > (self.metrics.newest_observation_epoch or 0.0):
+            self.metrics.newest_observation_epoch = observed_epoch
 
         det_row = {
             "detection_id": det["detection_id"],

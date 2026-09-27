@@ -74,6 +74,9 @@ class PipelineMetrics:
         self.anomalies = RateCounter()
         self.incidents_created = RateCounter()
         self.last_processed_at: Optional[float] = None
+        # Observation time of the newest observation processed so far: the
+        # basis of "telemetry freshness" (distinct from server liveness).
+        self.newest_observation_epoch: Optional[float] = None
         self.last_error: Optional[str] = None
         self.started_at = time.time()
 
@@ -102,5 +105,8 @@ class PipelineMetrics:
                 "incidents_created": self.incidents_created.total,
             },
             "last_processed_at": self.last_processed_at,
+            "newest_observation_epoch": self.newest_observation_epoch,
+            "telemetry_age_s": (round(time.time() - self.newest_observation_epoch, 1)
+                                if self.newest_observation_epoch else None),
             "last_error": self.last_error,
         }

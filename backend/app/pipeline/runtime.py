@@ -12,7 +12,8 @@ incident), a metrics heartbeat, fault expiry and retention pruning.
 Configuration (environment, server-side only):
   ATHER_PIPELINE_ENABLED      1   start the runtime with the API
   ATHER_SIM_ENABLED           1   run the simulated AWS feed
-  ATHER_SIM_INTERVAL_S        60  simulated observation cadence per station
+  ATHER_SIM_INTERVAL_S        60 (600 on Render) simulated observation cadence per station;
+                                  must fit processing capacity (see _emit backpressure)
   ATHER_SIM_MAX_STATIONS      -   limit simulated stations
   ATHER_REFERENCE_ENABLED     1   keep the Open-Meteo reference cache warm
   ATHER_RETENTION_HOURS       24  time-series retention
@@ -66,7 +67,12 @@ class PipelineRuntime:
 
         sim_enabled = _flag("ATHER_SIM_ENABLED") if sim_enabled is None else sim_enabled
         reference_enabled = _flag("ATHER_REFERENCE_ENABLED") if reference_enabled is None else reference_enabled
-        interval = sim_interval_s or float(ENV("ATHER_SIM_INTERVAL_S", "60"))
+        # The source cadence must fit what the engine can process. Layer 3
+        # (ECOD + Isolation Forest) costs ~80 ms/observation locally and
+        # ~0.7 s on a Render instance, so 296 stations every 60 s cannot be
+        # sustained there; 10 minutes (a standard AWS reporting interval)
+        # leaves ~3x headroom. Override with ATHER_SIM_INTERVAL_S.
+        interval = sim_interval_s or float(ENV("ATHER_SIM_INTERVAL_S", "600" if ENV("RENDER") else "60"))
         max_st = ENV("ATHER_SIM_MAX_STATIONS")
 
         self.reference = OpenMeteoReferenceAdapter(self._reference_coords, enabled=reference_enabled)
@@ -97,6 +103,11 @@ class PipelineRuntime:
         self.started_at: Optional[float] = None
         self._tasks: List[asyncio.Task] = []
         self._outage_incidents: Dict[str, str] = {}
+        # Station -> observation time of the newest observation RECEIVED from
+        # it (set at ingest, before the queue). Communication health is judged
+        # on this; a station whose data waits in ATHER's own queue is not silent.
+        self._last_received: Dict[str, float] = {}
+        self.sim_cycles_skipped = 0
 
     # ── helpers ─────────────────────────────────────────────────────────
     @staticmethod
@@ -146,6 +157,7 @@ class PipelineRuntime:
             self.metrics.received.add()
             try:
                 norm = self.prepare(obs, received)
+                self._note_received(norm)
                 if block:
                     await self.stream.put(norm)
                 else:
@@ -159,6 +171,11 @@ class PipelineRuntime:
                 rejected.append({"code": "STREAM_FULL", "message": str(e), "station_id": obs.station_id})
         return {"accepted": len(accepted), "observation_ids": accepted, "rejected": rejected}
 
+    def _note_received(self, norm: NormalizedObservation) -> None:
+        t_obs = norm.observed_at.timestamp()
+        if t_obs > self._last_received.get(norm.station_id, 0.0):
+            self._last_received[norm.station_id] = t_obs
+
     def process_now(self, items: List[ObservationIn]) -> Dict[str, Any]:
         """Synchronous path (legacy /api/ingest): process immediately and
         return the DetectionResult. Same processor, same events."""
@@ -167,6 +184,7 @@ class PipelineRuntime:
             self.metrics.received.add()
             try:
                 norms.append(self.prepare(obs))
+                self._note_received(norms[-1])
             except RejectedObservation as e:
                 self.metrics.rejected.add()
                 rejected.append(e.to_dict())
@@ -206,6 +224,21 @@ class PipelineRuntime:
         self.state = "STOPPED"
 
     async def _emit(self, items: List[ObservationIn]) -> None:
+        # Backpressure: never generate a new simulated cycle while the previous
+        # one is still waiting to be processed, or the queue (and every
+        # station's data age) grows without bound. The skip is visible: the
+        # source goes DEGRADED with the reason, and no station-level
+        # communication incidents are raised while the source is not ACTIVE.
+        if items and items[0].adapter == self.simulation.name and self.stream.depth >= max(1, len(items) // 2):
+            self.sim_cycles_skipped += 1
+            if not self.simulation.status.note.startswith("Processing backlog"):
+                self._sim_note = self.simulation.status.note
+            self.simulation.status.note = (f"Processing backlog: {self.stream.depth} observations still queued, "
+                                           f"cycle skipped ({self.sim_cycles_skipped} so far).")
+            self.simulation._set_state("DEGRADED", self.simulation.status.note)
+            return
+        if items and items[0].adapter == self.simulation.name and self.simulation.status.note.startswith("Processing backlog"):
+            self.simulation.status.note = getattr(self, "_sim_note", "")
         await self.ingest(items, block=True)
 
     def _publish_outcomes(self, outcomes: List[Dict[str, Any]]) -> None:
@@ -248,7 +281,11 @@ class PipelineRuntime:
         adapters = {a.name: a for a in self.adapters}
         for sid, h in list(self.processor.health.items()):
             cadence = h.get("cadence_s") or 300.0
-            age = now - (h.get("last_observed_epoch") or now)
+            # Age of the newest observation RECEIVED from the station (not the
+            # newest processed one): processing lag is a system condition,
+            # reported separately, never a station communication fault.
+            last_rx = max(self._last_received.get(sid, 0.0), h.get("last_observed_epoch") or 0.0) or now
+            age = now - last_rx
             adapter = adapters.get(h.get("adapter"))
             source_ok = adapter is None or adapter.status.state == "ACTIVE"
             if age > 3 * cadence and h.get("freshness") != "STALE" and source_ok:
@@ -263,7 +300,14 @@ class PipelineRuntime:
                     and self.started_at and now - self.started_at > 5 * cadence):
                 self._open_outage_incident(sid, h, age, cadence)
             if age <= 3 * cadence and sid in self._outage_incidents:
-                self._outage_incidents.pop(sid, None)  # recovered; operator closes the incident
+                # Telemetry resumed: record it on the SAME incident (existing
+                # lifecycle: the operator resolves it); a later outage updates
+                # that incident while open instead of opening a duplicate.
+                iid = self._outage_incidents.pop(sid)
+                inc = self.incidents.record_event(iid, "TELEMETRY_RESTORED",
+                                                  f"Telemetry resumed; newest observation {int(age)} s old.")
+                if inc:
+                    self.broker.publish(ev.INCIDENT_UPDATED, incident_event_payload(inc))
 
     def _open_outage_incident(self, sid: str, h: Dict[str, Any], age: float, cadence: float) -> None:
         stn = self.stations._stations.get(sid, {})
@@ -321,6 +365,10 @@ class PipelineRuntime:
                     log.exception("retention prune failed")
 
     # ── read models ─────────────────────────────────────────────────────
+    def _backlogged(self) -> bool:
+        qw = self.metrics.queue_wait.snapshot().get("p50_ms")
+        return bool(self.stream.depth and qw and qw / 1000.0 > self.simulation.cadence_s)
+
     def counts(self) -> Dict[str, int]:
         c = {"live_stations": 0, "nominal": 0, "suspect": 0, "degraded": 0, "anomaly": 0,
              "stale": 0, "watch": 0, "weather_events": 0, "simulated": 0, "measured": 0}
@@ -345,7 +393,8 @@ class PipelineRuntime:
             "detector": {"status": detector_state, "engine_version": _engine_version(),
                          "errors_total": m["totals"]["errors"], "last_error": m["last_error"]},
             "database": {"status": "OK" if db_ok else "ERROR"},
-            "stream": {"status": "OK", **self.stream.stats()},
+            "stream": {"status": "BACKLOG" if self._backlogged() else "OK", **self.stream.stats(),
+                       "sim_cycles_skipped": self.sim_cycles_skipped},
             "events": self.broker.stats(),
         }
         out = {

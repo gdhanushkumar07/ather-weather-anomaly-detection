@@ -247,6 +247,51 @@ class TestIncidentStateMachine(unittest.TestCase):
         )
 
 
+class TestWorkOrders(unittest.TestCase):
+    """Work orders are the ACTION step: raised from a real open incident,
+    advanced one step at a time, recorded on the incident timeline, and
+    never resolving the incident by themselves."""
+
+    def setUp(self):
+        incident_db.reset_for_tests()
+        from app.incidents import work_orders
+        self.wo = work_orders
+        self.inc = incident_service.upsert_from_evaluation(make_snapshot())
+
+    def test_full_lifecycle_is_recorded_on_the_incident(self):
+        iid = self.inc["incident_id"]
+        wo = self.wo.create(iid, "Temperature sensor anomaly", "high", "Field Maintenance")
+        self.assertEqual(wo["status"], "CREATED")
+        self.assertTrue(wo["work_order_id"].startswith("WO-"))
+        self.wo.advance(wo["work_order_id"], "ASSIGNED", assignee="Team North")
+        self.wo.advance(wo["work_order_id"], "IN_PROGRESS")
+        done = self.wo.advance(wo["work_order_id"], "COMPLETED", note="Sensor replaced.")
+        self.assertEqual(done["status"], "COMPLETED")
+        self.assertIsNotNone(done["completed_at"])
+        inc = incident_service.get(iid)
+        events = [t["event"] for t in inc["timeline"]]
+        for e in ("WORK_ORDER_CREATED", "WORK_ORDER_ASSIGNED", "WORK_ORDER_IN_PROGRESS", "WORK_ORDER_COMPLETED"):
+            self.assertIn(e, events)
+        self.assertEqual(inc["status"], "NEW")              # completion does not resolve the incident
+        self.assertEqual(len(inc["work_orders"]), 1)
+
+    def test_steps_cannot_be_skipped_and_assignee_required(self):
+        wo = self.wo.create(self.inc["incident_id"], "Issue", "MEDIUM", "Field Maintenance")
+        with self.assertRaises(incident_service.InvalidTransitionError):
+            self.wo.advance(wo["work_order_id"], "COMPLETED")
+        with self.assertRaises(incident_service.InvalidTransitionError):
+            self.wo.advance(wo["work_order_id"], "ASSIGNED")
+
+    def test_one_open_work_order_and_none_on_closed_incident(self):
+        iid = self.inc["incident_id"]
+        self.wo.create(iid, "Issue", "LOW", "Field Maintenance")
+        with self.assertRaises(incident_service.InvalidTransitionError):
+            self.wo.create(iid, "Second", "LOW", "Field Maintenance")
+        incident_service.dismiss(iid, "operator", "false alarm")
+        with self.assertRaises(incident_service.InvalidTransitionError):
+            self.wo.create(iid, "After close", "LOW", "Field Maintenance")
+
+
 class TestIncidentSourceSeparation(unittest.TestCase):
     """Phase 29/36: simulation incidents must never leak into the
     production (LIVE_AWS) incident list or counters."""

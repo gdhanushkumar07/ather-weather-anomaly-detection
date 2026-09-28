@@ -15,7 +15,7 @@ const STATE_CLASS: Record<string, string> = {
 };
 
 /**
- * ATHER SYSTEM — pipeline observability (spec §18/§19): component health,
+ * SkyGuard AI SYSTEM — pipeline observability (spec §18/§19): component health,
  * every data source (including the ones that are intentionally not
  * flowing, with the reason), latency distributions and throughput.
  * Live numbers arrive with the SYSTEM_METRICS heartbeat every 5 s; the
@@ -50,7 +50,7 @@ export const SystemWorkspace: React.FC = () => {
     <div className="lv-page">
       <div className="lv-page-head">
         <div>
-          <div className="lv-page-title">ATHER System</div>
+          <div className="lv-page-title">SkyGuard AI System</div>
           <div className="lv-page-sub">
             Continuous pipeline: sources → validation &amp; normalization → stream → 5-layer engine + conformal fusion →
             time-series &amp; incident storage → server-sent events → this dashboard.

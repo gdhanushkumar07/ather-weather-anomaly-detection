@@ -94,7 +94,7 @@ const LiveInjection: React.FC<{ types: any; onOpenIncident: (id: string) => void
       <Card title="Inject a fault into the live network" icon={<Syringe size={14} />}>
         <div className="lv-callout warn" style={{ marginBottom: 12 }}>
           Faults are applied to the <b>simulated</b> AWS feed only, at the next observation (every {types.cadence_s}s per station).
-          ATHER is not told a fault exists — it has to find it through the same pipeline as any other observation.
+          SkyGuard AI is not told a fault exists — it has to find it through the same pipeline as any other observation.
         </div>
         <div className="lv-form">
           <label className="lv-field">Station
@@ -378,10 +378,11 @@ export const TestLabWorkspace: React.FC<Props> = ({ stations, onOpenIncident, on
     <div className="lv-page">
       <div className="lv-page-head">
         <div>
-          <div className="a-eyebrow">Test Lab · validation environment</div>
-          <h1 className="a-h1">Does the intelligence engine behave as designed?</h1>
-          <p className="a-lead">Controlled cases with a known ground truth, run through the same five layers, fusion and root-cause logic as production.
-            For each case: input → expected behaviour → layer responses → fusion → final detection → root cause.</p>
+          <div className="a-eyebrow">Test Lab · simulation &amp; validation lab</div>
+          <h1 className="a-h1">Can SkyGuard AI detect each kind of sensor problem?</h1>
+          <p className="a-lead">Controlled cases with a known ground truth — temperature spike, humidity and pressure faults, drift, frozen sensor, communication loss —
+            run through the same five layers, fusion and root-cause logic as operations.
+            For each case: input → layer responses → fusion → anomaly decision → root cause → operational response. Scenario-suite results stay separate from operational incidents.</p>
         </div>
         <div className="lv-tabs">
           <button className={`lv-tab ${tab === 'suite' ? 'active' : ''}`} onClick={() => setTab('suite')}><ListChecks size={13} />Scenario suite</button>
@@ -391,7 +392,7 @@ export const TestLabWorkspace: React.FC<Props> = ({ stations, onOpenIncident, on
       </div>
       <div className="a-lab-banner">
         <FlaskConical size={16} />
-        <span><b>Not operational data.</b> Scenario and replay runs use an isolated engine instance and never create real investigations.
+        <span><b>Not operational data.</b> Scenario and replay runs use an isolated engine instance and never create operational incidents.
           Live injection alters only the clearly-labelled simulated feed.</span>
       </div>
       {error && tab !== 'suite' && <div className="lv-callout danger">Real-time pipeline unavailable: {error}</div>}

@@ -82,7 +82,7 @@ interface WeatherStationMarkerProps {
 const STATUS_LABEL: Record<WeatherStationStatus, string> = {
   normal: 'Normal',
   warning: 'Warning',
-  anomaly: 'Anomaly',
+  anomaly: 'Anomalous',
   offline: 'Offline',
 };
 

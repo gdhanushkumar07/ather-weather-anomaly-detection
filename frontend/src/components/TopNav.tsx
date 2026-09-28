@@ -11,11 +11,12 @@ interface TopNavProps {
   onSelectStation: (stationId: string) => void;
 }
 
-/** The four product destinations. Station detail and System are reached
+/** The five product destinations. Station detail and System are reached
  *  from inside the product (a station, the live indicator), not as tabs. */
 const TABS: { id: Workspace; label: string; also?: Workspace[] }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'map', label: 'Live Map', also: ['station'] },
+  { id: 'incidents', label: 'Incidents' },
   { id: 'anomalies', label: 'Investigations' },
   { id: 'testlab', label: 'Test Lab' },
 ];
@@ -57,21 +58,21 @@ export const TopNav: React.FC<TopNavProps> = ({ activeWorkspace, onNavigate, onS
 
   return (
     <header className="a-nav">
-      <button className="a-brand" onClick={() => onNavigate('home')} title="ATHER home">
+      <button className="a-brand" onClick={() => onNavigate('home')} title="SkyGuard AI home">
         <span className="a-brand-mark" />
         <span style={{ textAlign: 'left' }}>
-          <span className="a-brand-name">ATHER</span>
+          <span className="a-brand-name">SkyGuard AI</span>
           <span className="a-brand-sub">Weather intelligence</span>
         </span>
       </button>
 
-      <nav className="a-tabs" aria-label="ATHER">
+      <nav className="a-tabs" aria-label="SkyGuard AI">
         {TABS.map((t) => {
           const active = activeWorkspace === t.id || !!t.also?.includes(activeWorkspace);
           return (
             <button key={t.id} className={`a-tab ${active ? 'active' : ''}`} aria-current={active ? 'page' : undefined} onClick={() => onNavigate(t.id)}>
               {t.label}
-              {t.id === 'anomalies' && open_ > 0 && <span className="a-tab-count" title="Open investigations">{open_}</span>}
+              {t.id === 'incidents' && open_ > 0 && <span className="a-tab-count" title="Open incidents">{open_}</span>}
             </button>
           );
         })}

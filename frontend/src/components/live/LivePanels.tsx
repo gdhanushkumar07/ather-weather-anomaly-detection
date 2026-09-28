@@ -30,9 +30,9 @@ function describe(e: LiveEvent): { cls: string; kind: string; title: string; tex
     case 'STATION_STALE':
       return { cls: 'system', kind: 'Stale telemetry', title: `${d.station_id} silent ${d.silent_s}s`, text: d.summary, stationId: d.station_id };
     case 'INCIDENT_CREATED':
-      return { cls: 'incident', kind: `Investigation opened · ${String(d.severity).toLowerCase()}`, title: `${d.station_name || d.station_id} — ${d.rca_label || String(d.root_cause).replace(/_/g, ' ').toLowerCase()}`, text: `${d.parameter} · ${d.incident_id} · ${pct(d.confidence)} confidence`, stationId: d.station_id, incidentId: d.incident_id };
+      return { cls: 'incident', kind: `Incident opened · ${String(d.severity).toLowerCase()}`, title: `${d.station_name || d.station_id} — ${d.rca_label || String(d.root_cause).replace(/_/g, ' ').toLowerCase()}`, text: `${d.parameter} · ${d.incident_id} · ${pct(d.confidence)} confidence`, stationId: d.station_id, incidentId: d.incident_id };
     case 'INCIDENT_UPDATED':
-      return { cls: 'incident', kind: `Investigation updated · ${String(d.status || '').toLowerCase()}`, title: `${d.station_name || d.station_id} — ${d.rca_label || String(d.root_cause).replace(/_/g, ' ').toLowerCase()}`, text: `${String(d.severity).toLowerCase()} · ${d.observation_count} observation(s) · ${d.incident_id}`, stationId: d.station_id, incidentId: d.incident_id };
+      return { cls: 'incident', kind: `Incident updated · ${String(d.status || '').toLowerCase()}`, title: `${d.station_name || d.station_id} — ${d.rca_label || String(d.root_cause).replace(/_/g, ' ').toLowerCase()}`, text: `${String(d.severity).toLowerCase()} · ${d.observation_count} observation(s) · ${d.incident_id}`, stationId: d.station_id, incidentId: d.incident_id };
     case 'FAULT_INJECTED':
       return { cls: 'system', kind: 'Test Lab · fault injected', title: `${d.label} → ${d.station_name || d.station_id}`, text: `${d.parameter || 'station'} · ${d.severity} · ${Math.round(d.duration_s / 60)} min. Expect ${d.expected_layers?.join(', ') || 'freshness monitor'}.`, stationId: d.station_id };
     case 'FAULT_CLEARED':

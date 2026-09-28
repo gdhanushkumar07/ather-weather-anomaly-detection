@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ATHER Core API",
+    title="SkyGuard AI Core API",
     description="Intelligent Weather-Station Monitoring and Anomaly-Detection Platform",
     version="2.0.0",
     lifespan=lifespan,
@@ -68,7 +68,7 @@ app.add_middleware(
 def health_check():
     return {
         "status": "healthy",
-        "service": "ATHER Platform Backend",
+        "service": "SkyGuard AI Platform Backend",
         "stations_loaded": len(station_service._stations),
         "version": "1.0.0"
     }
@@ -318,6 +318,37 @@ def get_incident(incident_id: str):
     if not incident:
         raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
     return incident
+
+@app.get("/api/incidents/{incident_id}/work-orders")
+def list_work_orders(incident_id: str):
+    from app.incidents import work_orders
+    return {"work_orders": work_orders.list_for_incident(incident_id)}
+
+@app.post("/api/incidents/{incident_id}/work-orders", status_code=201)
+def create_work_order(incident_id: str, payload: Dict[str, Any]):
+    from app.incidents import work_orders
+    try:
+        wo = work_orders.create(incident_id, payload.get("issue", ""), payload.get("priority", ""),
+                                payload.get("team", ""), actor=payload.get("actor", "operator"), notes=payload.get("notes"))
+    except incident_service.IncidentNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    _publish_incident(incident_service.get(incident_id))
+    return wo
+
+@app.post("/api/work-orders/{work_order_id}/status")
+def advance_work_order(work_order_id: str, payload: Dict[str, Any]):
+    from app.incidents import work_orders
+    try:
+        wo = work_orders.advance(work_order_id, payload.get("status", ""), actor=payload.get("actor", "operator"),
+                                 assignee=payload.get("assignee"), note=payload.get("note"))
+    except work_orders.WorkOrderNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Work order '{work_order_id}' not found")
+    except incident_service.InvalidTransitionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    _publish_incident(incident_service.get(wo["incident_id"]))
+    return wo
 
 @app.post("/api/incidents/{incident_id}/acknowledge")
 def acknowledge_incident(incident_id: str, payload: Optional[Dict[str, Any]] = None):

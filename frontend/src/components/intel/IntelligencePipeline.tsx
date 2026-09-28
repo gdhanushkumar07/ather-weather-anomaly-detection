@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import { PipelineModel, Stage, CONFIDENCE_NOTE } from '../../utils/pipeline';
 
 /**
- * The ATHER intelligence pipeline for ONE observation, in the order the
+ * The SkyGuard AI intelligence pipeline for ONE observation, in the order the
  * backend evaluates it: OBSERVE → DETECT → FUSE → EXPLAIN → ACT.
  * Each row answers: what does this stage check · what did it find · how did it
  * contribute. Rows expand to the raw evidence the backend reported.
@@ -21,7 +21,7 @@ const STATE_CLASS: Record<string, string> = {
 const DECISION_CLASS: Record<string, string> = {
   nominal: 'lv-status-nominal', suspect: 'lv-status-suspect', degraded: 'lv-status-degraded',
   anomaly: 'lv-status-anomaly', weather: 'lv-status-weather',
-  warning: 'lv-status-suspect', critical: 'lv-status-anomaly',
+  warning: 'lv-status-suspect', critical: 'lv-status-anomaly', anomalous: 'lv-status-anomaly',
 };
 
 const StageRow: React.FC<{ s: Stage; open: boolean; onToggle: () => void }> = ({ s, open, onToggle }) => {

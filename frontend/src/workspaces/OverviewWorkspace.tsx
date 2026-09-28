@@ -1,6 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Layers, MapPinned, Radio, ShieldAlert, Thermometer } from 'lucide-react';
-import { LiveStation, formatAge, useLive, INTERPRETATION_LABEL } from '../services/live';
+import { LiveStation, formatAge, useLive, useLiveEvents, INTERPRETATION_LABEL } from '../services/live';
+import { fetchIncidents } from '../services/api';
+import { human, isClosed, opsStatus } from '../components/ops/incidentModel';
 import { Card, Empty, SourceBadge, StatusPill, fmt } from '../components/live/LiveBits';
 import { LiveEventFeed, useNow } from '../components/live/LivePanels';
 import { Workspace } from '../types/workspace';
@@ -23,6 +25,13 @@ const LAYERS: [string, string][] = [['L1', 'Physics'], ['L2', 'Temporal'], ['L3'
 export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate, onOpenStation, onOpenIncident }) => {
   const { stations, stationsVersion, counts, incidentCounts, system, connection, pipelineAvailable } = useLive();
   const now = useNow(5000);
+  const [incidents, setIncidents] = useState<any[] | null>(null);
+  const lastInc = useRef(0);
+  const loadIncidents = () => fetchIncidents(null).then((r) => setIncidents((r.incidents || []).filter((i: any) => !isClosed(i)))).catch(() => setIncidents(null));
+  useEffect(() => { loadIncidents(); }, []);
+  useLiveEvents(['INCIDENT_CREATED', 'INCIDENT_UPDATED'], () => {
+    if (Date.now() - lastInc.current > 3000) { lastInc.current = Date.now(); loadIncidents(); }
+  });
 
   const regionOf = useMemo(() => {
     const m = new Map<string, string>();
@@ -75,7 +84,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
       ? 'Waiting for the first observations'
       : critical === 0 && warning === 0 && degraded === 0
         ? `All ${c.live_stations} monitored stations are nominal`
-        : `${critical ? `${critical} critical` : ''}${critical && (warning || degraded) ? ' · ' : ''}${warning ? `${warning} warning` : ''}${warning && degraded ? ' · ' : ''}${degraded ? `${degraded} degraded` : ''} across ${c.live_stations} monitored stations`;
+        : `${critical ? `${critical} anomalous` : ''}${critical && (warning || degraded) ? ' · ' : ''}${warning ? `${warning} warning` : ''}${warning && degraded ? ' · ' : ''}${degraded ? `${degraded} degraded` : ''} across ${c.live_stations} monitored stations`;
 
   return (
     <div className="lv-page">
@@ -84,7 +93,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
           <div className="a-eyebrow">Network overview</div>
           <h1 className="a-h1">{headline}</h1>
           <p className="a-lead">
-            ATHER checks every observation through five independent detection layers, fuses the evidence, and explains what it found.
+            SkyGuard AI checks every observation through five independent detection layers, fuses the evidence, and explains what it found.
             {obsSource && <> Source: {obsSource.label}, one observation per station every {Math.round(obsSource.cadence_s)} s{lastObs ? `; last processed ${formatAge(lastObs, now)}` : ''}.</>}
             {warmup?.state === 'RUNNING' && <> Start-up: {warmup.stations_ready} of {warmup.stations_total} simulated stations live with current telemetry; the {warmup.history_stations ?? ''} stations around the baseline station are being warmed with {warmup.cycles} cycles of simulated history. Other stations build history from live cycles.</>}
           </p>
@@ -95,24 +104,44 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
             <button className="lv-btn" title="Simulated station with the densest neighbourhood — the baseline for a normal-operation walkthrough"
               onClick={() => onOpenStation(warmup.demo_station_id)}>Baseline station</button>
           )}
-          <button className="lv-btn" onClick={() => onNavigate('anomalies')}><ShieldAlert size={14} />Investigations</button>
+          <button className="lv-btn" onClick={() => onNavigate('incidents')}><ShieldAlert size={14} />Incidents</button>
           <button className="lv-btn lv-btn-primary" onClick={() => onNavigate('map')}><MapPinned size={14} />Open live map</button>
         </div>
       </div>
 
       <div className="lv-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
         <div className="lv-stat"><span className="lv-stat-lbl">Monitored live</span><span className="lv-stat-val">{c.live_stations ?? '—'}</span>
-          <span className="lv-stat-sub">{c.catalogue_total ? `of ${c.catalogue_total.toLocaleString()} catalogued` : ' '}</span></div>
-        <div className="lv-stat nominal"><span className="lv-stat-lbl">Healthy</span><span className="lv-stat-val">{c.nominal ?? '—'}</span><span className="lv-stat-sub">nominal</span></div>
+          <span className="lv-stat-sub">AWS stations in the network</span></div>
+        <div className="lv-stat nominal"><span className="lv-stat-lbl">Nominal</span><span className="lv-stat-val">{c.nominal ?? '—'}</span><span className="lv-stat-sub">fresh, no anomalous evidence</span></div>
         <div className="lv-stat suspect"><span className="lv-stat-lbl">Warning</span><span className="lv-stat-val">{warning}</span><span className="lv-stat-sub">suspect evidence</span></div>
         <div className="lv-stat degraded"><span className="lv-stat-lbl">Degraded</span><span className="lv-stat-val">{degraded}</span><span className="lv-stat-sub">{c.stale ? `${c.stale} stale` : 'data quality'}</span></div>
-        <div className="lv-stat anomaly"><span className="lv-stat-lbl">Critical</span><span className="lv-stat-val">{critical}</span><span className="lv-stat-sub">anomaly confirmed</span></div>
-        <button className="lv-stat" onClick={() => onNavigate('anomalies')}><span className="lv-stat-lbl">Open investigations</span><span className="lv-stat-val">{openInv}</span>
+        <div className="lv-stat anomaly"><span className="lv-stat-lbl">Anomalous</span><span className="lv-stat-val">{critical}</span><span className="lv-stat-sub">anomaly confirmed</span></div>
+        <button className="lv-stat" onClick={() => onNavigate('incidents')}><span className="lv-stat-lbl">Active incidents</span><span className="lv-stat-val">{openInv}</span>
           <span className="lv-stat-sub">{incidentCounts ? `${incidentCounts.critical ?? 0} critical · ${incidentCounts.new ?? 0} new` : ' '}</span></button>
       </div>
 
       <div className="lv-grid-2" style={{ gridTemplateColumns: 'minmax(0, 1.25fr) minmax(0, 1fr)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card title="Active incidents" icon={<ShieldAlert size={14} />}
+            right={<button className="lv-link" onClick={() => onNavigate('incidents')}>Open incident queue</button>}>
+            {incidents === null ? <Empty>Loading…</Empty> : !incidents.length ? <Empty>No open incidents.</Empty> : (
+              <table className="lv-table">
+                <thead><tr><th>Incident</th><th>Station</th><th>Finding</th><th>Severity</th><th>Status</th></tr></thead>
+                <tbody>
+                  {incidents.slice(0, 6).map((i) => (
+                    <tr key={i.incident_id} className="clickable" onClick={() => onOpenIncident(i.incident_id)}>
+                      <td className="lv-mono" style={{ fontSize: '0.7rem' }}>{i.incident_id}</td>
+                      <td>{i.station_name || i.station_id}</td>
+                      <td>{i.parameter} · {i.context?.rca_label || human(i.root_cause)}</td>
+                      <td><span className={`lv-pill lv-pill-sm ${i.severity === 'CRITICAL' ? 'lv-status-anomaly' : 'lv-status-suspect'}`}>{i.severity}</span></td>
+                      <td className="lv-muted">{opsStatus(i).label}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+
           <Card title="Stations needing attention" icon={<ShieldAlert size={14} />}
             right={<button className="lv-link" onClick={() => onNavigate('map')}>View on map</button>}>
             {!attention.length ? (
@@ -160,7 +189,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Card title="Recent anomaly events" icon={<Radio size={14} />}
-            right={<button className="lv-link" onClick={() => onNavigate('anomalies')}>All investigations</button>}>
+            right={<button className="lv-link" onClick={() => onNavigate('incidents')}>All incidents</button>}>
             <div className="lv-scroll" style={{ maxHeight: 330 }}>
               <LiveEventFeed limit={12} onSelectStation={onOpenStation} onOpenIncident={onOpenIncident} />
             </div>
@@ -175,7 +204,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
                   <div className="lv-stat"><span className="lv-stat-lbl">Mean pressure</span><span className="lv-stat-val" style={{ fontSize: '1.2rem' }}>{fmt(env.p, 0, ' hPa')}</span></div>
                   <div className="lv-stat weather"><span className="lv-stat-lbl">Weather events</span><span className="lv-stat-val" style={{ fontSize: '1.2rem' }}>{c.weather_events || 0}</span></div>
                 </div>
-                <p className="a-note" style={{ marginTop: 8 }}>Means of the latest observation from {env.n} stations. Weather events are changes corroborated by neighbours — ATHER does not treat them as sensor faults.</p>
+                <p className="a-note" style={{ marginTop: 8 }}>Means of the latest observation from {env.n} stations. Weather events are changes corroborated by neighbours — SkyGuard AI does not treat them as sensor faults.</p>
               </>
             )}
           </Card>
@@ -183,7 +212,7 @@ export const OverviewWorkspace: React.FC<Props> = ({ stationsGeoJSON, onNavigate
           <Card title="By region" icon={<MapPinned size={14} />}>
             {!regions.length ? <Empty>No live stations.</Empty> : (
               <table className="lv-table">
-                <thead><tr><th>Region</th><th style={{ textAlign: 'right' }}>Stations</th><th style={{ textAlign: 'right' }}>Need attention</th><th style={{ textAlign: 'right' }}>Critical</th></tr></thead>
+                <thead><tr><th>Region</th><th style={{ textAlign: 'right' }}>Stations</th><th style={{ textAlign: 'right' }}>Need attention</th><th style={{ textAlign: 'right' }}>Anomalous</th></tr></thead>
                 <tbody>
                   {regions.slice(0, 8).map(([r, e]) => (
                     <tr key={r}><td>{r}</td><td style={{ textAlign: 'right' }}>{e.total}</td>

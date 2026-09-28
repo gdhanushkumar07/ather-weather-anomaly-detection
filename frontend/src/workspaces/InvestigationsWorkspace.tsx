@@ -9,6 +9,7 @@ interface Props {
   onOpenIncident: (id: string | null) => void;
   onOpenStation: (id: string) => void;
   onShowOnMap: (id: string) => void;
+  onManage: (id: string) => void;
 }
 
 type View = 'open' | 'critical' | 'closed' | 'all';
@@ -21,7 +22,7 @@ const SEV: Record<string, number> = { CRITICAL: 0, WARNING: 1, INFO: 2 };
  * investigation for the selected one. Incidents are created by the backend
  * only; this page reads them and requests lifecycle transitions.
  */
-export const InvestigationsWorkspace: React.FC<Props> = ({ openIncidentId, onOpenIncident, onOpenStation, onShowOnMap }) => {
+export const InvestigationsWorkspace: React.FC<Props> = ({ openIncidentId, onOpenIncident, onOpenStation, onShowOnMap, onManage }) => {
   const [all, setAll] = useState<any[] | null>(null);
   const [view, setView] = useState<View>('open');
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +59,7 @@ export const InvestigationsWorkspace: React.FC<Props> = ({ openIncidentId, onOpe
         <div>
           <div className="a-eyebrow">Investigations</div>
           <h1 className="a-h1">{counts.open} open investigation{counts.open === 1 ? '' : 's'}{counts.critical ? ` · ${counts.critical} critical` : ''}</h1>
-          <p className="a-lead">Opened automatically when fused evidence confirms a sensor problem. Weather events corroborated by neighbours never open one.</p>
+          <p className="a-lead">The technical deep dive behind each incident: what changed, which layers contributed, the evidence and the context. Lifecycle, work orders and reports are managed in Incidents.</p>
         </div>
       </div>
       {error && <div className="lv-callout danger">{error}</div>}
@@ -93,9 +94,9 @@ export const InvestigationsWorkspace: React.FC<Props> = ({ openIncidentId, onOpe
         </div>
         <div style={{ minWidth: 0 }}>
           {openIncidentId ? (
-            <InvestigationConsole incidentId={openIncidentId} onOpenStation={onOpenStation} onShowOnMap={onShowOnMap} />
+            <InvestigationConsole incidentId={openIncidentId} onOpenStation={onOpenStation} onShowOnMap={onShowOnMap} onManage={onManage} />
           ) : (
-            <Empty>{all?.length ? 'Select an investigation.' : 'No investigations yet. When ATHER confirms a sensor problem, the full investigation appears here.'}</Empty>
+            <Empty>{all?.length ? 'Select an investigation.' : 'No investigations yet. When SkyGuard AI confirms a sensor problem, the full investigation appears here.'}</Empty>
           )}
         </div>
       </div>

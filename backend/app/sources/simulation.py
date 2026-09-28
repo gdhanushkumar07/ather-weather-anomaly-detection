@@ -106,7 +106,7 @@ FAULT_TYPES: Dict[str, Dict[str, Any]] = {
         "parameters": [],
         "expected_layers": ["L2"],
         "expected_interpretation": "likely_weather_event",
-        "description": "A gust-front passage cools every station within the radius at once. L2 fires, but L4 finds neighbours agree — ATHER should call it weather, not a sensor fault.",
+        "description": "A gust-front passage cools every station within the radius at once. L2 fires, but L4 finds neighbours agree — SkyGuard AI should call it weather, not a sensor fault.",
         "magnitude": {"temperature": (-3.5, -6.0, -9.0), "pressure": (1.0, 2.0, 3.0), "wind_speed": (10.0, 25.0, 45.0)},
         "radius_km": (25.0, 40.0, 60.0),
     },
@@ -493,7 +493,7 @@ def expected_time_to_detection(fault_type: str, cadence_s: float, frozen_min_spa
 # ── adapter ─────────────────────────────────────────────────────────────
 class SimulationAdapter(SourceAdapter):
     name = "simulation"
-    label = "ATHER simulated AWS feed"
+    label = "SkyGuard AI simulated AWS feed"
     kind = OBSERVATION
     simulated = True
 

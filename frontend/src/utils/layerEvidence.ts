@@ -1,7 +1,7 @@
 import { CanonicalLayerCard, EvidenceAvailability, EvidenceAvailabilityEntry } from '../types/weather';
 
 /**
- * Evidence-aware view of the 5 ATHER layers, derived ONLY from the backend
+ * Evidence-aware view of the 5 SkyGuard AI layers, derived ONLY from the backend
  * response (layers.* cards + evidence_availability). The rule it enforces:
  *
  *     insufficient / unavailable / not applicable  !=  normal

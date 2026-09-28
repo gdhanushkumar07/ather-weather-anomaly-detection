@@ -20,7 +20,7 @@ class WeatherGridService:
 
     def get_grid_metadata(self) -> Dict[str, Any]:
         return {
-            "source": "ATHER Meteorological Grid Engine / Vane Adapter",
+            "source": "SkyGuard AI Meteorological Grid Engine / Vane Adapter",
             "model_run": "2026-09-08T12:00:00Z",
             "bbox": [self.lon_min, self.lat_min, self.lon_max, self.lat_max],
             "nx": self.nx,

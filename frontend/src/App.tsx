@@ -5,6 +5,7 @@ import { MapWorkspace, MapFilters, DEFAULT_MAP_FILTERS } from './workspaces/MapW
 import { OverviewWorkspace } from './workspaces/OverviewWorkspace';
 import { StationWorkspace } from './workspaces/StationWorkspace';
 import { InvestigationsWorkspace } from './workspaces/InvestigationsWorkspace';
+import { IncidentsWorkspace } from './workspaces/IncidentsWorkspace';
 import { SystemWorkspace } from './workspaces/SystemWorkspace';
 import { AtherMapHandle, MapViewState } from './map/AtherMap';
 import { Station, AnomaliesSummary, WeatherLayerType } from './types/weather';
@@ -19,7 +20,8 @@ function getWorkspaceFromPath(): Workspace {
   const path = window.location.pathname.toLowerCase();
   if (path === '/map' || path === '/dashboard') return 'map';
   if (path === '/overview' || path === '/health') return 'overview';
-  if (path === '/investigations' || path === '/anomalies' || path === '/incidents') return 'anomalies';
+  if (path === '/incidents') return 'incidents';
+  if (path === '/investigations' || path === '/anomalies') return 'anomalies';
   if (path === '/testlab' || path === '/test-lab') return 'testlab';
   if (path === '/station') return 'station';
   if (path === '/system') return 'system';
@@ -30,6 +32,7 @@ function getPathForWorkspace(ws: Workspace): string {
   switch (ws) {
     case 'map': return '/map';
     case 'overview': return '/overview';
+    case 'incidents': return '/incidents';
     case 'anomalies': return '/investigations';
     case 'testlab': return '/test-lab';
     case 'station': return '/station';
@@ -45,7 +48,7 @@ function markerStatus(s: OverallStatus): string {
 }
 
 /**
- * ATHER application shell.
+ * SkyGuard AI application shell.
  *   Home (public) → Overview · Live Map · Investigations · Test Lab
  * Station detail is entered from the map/overview/investigations; System
  * from the live indicator. Shared state lives here once and is passed down.
@@ -177,6 +180,7 @@ export const App: React.FC = () => {
   };
 
   const openIncident = (id: string) => { setOpenIncidentId(id); changeWorkspace('anomalies'); };
+  const openOps = (id: string) => { setOpenIncidentId(id); changeWorkspace('incidents'); };
 
   const navigate = (target: Workspace) => changeWorkspace(target);
 
@@ -241,17 +245,22 @@ export const App: React.FC = () => {
         </div>
 
         {workspace === 'overview' && (
-          <OverviewWorkspace stationsGeoJSON={stationsGeoJSON} onNavigate={navigate} onOpenStation={openStation} onOpenIncident={openIncident} />
+          <OverviewWorkspace stationsGeoJSON={stationsGeoJSON} onNavigate={navigate} onOpenStation={openStation} onOpenIncident={openOps} />
         )}
 
         {workspace === 'station' && (selectedStation ? (
-          <StationWorkspace station={selectedStation} onBack={backToMap} onOpenIncident={openIncident} onOpenStation={openStation} />
+          <StationWorkspace station={selectedStation} onBack={backToMap} onOpenIncident={openIncident} onManageIncident={openOps} onOpenStation={openStation} />
         ) : (
           <div className="lv-page"><div className="lv-empty">No station selected. <button className="lv-link" onClick={backToMap}>Open the live map</button></div></div>
         ))}
 
         {workspace === 'anomalies' && (
-          <InvestigationsWorkspace openIncidentId={openIncidentId} onOpenIncident={setOpenIncidentId} onOpenStation={openStation} onShowOnMap={selectOnMap} />
+          <InvestigationsWorkspace openIncidentId={openIncidentId} onOpenIncident={setOpenIncidentId} onOpenStation={openStation} onShowOnMap={selectOnMap} onManage={openOps} />
+        )}
+
+        {workspace === 'incidents' && (
+          <IncidentsWorkspace openIncidentId={openIncidentId} onOpenIncident={setOpenIncidentId} onInvestigate={openIncident}
+            onOpenStation={openStation} onShowOnMap={selectOnMap} />
         )}
 
         {workspace === 'system' && <SystemWorkspace />}

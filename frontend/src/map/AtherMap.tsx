@@ -581,7 +581,7 @@ export const AtherMap = forwardRef<AtherMapHandle, AtherMapProps>(({
               </span>
               {currentIncident && (
                 <span className={`inav-status ${currentIncident.status.toLowerCase()}`}>
-                  {currentIncident.status}
+                  {currentIncident.status === 'ANOMALY' ? 'ANOMALOUS' : currentIncident.status}
                 </span>
               )}
             </div>

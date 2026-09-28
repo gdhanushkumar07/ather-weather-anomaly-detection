@@ -15,6 +15,8 @@ interface Props {
   station: Station;
   onBack: () => void;
   onOpenIncident: (id: string) => void;
+  /** Opens the incident in the operational queue (lifecycle, work order, report). */
+  onManageIncident?: (id: string) => void;
   onOpenStation: (id: string) => void;
 }
 
@@ -22,10 +24,21 @@ const CH_LABEL: Record<string, string> = { temperature_c: 'Temperature', pressur
 
 /**
  * STATION — a focused investigation context for one AWS:
- * identity → current telemetry → sensor health → how ATHER assessed the
+ * identity → current telemetry → sensor health → how SkyGuard AI assessed the
  * latest observation → history → anomalies → context (neighbours, NWP).
  */
-export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncident, onOpenStation }) => {
+// Layer 5 drift tier -> operational sensor-health state. The tier is the
+// backend's; this only names it and states the standard maintenance response.
+const CHANNEL_HEALTH: Record<string, { label: string; cls: string; action: string }> = {
+  NORMAL: { label: 'Nominal', cls: 'lv-status-nominal', action: 'No action.' },
+  SUSPICIOUS: { label: 'Watch', cls: 'lv-status-suspect', action: 'Keep under watch; no maintenance yet.' },
+  POSSIBLE_DRIFT: { label: 'Attention', cls: 'lv-status-suspect', action: 'Schedule a calibration check.' },
+  LIKELY_DRIFT: { label: 'Degraded', cls: 'lv-status-anomaly', action: 'Calibrate or replace the sensor.' },
+  HIGH_RISK: { label: 'Degraded', cls: 'lv-status-anomaly', action: 'Replace or recalibrate the sensor promptly.' },
+  INSUFFICIENT_DATA: { label: 'Not evaluated', cls: 'lv-status-unknown', action: 'History warming up — needs 6 valid samples.' },
+};
+
+export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncident, onManageIncident, onOpenStation }) => {
   const id = station.id;
   const { stations, stationsVersion, warmingIds } = useLive();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -109,14 +122,17 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
           {isLive ? <StatusPill status={liveState!.overall_status} watch={liveState!.watch} /> : <span className="lv-pill lv-status-unknown">{warming ? 'Warming up' : 'Not monitored live'}</span>}
           <SourceBadge source={liveState?.source || assessment?.observation?.source} simulated={liveState?.simulated} />
           {openInc[0] && (
-            <button className="lv-btn lv-btn-primary" onClick={() => onOpenIncident(openInc[0].incident_id)}><ShieldAlert size={14} />Open investigation</button>
+            <>
+              <button className="lv-btn lv-btn-primary" onClick={() => onOpenIncident(openInc[0].incident_id)}><ShieldAlert size={14} />Investigate</button>
+              {onManageIncident && <button className="lv-btn" onClick={() => onManageIncident(openInc[0].incident_id)}>Incident {openInc[0].incident_id}</button>}
+            </>
           )}
         </div>
       </div>
       {error && <div className="lv-callout danger">{error}</div>}
       {warming && (
         <div className="lv-callout info">
-          This ATHER station's simulated history is being processed through the full engine at start-up; it joins the live feed within a few minutes. Values below are the catalogue snapshot until then.
+          This SkyGuard AI station's simulated history is being processed through the full engine at start-up; it joins the live feed within a few minutes. Values below are the catalogue snapshot until then.
         </div>
       )}
       {!isLive && !warming && (
@@ -149,15 +165,28 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
                 <dt>Suspicious now</dt><dd>{liveState?.triggered_layers?.length ? `evidence from ${liveState.triggered_layers.join(', ')}` : liveState?.watch ? 'single excursion on watch' : 'none'}</dd>
                 {typeof det?.sensor_health_index === 'number' && <><dt>Sensor health index</dt><dd>{det.sensor_health_index} / 100</dd></>}
               </dl>
-              {Object.keys(drift).length > 0 && (
-                <table className="lv-table" style={{ marginTop: 10 }}>
-                  <thead><tr><th>Channel</th><th>Drift</th><th>Bias</th><th>Reference</th></tr></thead>
+              <div className="a-eyebrow" style={{ margin: '12px 0 4px' }}>Sensor health by channel (Layer 5 drift evidence)</div>
+              {!Object.keys(drift).length ? (
+                <p className="a-note" style={{ margin: 0 }}>Not evaluated — Layer 5 has not tracked any channel for this station yet.</p>
+              ) : (
+                <table className="lv-table">
+                  <thead><tr><th>Channel</th><th>Health</th><th>Evidence</th><th>Incidents</th><th>Maintenance</th></tr></thead>
                   <tbody>
-                    {Object.entries(drift).map(([ch, c]: [string, any]) => (
-                      <tr key={ch}><td>{CH_LABEL[ch] || ch}</td><td>{String(c.drift_tier).replace(/_/g, ' ').toLowerCase()}</td>
-                        <td className="a-num">{typeof c.estimated_bias === 'number' ? c.estimated_bias.toFixed(2) : '—'}</td>
-                        <td className="lv-muted">{c.reference_mode === 'SPATIAL' ? 'neighbours' : c.reference_mode === 'BACKGROUND' ? 'NWP' : c.reference_mode === 'SUSPENDED_SATURATION' ? 'suspended (saturated)' : 'own history'}</td></tr>
-                    ))}
+                    {Object.entries(drift).map(([ch, c]: [string, any]) => {
+                      const h = CHANNEL_HEALTH[c.drift_tier] || { label: String(c.drift_tier).replace(/_/g, ' ').toLowerCase(), cls: 'lv-status-unknown', action: '—' };
+                      const nInc = incidents.filter((i) => String(i.parameter || '').toLowerCase().startsWith((CH_LABEL[ch] || ch).toLowerCase().slice(0, 4))).length;
+                      return (
+                        <tr key={ch}>
+                          <td>{CH_LABEL[ch] || ch}</td>
+                          <td><span className={`lv-pill lv-pill-sm ${h.cls}`}>{h.label}</span></td>
+                          <td className="lv-muted">{c.drift_tier === 'INSUFFICIENT_DATA'
+                            ? `${c.samples_tracked ?? 0}/6 valid samples`
+                            : `bias ${typeof c.estimated_bias === 'number' ? c.estimated_bias.toFixed(2) : '—'} vs ${c.reference_mode === 'SPATIAL' ? 'neighbours' : c.reference_mode === 'BACKGROUND' ? 'NWP' : c.reference_mode === 'SUSPENDED_SATURATION' ? 'nothing (saturated, suspended)' : 'own history'} · ${c.samples_tracked} samples`}</td>
+                          <td className="a-num">{nInc}</td>
+                          <td className="lv-muted">{h.action}{typeof c.days_to_failure === 'number' ? ` Projected to exceed tolerance in ~${Math.round(c.days_to_failure)} d.` : ''}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -170,7 +199,7 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
       </div>
 
       {/* intelligence pipeline */}
-      <Card title="How ATHER assessed the latest observation" icon={<Layers size={14} />}
+      <Card title="How SkyGuard AI assessed the latest observation" icon={<Layers size={14} />}
         right={liveState ? <span className="lv-muted">{fmtDateTime(liveState.last_observed_at)}</span> : undefined}>
         {!model ? <Empty>Loading assessment…</Empty> : (
           <>
@@ -229,7 +258,7 @@ export const StationWorkspace: React.FC<Props> = ({ station, onBack, onOpenIncid
               <thead><tr><th>ID</th><th>Finding</th><th>Severity</th><th>Status</th><th>Opened</th></tr></thead>
               <tbody>
                 {incidents.slice(0, 8).map((i) => (
-                  <tr key={i.incident_id} className="clickable" onClick={() => onOpenIncident(i.incident_id)}>
+                  <tr key={i.incident_id} className="clickable" onClick={() => (onManageIncident || onOpenIncident)(i.incident_id)}>
                     <td className="lv-mono" style={{ fontSize: '0.72rem' }}>{i.incident_id}</td>
                     <td>{i.context?.rca_label || String(i.root_cause || '').replace(/_/g, ' ').toLowerCase()}</td>
                     <td>{i.severity?.toLowerCase()}</td><td>{i.status?.toLowerCase()}</td>

@@ -43,7 +43,7 @@ interface MapWorkspaceProps {
 }
 
 const SEVERITY: [MapFilters['severity'], string][] = [
-  ['all', 'All'], ['anomaly', 'Critical'], ['suspect', 'Warning'], ['degraded', 'Degraded'], ['nominal', 'Healthy'],
+  ['all', 'All'], ['anomaly', 'Anomalous'], ['suspect', 'Warning'], ['degraded', 'Degraded'], ['nominal', 'Nominal'],
 ];
 const FINDING: [MapFilters['finding'], string][] = [
   ['all', 'Any finding'], ['likely_sensor_fault', 'Sensor fault'], ['likely_weather_event', 'Weather event'],
@@ -80,14 +80,9 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
     <div className="lv-page" style={{ maxWidth: 'none', paddingTop: 16, gap: 12 }}>
       <div className="lv-spread" style={{ flexWrap: 'wrap', gap: 12 }}>
         <div className="a-filters">
-          <span className="a-filter-label">Network</span>
-          <div className="a-filter-group">
-            <button className={filters.network === 'live' ? 'active' : ''} onClick={() => set({ network: 'live' })}
-              title={warmingCount ? `${warmingCount} simulated stations are still warming up (history being processed) and join the live feed shortly` : undefined}>
-              Live AWS · {liveCount}{warmingCount ? ` + ${warmingCount} warming up` : ''}</button>
-            <button className={filters.network === 'all' ? 'active' : ''} onClick={() => set({ network: 'all' })}
-              title="Adds catalogue stations that are not monitored live (static snapshot)">All catalogue · {catalogueCount.toLocaleString()}</button>
-          </div>
+          <span className="a-map-title" title="The SkyGuard AI operational fleet: every monitored AWS station">
+            AWS network · {(liveCount + warmingCount).toLocaleString()} stations
+          </span>
           <span className="a-filter-label" style={{ marginLeft: 8 }}>Severity</span>
           <div className="a-filter-group">
             {SEVERITY.map(([k, l]) => (
@@ -174,12 +169,12 @@ export const MapWorkspace = forwardRef<AtherMapHandle, MapWorkspaceProps>(({
           <section className="lv-card">
             <div className="lv-card-body">
               <div className="lv-legend" style={{ gap: 14 }}>
-                <span><i style={{ background: 'var(--s-nominal)', borderRadius: '50%' }} />Healthy</span>
+                <span><i style={{ background: 'var(--s-nominal)', borderRadius: '50%' }} />Nominal</span>
                 <span><i style={{ background: 'var(--s-warning)', borderRadius: '50%' }} />Warning</span>
-                <span><i style={{ background: 'var(--s-critical)', borderRadius: '50%' }} />Critical</span>
-                <span><i style={{ background: 'var(--s-neutral)', borderRadius: '50%' }} />Degraded / not live</span>
+                <span><i style={{ background: 'var(--s-critical)', borderRadius: '50%' }} />Anomalous</span>
+                <span><i style={{ background: 'var(--s-neutral)', borderRadius: '50%' }} />Degraded / not evaluated</span>
               </div>
-              <p className="a-note" style={{ marginTop: 6 }}>Clusters take the colour of their most severe station. Only critical stations animate.</p>
+              <p className="a-note" style={{ marginTop: 6 }}>Clusters take the colour of their most severe station. Only anomalous stations animate.</p>
             </div>
           </section>
         </aside>

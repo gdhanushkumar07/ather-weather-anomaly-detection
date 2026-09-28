@@ -76,7 +76,7 @@ export async function ingestObservation(payload: any) {
   return res.json();
 }
 
-// ── ATHER Test Lab (isolated simulation engine) ─────────────────────────
+// ── SkyGuard AI Test Lab (isolated simulation engine) ─────────────────────────
 
 export async function fetchSimulationScenarios(): Promise<{ scenarios: any[] }> {
   const res = await fetch(`${API_BASE}/simulation/scenarios`);
@@ -97,7 +97,7 @@ export async function runSimulation(scenarioId: string, baseStationId?: string |
   return res.json();
 }
 
-// ── ATHER Incident Workflow (persistent, incident-ID keyed) ──────────────
+// ── SkyGuard AI Incident Workflow (persistent, incident-ID keyed) ──────────────
 // Backend is authoritative for status/severity/confidence/evidence — these
 // functions only render and request state changes (Phase 44).
 
@@ -155,13 +155,29 @@ export const resolveIncident = (incidentId: string, resolutionNotes: string, res
 export const dismissIncident = (incidentId: string, dismissalReason: string, actor = 'operator') =>
   postIncidentAction(incidentId, 'dismiss', { actor, dismissal_reason: dismissalReason });
 
+// ── maintenance work orders (raised from an incident) ──────────────────
+async function postJson(path: string, body: Record<string, any>) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null);
+    throw new Error(detail?.detail || `Request failed: ${res.statusText}`);
+  }
+  return res.json();
+}
+export const createWorkOrder = (incidentId: string, body: { issue: string; priority: string; team: string; notes?: string }) =>
+  postJson(`/incidents/${encodeURIComponent(incidentId)}/work-orders`, { ...body, actor: 'operator' });
+export const advanceWorkOrder = (workOrderId: string, status: string, extra: { assignee?: string; note?: string } = {}) =>
+  postJson(`/work-orders/${encodeURIComponent(workOrderId)}/status`, { status, actor: 'operator', ...extra });
+
 export async function fetchEscalationPreview(incidentId: string) {
   const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}/escalation-preview`);
   if (!res.ok) throw new Error(`Failed to fetch escalation preview for ${incidentId}: ${res.statusText}`);
   return res.json();
 }
 
-// ── ATHER real-time pipeline ─────────────────────────────────────────────
+// ── SkyGuard AI real-time pipeline ─────────────────────────────────────────────
 // The dashboard loads /network/state once and then applies SSE events
 // (services/live.tsx). Everything below is fetched on demand per view.
 

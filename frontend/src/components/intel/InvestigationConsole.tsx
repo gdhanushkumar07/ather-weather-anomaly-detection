@@ -3,7 +3,7 @@ import { MapPinned, Siren, UserCheck, Search as InvestigateIcon, XCircle, CheckC
 import {
   acknowledgeIncident, dismissIncident, fetchDetection, fetchIncidentDetail, fetchStationTimeseries, investigateIncident, resolveIncident,
 } from '../../services/api';
-import { INTERPRETATION_LABEL, formatAge, useLive, useLiveEvents } from '../../services/live';
+import { INTERPRETATION_LABEL, STATUS_LABEL, formatAge, useLive, useLiveEvents } from '../../services/live';
 import { Empty, SourceBadge, fmt, fmtDateTime, pct } from '../live/LiveBits';
 import { IntelligencePipeline } from './IntelligencePipeline';
 import { MiniChart, PARAMS } from './StationEvidence';
@@ -40,7 +40,9 @@ export const InvestigationConsole: React.FC<{
   incidentId: string;
   onOpenStation: (id: string) => void;
   onShowOnMap: (id: string) => void;
-}> = ({ incidentId, onOpenStation, onShowOnMap }) => {
+  /** When given, lifecycle actions live in the Incidents page and this links there. */
+  onManage?: (id: string) => void;
+}> = ({ incidentId, onOpenStation, onShowOnMap, onManage }) => {
   const [inc, setInc] = useState<any | null>(null);
   const [det, setDet] = useState<any | null>(null);
   const [series, setSeries] = useState<any | null>(null);
@@ -122,7 +124,7 @@ export const InvestigationConsole: React.FC<{
           </div>
           {prov.injected_fault && (
             <div className="lv-callout warn" style={{ marginTop: 12 }}>
-              Produced from simulated telemetry with a Test Lab fault (<b>{prov.injected_fault.label}</b>, {prov.injected_fault.severity}). ATHER was not told a fault existed.
+              Produced from simulated telemetry with a Test Lab fault (<b>{prov.injected_fault.label}</b>, {prov.injected_fault.severity}). SkyGuard AI was not told a fault existed.
             </div>
           )}
           {!inc.context && (
@@ -138,7 +140,7 @@ export const InvestigationConsole: React.FC<{
           <Q n="01" label="What happened">
             <div className="lv-row" style={{ marginBottom: 6 }}>
               <span className="lv-pill lv-status-unknown">Detection</span>
-              <span style={{ fontSize: '0.86rem' }}>{inc.parameter} reading at {inc.station_name || inc.station_id} was judged <b>{String(det?.overall_status || inc.fusion_result?.status || 'abnormal').toLowerCase()}</b> by the fused evidence.</span>
+              <span style={{ fontSize: '0.86rem' }}>{inc.parameter} reading at {inc.station_name || inc.station_id} was judged <b>{(STATUS_LABEL[String(det?.overall_status)] || String(inc.fusion_result?.status || 'abnormal')).toLowerCase()}</b> by the fused evidence.</span>
             </div>
             <div className="lv-muted">Root cause code {String(inc.root_cause).replace(/_/g, ' ').toLowerCase()} · {inc.observation_count} observation(s) so far</div>
           </Q>
@@ -234,7 +236,7 @@ export const InvestigationConsole: React.FC<{
                     </tbody>
                   </table>
                 ) : <p className="lv-muted">No neighbour snapshot was captured.</p>}
-                <p className="a-note" style={{ marginTop: 6 }}>{isWeather ? 'Neighbours showed the same change, so this is treated as weather.' : 'Had the neighbours shown the same change, ATHER would have classified it as weather and opened no investigation.'}</p>
+                <p className="a-note" style={{ marginTop: 6 }}>{isWeather ? 'Neighbours showed the same change, so this is treated as weather.' : 'Had the neighbours shown the same change, SkyGuard AI would have classified it as weather and opened no investigation.'}</p>
               </div>
               <div>
                 <div className="a-eyebrow" style={{ marginBottom: 6 }}>Weather model reference <span className="lv-badge lv-badge-nwp" style={{ marginLeft: 6 }}>MODEL DATA</span></div>
@@ -256,7 +258,12 @@ export const InvestigationConsole: React.FC<{
               {ctx.action_label && <b>{ctx.action_label}</b>}
             </div>
             <p style={{ margin: '0 0 12px', fontSize: '0.86rem', lineHeight: 1.5 }}>{inc.recommended_action || '—'}</p>
-            {!closed ? (
+            {onManage ? (
+              <div className="lv-row">
+                <button className="lv-btn lv-btn-primary" onClick={() => onManage(inc.incident_id)}>Manage incident — lifecycle, work order, report</button>
+                <span className="a-note">Status: {inc.status.toLowerCase()}</span>
+              </div>
+            ) : !closed ? (
               <div className="lv-row">
                 <button className="lv-btn" disabled={busy || !allowed.includes('ACKNOWLEDGED')} onClick={() => act(() => acknowledgeIncident(inc.incident_id))}><UserCheck size={14} />Acknowledge</button>
                 <button className="lv-btn" disabled={busy || !allowed.includes('INVESTIGATING')} onClick={() => act(() => investigateIncident(inc.incident_id))}><InvestigateIcon size={14} />Start investigating</button>

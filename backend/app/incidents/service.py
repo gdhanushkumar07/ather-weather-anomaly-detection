@@ -109,6 +109,8 @@ def get(incident_id: str) -> Optional[Dict[str, Any]]:
     inc = _row_with_timeline(conn, incident_id)
     if inc:
         inc["lifecycle"] = build_lifecycle(inc)
+        rows = conn.execute("SELECT * FROM work_orders WHERE incident_id = ? ORDER BY created_at ASC", (incident_id,)).fetchall()
+        inc["work_orders"] = [dict_from_row(r) for r in rows]
     return inc
 
 
@@ -123,7 +125,7 @@ def build_lifecycle(inc: Dict[str, Any]) -> List[Dict[str, Any]]:
         steps.append({"stage": "OBSERVATION", "at": first_obs,
                       "detail": f"{inc.get('parameter')} observation received from {inc.get('station_id')} ({inc.get('obs_source') or 'unknown source'})."})
     steps.append({"stage": "DETECTION", "at": inc.get("detected_at"),
-                  "detail": ctx.get("summary") or f"ATHER engine flagged {inc.get('root_cause')}."})
+                  "detail": ctx.get("summary") or f"SkyGuard AI flagged {inc.get('root_cause')}."})
     for t in inc.get("timeline", []):
         if t["event"] == "SEVERITY_ESCALATED":
             steps.append({"stage": "ESCALATION", "at": t["at"], "detail": t.get("note")})
@@ -137,7 +139,7 @@ def build_lifecycle(inc: Dict[str, Any]) -> List[Dict[str, Any]]:
     for t in inc.get("timeline", []):
         if t["event"] in ("ACKNOWLEDGED", "INVESTIGATING", "ESCALATED"):
             steps.append({"stage": t["event"], "at": t["at"], "detail": t.get("note"), "actor": t.get("actor")})
-        elif t["event"] in ("RESOLVED", "DISMISSED"):
+        elif t["event"] in ("RESOLVED", "DISMISSED", "TELEMETRY_RESTORED") or t["event"].startswith("WORK_ORDER_"):
             steps.append({"stage": t["event"], "at": t["at"], "detail": t.get("note"), "actor": t.get("actor")})
     return steps
 
@@ -160,7 +162,13 @@ def list_all(status: Optional[str] = None, source: str = "LIVE_AWS", station_id:
         params.append(station_id)
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = conn.execute(f"SELECT * FROM incidents {where} ORDER BY updated_at DESC", params).fetchall()
-    return [dict_from_row(r) for r in rows]
+    out = [dict_from_row(r) for r in rows]
+    # Latest work order per incident, so the queue shows the action state.
+    latest = {r["incident_id"]: {"work_order_id": r["work_order_id"], "status": r["status"]}
+              for r in conn.execute("SELECT incident_id, work_order_id, status FROM work_orders ORDER BY created_at ASC")}
+    for inc in out:
+        inc["work_order"] = latest.get(inc["incident_id"])
+    return out
 
 
 def get_active_counts(source: str = "LIVE_AWS") -> Dict[str, int]:
@@ -443,5 +451,5 @@ def build_escalation_preview(incident_id: str) -> Optional[Dict[str, Any]]:
         "evidence": inc.get("evidence") or [],
         "recommended_action": inc.get("recommended_action"),
         "is_preview_only": True,
-        "note": "This is a preview only. ATHER has not contacted any external recipient.",
+        "note": "This is a preview only. SkyGuard AI has not contacted any external recipient.",
     }

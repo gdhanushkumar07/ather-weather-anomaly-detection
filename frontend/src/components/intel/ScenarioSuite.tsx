@@ -75,7 +75,7 @@ export const ScenarioSuite: React.FC = () => {
         {!scenarios.length ? <Empty>Loading scenarios…</Empty> : (
           <div className="lv-table-wrap">
             <table className="lv-table">
-              <thead><tr><th>Scenario</th><th>Expected behaviour</th><th>ATHER's result</th><th>Layers with evidence</th><th>Outcome</th><th /></tr></thead>
+              <thead><tr><th>Scenario</th><th>Expected behaviour</th><th>SkyGuard AI's result</th><th>Layers with evidence</th><th>Outcome</th><th /></tr></thead>
               <tbody>
                 {scenarios.map((s) => {
                   const x = results[s.id];

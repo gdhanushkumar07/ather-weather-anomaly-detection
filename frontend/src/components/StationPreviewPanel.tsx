@@ -13,7 +13,7 @@ interface StationPreviewPanelProps {
 
 /**
  * Map quick view: enough to decide whether to open the station — identity,
- * current state, what ATHER found, and the values it found it on. Read-only;
+ * current state, what SkyGuard AI found, and the values it found it on. Read-only;
  * everything comes from the live pipeline store (or the catalogue, labelled).
  */
 export const StationPreviewPanel: React.FC<StationPreviewPanelProps> = ({ station, onClose, onViewDetails }) => {

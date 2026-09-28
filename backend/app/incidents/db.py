@@ -139,6 +139,26 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         );
 
         CREATE INDEX IF NOT EXISTS idx_timeline_incident ON incident_timeline(incident_id);
+
+        -- Maintenance work orders raised from an incident (Created -> Assigned
+        -- -> In progress -> Completed). Deliberately small: not a CMMS.
+        CREATE TABLE IF NOT EXISTS work_orders (
+            work_order_id TEXT PRIMARY KEY,
+            incident_id   TEXT NOT NULL,
+            station_id    TEXT NOT NULL,
+            issue         TEXT NOT NULL,
+            priority      TEXT NOT NULL,
+            team          TEXT NOT NULL,
+            assignee      TEXT,
+            status        TEXT NOT NULL,
+            notes         TEXT,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            completed_at  TEXT,
+            FOREIGN KEY (incident_id) REFERENCES incidents(incident_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_work_orders_incident ON work_orders(incident_id);
         """
     )
     # Additive migration: evidence context captured by the real-time pipeline
@@ -168,6 +188,6 @@ def reset_for_tests() -> None:
     """Test-only helper: drops and recreates the schema on the CURRENT
     thread's connection. Never called from production code paths."""
     conn = get_connection()
-    conn.executescript("DROP TABLE IF EXISTS incident_timeline; DROP TABLE IF EXISTS incidents;")
+    conn.executescript("DROP TABLE IF EXISTS work_orders; DROP TABLE IF EXISTS incident_timeline; DROP TABLE IF EXISTS incidents;")
     conn.commit()
     _init_schema(conn)

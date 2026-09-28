@@ -248,20 +248,20 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
       {/* ========================================================================= */}
       {/* 00. EDITORIAL TOP NAVIGATION (Always Sticky, Z-Index 1000+, Dynamic State) */}
       {/* ========================================================================= */}
-      <header className={`home-top-nav ${isScrolled ? 'scrolled' : 'top-state'}`} aria-label="ATHER Sticky Navigation">
+      <header className={`home-top-nav ${isScrolled ? 'scrolled' : 'top-state'}`} aria-label="SkyGuard AI Sticky Navigation">
         <div className="home-nav-container">
           {/* Brand Left */}
           <div
             className="home-nav-brand"
             onClick={() => scrollToSection('home')}
-            title="ATHER Meteorological Intelligence"
+            title="SkyGuard AI Meteorological Intelligence"
           >
             <div className="home-nav-logo-mark">
               <span className="home-logo-pulse" />
               <Radio className="w-3.5 h-3.5 text-amber-500" />
             </div>
             <div className="home-brand-titles">
-              <span className="home-brand-main">ATHER</span>
+              <span className="home-brand-main">SkyGuard AI</span>
               <span className="home-brand-sub">WEATHER INTELLIGENCE</span>
             </div>
           </div>
@@ -319,9 +319,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
             <button
               className="home-cta-button primary nav-cta-btn"
               onClick={() => onLaunchPlatform('overview')}
-              title="Open the ATHER operational overview"
+              title="Open the SkyGuard AI operational overview"
             >
-              <span>LAUNCH ATHER</span>
+              <span>LAUNCH SKYGUARD AI</span>
               <ArrowRight className="cta-gold-arrow w-3.5 h-3.5" />
             </button>
 
@@ -390,7 +390,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                   onLaunchPlatform('overview');
                 }}
               >
-                <span>LAUNCH ATHER</span>
+                <span>LAUNCH SKYGUARD AI</span>
                 <ArrowRight className="cta-gold-arrow w-3.5 h-3.5" />
               </button>
             </div>
@@ -420,7 +420,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               </h1>
 
               <p className="hero-body-text">
-                ATHER transforms weather-station observations into explainable anomaly
+                SkyGuard AI transforms weather-station observations into explainable anomaly
                 intelligence by combining physical consistency, temporal behavior,
                 multivariate relationships, spatial context, and sensor health.
               </p>
@@ -429,9 +429,9 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 <button
                   className="home-cta-button primary large hero-primary-cta"
                   onClick={() => onLaunchPlatform('overview')}
-                  title="Open the ATHER operational overview"
+                  title="Open the SkyGuard AI operational overview"
                 >
-                  <span>LAUNCH ATHER</span>
+                  <span>LAUNCH SKYGUARD AI</span>
                   <ArrowRight className="cta-gold-arrow w-4 h-4" />
                 </button>
                 <button
@@ -476,7 +476,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                     <span className="dot" />
                   </div>
                   <div className="console-title">
-                    <span className="mono-sub">ATHER / STATION INTELLIGENCE</span>
+                    <span className="mono-sub">SKYGUARD AI / STATION INTELLIGENCE</span>
                   </div>
                   <div className="console-status-live demo-badge">
                     <span className="demo-beacon" />
@@ -607,7 +607,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                       type="button"
                       className="console-launch-btn"
                       onClick={() => onLaunchPlatform('map')}
-                      title="Open station in operational ATHER map console"
+                      title="Open station in operational SkyGuard AI map console"
                     >
                       <span>OPEN MAP CONSOLE</span>
                       <ArrowRight className="w-3 h-3 text-amber-400" />
@@ -726,10 +726,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               </div>
 
               <div className="analysis-col ather-col">
-                <div className="col-tag accent">ATHER RESPONSE</div>
+                <div className="col-tag accent">SKYGUARD AI RESPONSE</div>
                 <h3 className="col-headline">Decoupled multi-layer verification.</h3>
                 <p className="col-body">
-                  ATHER evaluates observations across multiple intelligence layers to separate physical anomalies, unusual behavior and potential sensor faults.
+                  SkyGuard AI evaluates observations across multiple intelligence layers to separate physical anomalies, unusual behavior and potential sensor faults.
                 </p>
               </div>
             </div>
@@ -738,13 +738,13 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
       </section>
 
       {/* ========================================================================= */}
-      {/* 03. SECTION 03 — TODAY VS ATHER (#how-it-works / S-02 & S-03)              */}
+      {/* 03. SECTION 03 — TODAY VS SkyGuard AI (#how-it-works / S-02 & S-03)              */}
       {/* ========================================================================= */}
       <section id="how-it-works" className="home-section why-section">
         <div className="home-container">
           <div className="section-header-left">
             <div className="section-system-label">
-              <span>S-02 / WHY ATHER</span>
+              <span>S-02 / WHY SKYGUARD AI</span>
             </div>
             <h2 className="section-headline">
               THE FUTURE OF WEATHER<br />
@@ -755,11 +755,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
             </p>
             <p className="section-lead-body">
               Legacy weather observation pipelines blindly ingest and store telemetry, relying on reactive inspection.
-              ATHER introduces physics-informed, multivariate, and spatial evaluation before an anomaly is asserted.
+              SkyGuard AI introduces physics-informed, multivariate, and spatial evaluation before an anomaly is asserted.
             </p>
           </div>
 
-          {/* Two Contrasting Cards: Today vs ATHER */}
+          {/* Two Contrasting Cards: Today vs SkyGuard AI */}
           <div className="comparison-cards-grid">
             {/* Left Card: Raw Observations (White Card) */}
             <div className="contrast-card raw-pipeline">
@@ -807,10 +807,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               </div>
             </div>
 
-            {/* Right Card: ATHER Intelligence (Dark Obsidian Card) */}
+            {/* Right Card: SkyGuard AI Intelligence (Dark Obsidian Card) */}
             <div className="contrast-card ather-intelligent">
               <div className="contrast-card-header">
-                <span className="contrast-tag accent">ATHER</span>
+                <span className="contrast-tag accent">SkyGuard AI</span>
                 <h3 className="contrast-title">INTELLIGENT OBSERVATION</h3>
               </div>
 
@@ -855,7 +855,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
 
               <div className="contrast-banner ather-banner">
                 <CheckCircle2 className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                <span>ATHER turns raw observations into explainable, mathematically sound anomaly intelligence.</span>
+                <span>SkyGuard AI turns raw observations into explainable, mathematically sound anomaly intelligence.</span>
               </div>
             </div>
           </div>
@@ -869,14 +869,14 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
         <div className="home-container">
           <div className="section-header-left">
             <div className="section-system-label">
-              <span>S-03 / HOW ATHER THINKS</span>
+              <span>S-03 / HOW SKYGUARD AI THINKS</span>
             </div>
             <h2 className="section-headline">
               FROM OBSERVATION<br />
               TO <span className="hero-subline-italic">INTELLIGENCE.</span>
             </h2>
             <p className="section-lead-body">
-              ATHER evaluates each observation through multiple complementary intelligence
+              SkyGuard AI evaluates each observation through multiple complementary intelligence
               layers instead of relying on a single brittle anomaly detector.
             </p>
           </div>
@@ -997,7 +997,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 MULTIPLE SIGNALS.
               </h2>
               <p className="section-lead-body">
-                Hover over or click any node in the ATHER intelligence pipeline to inspect its
+                Hover over or click any node in the SkyGuard AI intelligence pipeline to inspect its
                 evaluation criteria, algorithmic execution, and operational output.
               </p>
             </div>
@@ -1054,7 +1054,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 </div>
 
                 <div className="inspector-footer">
-                  <span className="inspector-note">Operational in ATHER Backend Engine</span>
+                  <span className="inspector-note">Operational in SkyGuard AI Backend Engine</span>
                   <button
                     className="inspector-action-btn"
                     onClick={() => onLaunchPlatform('map')}
@@ -1078,12 +1078,12 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                   REAL WEATHER DATA<br />
                   IS NEVER PERFECT.
                 </h2>
-                <p className="section-subline-italic">ATHER adapts.</p>
+                <p className="section-subline-italic">SkyGuard AI adapts.</p>
 
                 <p className="section-lead-body">
                   Weather stations frequently suffer from broken communication lines, dead sensors,
                   or partial channel dropouts. While conventional models crash or hallucinate zeros,
-                  ATHER operates with whatever evidence is available, adjusting uncertainty rather
+                  SkyGuard AI operates with whatever evidence is available, adjusting uncertainty rather
                   than pretending missing signals are normal.
                 </p>
 
@@ -1183,7 +1183,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 <div className="degraded-card-explanation">
                   <Info className="w-4 h-4 text-amber-500 flex-shrink-0" />
                   <p>
-                    ATHER acknowledges uncertainty. When sensor channels drop, the system communicates
+                    SkyGuard AI acknowledges uncertainty. When sensor channels drop, the system communicates
                     reduced confidence rather than pretending missing inputs are complete.
                   </p>
                 </div>
@@ -1312,7 +1312,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                     className="investigate-cta-btn"
                     onClick={() => onLaunchPlatform('map')}
                   >
-                    <span>INVESTIGATE IN ATHER →</span>
+                    <span>INVESTIGATE IN SKYGUARD AI →</span>
                   </button>
                 </div>
               </div>
@@ -1452,7 +1452,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               <span>S-09 / PLATFORM CONSOLE</span>
             </div>
             <h2 className="section-headline">
-              THE ATHER<br />
+              THE SKYGUARD AI<br />
               PLATFORM CONSOLE
             </h2>
             <p className="section-lead-body">
@@ -1572,7 +1572,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               className="home-cta-button primary large"
               onClick={() => onLaunchPlatform('map')}
             >
-              <span>OPEN LIVE ATHER</span>
+              <span>OPEN LIVE SKYGUARD AI</span>
               <ArrowRight className="cta-gold-arrow w-4 h-4" />
             </button>
           </div>
@@ -1592,7 +1592,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
               </span>
             </h2>
             <p className="final-cta-body">
-              ATHER turns complex station observations into verifiable anomaly signals that can be
+              SkyGuard AI turns complex station observations into verifiable anomaly signals that can be
               investigated, explained, and acted upon by meteorological engineers and automated systems.
             </p>
             <div className="final-cta-buttons">
@@ -1600,7 +1600,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
                 className="home-cta-button primary large"
                 onClick={() => onLaunchPlatform('map')}
               >
-                <span>LAUNCH ATHER</span>
+                <span>LAUNCH SKYGUARD AI</span>
                 <ArrowRight className="cta-gold-arrow w-4 h-4" />
               </button>
               <button
@@ -1624,7 +1624,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
             <div className="footer-brand">
               <div className="footer-logo">
                 <Radio className="w-4 h-4 text-amber-500" />
-                <span>ATHER</span>
+                <span>SkyGuard AI</span>
               </div>
               <p className="footer-tagline">WEATHER INTELLIGENCE PLATFORM</p>
               <p className="footer-desc">
@@ -1695,7 +1695,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onLaunchPlatform, summary })
 
           <div className="footer-bottom-row">
             <span className="footer-copyright">
-              © {new Date().getFullYear()} ATHER Meteorological Intelligence. All operational rights reserved.
+              © {new Date().getFullYear()} SkyGuard AI Meteorological Intelligence. All operational rights reserved.
             </span>
             <div className="footer-status-pill">
               <span className="dot green" />

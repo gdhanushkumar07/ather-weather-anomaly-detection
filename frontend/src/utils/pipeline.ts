@@ -1,5 +1,5 @@
 /**
- * ATHER intelligence pipeline — one presentation model for the 10 stages
+ * SkyGuard AI intelligence pipeline — one presentation model for the 10 stages
  *
  *   OBSERVE  1 Data quality
  *   DETECT   2 Physics · 3 Temporal · 4 Multivariate · 5 Spatial · 6 Sensor health
@@ -254,8 +254,8 @@ function build(inp: Input): PipelineModel {
 
   // 8 — decision
   const overall = inp.overall;
-  // Decision vocabulary: NOMINAL · WARNING · CRITICAL · DEGRADED (same as the network counts).
-  const DECISION_LABEL: Record<string, string> = { nominal: 'nominal', suspect: 'warning', anomaly: 'critical', degraded: 'degraded' };
+  // Decision vocabulary: NOMINAL · WARNING · ANOMALOUS · DEGRADED (same as the network counts).
+  const DECISION_LABEL: Record<string, string> = { nominal: 'nominal', suspect: 'warning', anomaly: 'anomalous', degraded: 'degraded' };
   const decisionState = overall ? (DECISION_LABEL[overall] || human(overall)) : human(fu.status);
   const decRows: [string, string][] = [['Sensor-trust status', decisionState || '—'], ['Engine status', human(fu.status) || '—']];
   if (inp.severity && inp.severity !== 'NONE') decRows.push(['Severity', human(inp.severity)]);

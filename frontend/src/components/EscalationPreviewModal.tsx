@@ -70,7 +70,7 @@ export const EscalationPreviewModal: React.FC<EscalationPreviewModalProps> = ({ 
           <button className="btn-close-panel" onClick={onClose}><X className="w-4 h-4" /></button>
         </div>
         <div className="escalation-preview-note">
-          This is a preview only. ATHER has not contacted any external recipient.
+          This is a preview only. SkyGuard AI has not contacted any external recipient.
         </div>
         {error && <div className="test-lab-error">{error}</div>}
         {preview && (

@@ -160,7 +160,7 @@ SCENARIOS: Dict[str, Scenario] = {
         id="MISSING_TELEMETRY",
         pressure_convention="MSL",
         name="Missing Telemetry",
-        description="Only one channel is reported and there is no observation history — ATHER must report insufficient evidence, not fabricate a fault.",
+        description="Only one channel is reported and there is no observation history — SkyGuard AI must report insufficient evidence, not fabricate a fault.",
         steps=[ScenarioStep(temperature_c=29.0, pressure_hpa=None, humidity_pct=None)],
         # A single valid, unremarkable channel with no history is correctly
         # NORMAL overall (physics passes, nothing anomalous was observed) —

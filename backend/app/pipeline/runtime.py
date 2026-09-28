@@ -145,7 +145,7 @@ class PipelineRuntime:
             if obs.station is None:
                 raise RejectedObservation(
                     "UNKNOWN_STATION",
-                    f"Station '{obs.station_id}' is not in the ATHER catalogue and no station metadata was supplied.",
+                    f"Station '{obs.station_id}' is not in the SkyGuard AI catalogue and no station metadata was supplied.",
                     obs.station_id,
                 )
             m = obs.station

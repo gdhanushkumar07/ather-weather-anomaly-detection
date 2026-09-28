@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { fetchNetworkState } from './api';
 
 /**
- * ATHER live network state.
+ * SkyGuard AI live network state.
  *
  * One EventSource per browser tab. On mount: GET /api/network/state (the
  * snapshot carries event_seq), then subscribe to /api/stream?since=event_seq
@@ -241,7 +241,7 @@ export function formatAge(iso?: string | number | null, now = Date.now()): strin
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  nominal: 'Nominal', suspect: 'Warning', degraded: 'Degraded', anomaly: 'Critical',
+  nominal: 'Nominal', suspect: 'Warning', degraded: 'Degraded', anomaly: 'Anomalous',
 };
 
 export const INTERPRETATION_LABEL: Record<string, string> = {

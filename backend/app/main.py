@@ -160,8 +160,14 @@ def get_current_weather(
     """
     Fetches real-time localized current weather from Open-Meteo for the specified coordinate.
     """
+    from .weather.open_meteo import UpstreamError, UpstreamUnavailable
     try:
         return open_meteo_service.get_current_weather(lat, lon)
+    except UpstreamUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"Open-Meteo reference temporarily unavailable: {e}")
+    except UpstreamError as e:
+        raise HTTPException(status_code=503 if e.kind in ("rate_limited", "server_error", "network") else 502,
+                            detail=f"Open-Meteo reference fetch failed ({e.kind}): {e}")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Open-Meteo weather fetch error: {str(e)}")
 

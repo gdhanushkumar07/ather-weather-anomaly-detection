@@ -1,15 +1,57 @@
 """
-ATHER Open-Meteo Current Weather Service
-----------------------------------------
-Fetches real-time localized meteorological conditions from Open-Meteo API
-with built-in in-memory caching to optimize bandwidth and eliminate redundant queries.
+SkyGuard AI — Open-Meteo NWP reference client
+--------------------------------------------
+Open-Meteo is MODEL output. SkyGuard uses it only as the observed-vs-model
+reference layer and as the baseline the simulated AWS feed is seeded from —
+never as a station observation.
+
+Upstream discipline (Open-Meteo's free API counts EVERY LOCATION in a
+multi-location request as one call, and Render's outbound IP is shared):
+
+  * one request path for the whole process: every upstream call goes through
+    `_request()`, which holds a lock and enforces a minimum spacing between
+    calls (effective concurrency = 1, from the poller and on-demand paths alike)
+  * the background poller is the only bulk fetcher: multi-location batches,
+    de-duplicated coordinates, only stale/missing locations, sent sequentially
+  * single-flight: a second batch refresh while one runs is served from cache
+  * per-status handling: 429 respects Retry-After, backs off 2/5/10/20 s with
+    jitter; an hourly/daily quota stops the poll and sets a cooldown until the
+    quota resets; 5xx/timeouts back off; 400/401/403/404 are not retried
+  * the cache is never cleared on failure: readers get the last valid values
+    with their fetch time (stale-while-revalidate); no value is ever invented
+
+Configuration (environment):
+  WEATHER_POLL_INTERVAL_SECONDS      3600  background refresh cadence
+  WEATHER_CACHE_TTL_SECONDS          3000  a location older than this is refetched
+  WEATHER_BATCH_SIZE                 50    locations per request
+  WEATHER_MIN_REQUEST_INTERVAL_S     1.5   minimum spacing between upstream calls
+  WEATHER_MAX_RETRIES                4     retries per batch (2/5/10/20 s + jitter)
+  OPEN_METEO_API_KEY                 -     optional; uses the commercial endpoint (own quota)
 """
 
+import email.utils
+import logging
+import os
+import random
+import socket
+import threading
 import time
+import urllib.error
 import urllib.request
 import urllib.parse
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Tuple
+
+log = logging.getLogger("skyguard.weather")
+if not log.handlers:
+    # The app configures no logging, so INFO would be dropped; ingestion logs
+    # are what diagnoses production upstream problems (WEATHER_LOG_LEVEL).
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    log.addHandler(_h)
+    log.setLevel(os.environ.get("WEATHER_LOG_LEVEL", "INFO").upper())
+    log.propagate = False
 
 # WMO Weather interpretation codes (WW)
 WMO_WEATHER_CODES = {
@@ -110,214 +152,340 @@ def with_pressure_provenance(data: Dict[str, Any]) -> Dict[str, Any]:
     return data
 
 
+CURRENT_VARS = ("temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,"
+                "pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m")
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+CUSTOMER_FORECAST_URL = "https://customer-api.open-meteo.com/v1/forecast"
+USER_AGENT = "SkyGuard-AI-Weather/1.1 (academic-monitoring)"
+RETRY_DELAYS_S = (2.0, 5.0, 10.0, 20.0)
+NEGATIVE_CACHE_S = 300.0
+
+
+def _env_f(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _key(lat: float, lon: float) -> str:
+    return f"{round(lat, 3)}_{round(lon, 3)}"
+
+
+class UpstreamError(Exception):
+    """One classified upstream failure."""
+
+    def __init__(self, kind: str, status: Optional[int], message: str,
+                 retry_after: Optional[float] = None, scope: Optional[str] = None):
+        super().__init__(message)
+        self.kind = kind            # rate_limited | client_error | config_error | server_error | network | bad_payload
+        self.status = status
+        self.retry_after = retry_after
+        self.scope = scope          # for rate limits: minute | hour | day | None (unknown)
+
+    @property
+    def retryable(self) -> bool:
+        return self.kind in ("rate_limited", "server_error", "network") and self.scope not in ("hour", "day")
+
+
+class UpstreamUnavailable(Exception):
+    """The upstream is in a cooldown (quota exhausted) or recently failed here."""
+
+
+def _parse_retry_after(value: Optional[str]) -> Optional[float]:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            dt = email.utils.parsedate_to_datetime(value)
+            return max(0.0, (dt - datetime.now(timezone.utc)).total_seconds())
+        except Exception:
+            return None
+
+
+def _rate_limit_scope(reason: str) -> Optional[str]:
+    r = (reason or "").lower()
+    return "day" if "daily" in r else "hour" if "hourly" in r else "minute" if "minutely" in r else None
+
+
+def _quota_reset(scope: str, now: float) -> float:
+    t = datetime.fromtimestamp(now, tz=timezone.utc)
+    if scope == "day":
+        nxt = (t + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        nxt = (t + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    return nxt.timestamp() + 30.0
+
+
+def _format(item: Dict[str, Any], lat: float, lon: float) -> Dict[str, Any]:
+    current = item.get("current") or {}
+    weather_code = current.get("weather_code", 0)
+    wind_deg = current.get("wind_direction_10m")
+    pressure, pressure_convention = select_pressure(current)
+    return {
+        "latitude": lat,
+        "longitude": lon,
+        "temperature": current.get("temperature_2m"),
+        "apparentTemperature": current.get("apparent_temperature"),
+        "humidity": current.get("relative_humidity_2m"),
+        "pressure": pressure,
+        "pressureConvention": pressure_convention,
+        "surfacePressure": current.get("surface_pressure"),
+        "windSpeed": current.get("wind_speed_10m"),
+        "windGusts": current.get("wind_gusts_10m"),
+        "windDirectionDeg": wind_deg,
+        "windDirection": degrees_to_cardinal(wind_deg),
+        "precipitation": current.get("precipitation", 0.0),
+        "weatherCode": weather_code,
+        "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
+        "timestamp": current.get("time"),
+        "source": "NWP_MODEL_REFERENCE",
+    }
+
+
 class OpenMeteoService:
-    def __init__(self, cache_ttl_seconds: int = 1800):
+    def __init__(self, cache_ttl_seconds: Optional[float] = None):
         self.cache: Dict[str, Dict[str, Any]] = {}
-        self.cache_ttl = cache_ttl_seconds
+        self.cache_ttl = cache_ttl_seconds if cache_ttl_seconds is not None else _env_f("WEATHER_CACHE_TTL_SECONDS", 3000)
+        self.batch_size = int(_env_f("WEATHER_BATCH_SIZE", 50))
+        self.min_interval_s = _env_f("WEATHER_MIN_REQUEST_INTERVAL_S", 1.5)
+        self.max_retries = int(_env_f("WEATHER_MAX_RETRIES", len(RETRY_DELAYS_S)))
         self._cache_file = os.path.join(os.path.dirname(__file__), ".weather_cache.json")
         self._load_disk_cache()
         self._ctx = _tls_context()
-        # Outcome of the most recent batch fetch — lets the reference adapter
+        self._sleep = time.sleep                 # injectable for tests
+        self._request_lock = threading.Lock()    # ONE upstream call at a time, process-wide
+        self._refresh_lock = threading.Lock()    # single-flight batch refresh
+        self._last_request_at = 0.0
+        self._failed_at: Dict[str, float] = {}   # on-demand negative cache
+        self.blocked_until = 0.0                 # quota cooldown (hourly/daily limit)
+        self.blocked_reason: Optional[str] = None
+        self.stats = {"requests": 0, "locations_requested": 0, "rate_limited": 0, "retries": 0}
+        # Outcome of the most recent batch refresh — lets the reference adapter
         # distinguish "source down" from "everything already cached".
         self.last_report: Dict[str, Any] = {}
 
+    # ── disk cache (last valid values survive restarts on persistent disks) ──
     def _load_disk_cache(self):
         try:
             if os.path.exists(self._cache_file):
                 with open(self._cache_file, "r", encoding="utf-8") as f:
                     self.cache = json.load(f)
         except Exception as e:
-            print(f"Warning: Could not load disk cache: {e}")
+            log.warning("[WEATHER] could not load disk cache: %s", e)
 
     def _save_disk_cache(self):
         try:
             with open(self._cache_file, "w", encoding="utf-8") as f:
                 json.dump(self.cache, f)
-        except Exception as e:
+        except Exception:
             pass
 
-    def get_current_weather(self, lat: float, lon: float) -> Dict[str, Any]:
-        """
-        Fetches current weather for given coordinates from Open-Meteo or returns cached entry.
-        """
-        cache_key = f"{round(lat, 3)}_{round(lon, 3)}"
-        now = time.time()
+    # ── the single upstream request path ────────────────────────────────
+    def blocked(self, now: Optional[float] = None) -> bool:
+        return (now or time.time()) < self.blocked_until
 
-        if cache_key in self.cache:
-            entry = self.cache[cache_key]
-            if now - entry["cached_at"] < self.cache_ttl:
-                return with_pressure_provenance(entry["data"])
-
-        # Build Open-Meteo URL
+    def _request(self, lats: List[float], lons: List[float]) -> Any:
+        """One paced upstream call. Raises UpstreamError (classified)."""
         params = {
-            "latitude": f"{lat:.4f}",
-            "longitude": f"{lon:.4f}",
-            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
+            "latitude": ",".join(f"{x:.4f}" for x in lats),
+            "longitude": ",".join(f"{x:.4f}" for x in lons),
+            "current": CURRENT_VARS,
         }
-        url = f"https://api.open-meteo.com/v1/forecast?{urllib.parse.urlencode(params)}"
-
-        ctx = self._ctx
-
-        req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "ATHER-Weather-Intelligence/1.0 (academic-monitoring)"}
-        )
-
+        api_key = os.environ.get("OPEN_METEO_API_KEY", "").strip()
+        if api_key:
+            # Commercial endpoint: its own quota instead of the free tier's
+            # per-IP limit (Render's outbound IP is shared). Never logged.
+            params["apikey"] = api_key
+        base = CUSTOMER_FORECAST_URL if api_key else FORECAST_URL
+        url = f"{base}?{urllib.parse.urlencode(params, safe=',')}"
+        with self._request_lock:
+            wait = self._last_request_at + self.min_interval_s - time.time()
+            if wait > 0:
+                self._sleep(wait)
+            self._last_request_at = time.time()
+            self.stats["requests"] += 1
+            self.stats["locations_requested"] += len(lats)
+            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            try:
+                with urllib.request.urlopen(req, context=self._ctx, timeout=15) as response:
+                    status = getattr(response, "status", 200)
+                    raw = response.read()
+            except urllib.error.HTTPError as e:
+                try:
+                    detail = e.read().decode("utf-8", "replace")
+                    reason = (json.loads(detail) or {}).get("reason") or detail
+                except Exception:
+                    reason = str(e)
+                reason = str(reason)[:200]
+                hdrs = getattr(e, "headers", None)
+                retry_after = _parse_retry_after(hdrs.get("Retry-After") if hdrs is not None else None)
+                code = e.code
+                if code == 429:
+                    self.stats["rate_limited"] += 1
+                    raise UpstreamError("rate_limited", 429, f"HTTP 429: {reason}", retry_after, _rate_limit_scope(reason))
+                if code in (401, 403, 404):
+                    raise UpstreamError("config_error", code, f"HTTP {code}: {reason} (check endpoint/configuration)")
+                if 400 <= code < 500:
+                    raise UpstreamError("client_error", code, f"HTTP {code}: {reason}")
+                raise UpstreamError("server_error", code, f"HTTP {code}: {reason}", retry_after)
+            except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, OSError) as e:
+                raise UpstreamError("network", None, f"{type(e).__name__}: {e}"[:200])
+        if status != 200:
+            raise UpstreamError("server_error" if status >= 500 else "client_error", status, f"HTTP {status}")
         try:
-            with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
-                if response.status != 200:
-                    raise RuntimeError(f"Open-Meteo returned status {response.status}")
-                raw = json.loads(response.read().decode("utf-8"))
-
-            current = raw.get("current", {})
-            weather_code = current.get("weather_code", 0)
-            wind_deg = current.get("wind_direction_10m")
-
-            pressure, pressure_convention = select_pressure(current)
-            formatted_data = {
-                "latitude": lat,
-                "longitude": lon,
-                "temperature": current.get("temperature_2m"),
-                "apparentTemperature": current.get("apparent_temperature"),
-                "humidity": current.get("relative_humidity_2m"),
-                "pressure": pressure,
-                "pressureConvention": pressure_convention,
-                "surfacePressure": current.get("surface_pressure"),
-                "windSpeed": current.get("wind_speed_10m"),
-                "windGusts": current.get("wind_gusts_10m"),
-                "windDirectionDeg": wind_deg,
-                "windDirection": degrees_to_cardinal(wind_deg),
-                "precipitation": current.get("precipitation", 0.0),
-                "weatherCode": weather_code,
-                "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
-                "timestamp": current.get("time"),
-                "source": "NWP_MODEL_REFERENCE"
-            }
-
-            # Store in cache
-            self.cache[cache_key] = {
-                "cached_at": now,
-                "data": formatted_data
-            }
-            self._save_disk_cache()
-            return formatted_data
+            data = json.loads(raw.decode("utf-8"))
         except Exception as e:
-            # Fallback to existing cache even if expired
-            if cache_key in self.cache:
-                return with_pressure_provenance(self.cache[cache_key]["data"])
-            raise e
+            raise UpstreamError("bad_payload", status, f"unparseable response: {e}")
+        if isinstance(data, dict) and data.get("error"):
+            raise UpstreamError("client_error", status, f"API error: {data.get('reason')}")
+        return data
 
+    def _request_with_retry(self, lats: List[float], lons: List[float], label: str) -> Any:
+        attempt = 0
+        while True:
+            try:
+                return self._request(lats, lons)
+            except UpstreamError as e:
+                if e.kind == "rate_limited" and e.scope in ("hour", "day"):
+                    self.blocked_until = _quota_reset(e.scope, time.time())
+                    self.blocked_reason = f"Open-Meteo {e.scope}ly quota exhausted"
+                    log.warning("[WEATHER] %s status=429 scope=%s — cooldown until %s",
+                                label, e.scope, datetime.fromtimestamp(self.blocked_until, tz=timezone.utc).isoformat())
+                    raise
+                if not e.retryable or attempt >= self.max_retries:
+                    if e.kind == "rate_limited":
+                        # minute limit still active after all retries: brief cooldown
+                        self.blocked_until = time.time() + max(60.0, e.retry_after or 0.0)
+                        self.blocked_reason = "Open-Meteo rate limit (retries exhausted)"
+                    log.warning("[WEATHER] %s failed kind=%s status=%s attempts=%d: %s",
+                                label, e.kind, e.status, attempt + 1, e)
+                    raise
+                base = RETRY_DELAYS_S[min(attempt, len(RETRY_DELAYS_S) - 1)]
+                delay = e.retry_after if e.retry_after is not None else base * random.uniform(0.8, 1.25)
+                attempt += 1
+                self.stats["retries"] += 1
+                log.info("[WEATHER] %s status=%s retry_after=%s retry attempt=%d delay=%.1fs",
+                         label, e.status, e.retry_after, attempt + 1, delay)
+                self._sleep(delay)
+
+    # ── on-demand single location (cache-first, never retries in a request) ──
+    def get_current_weather(self, lat: float, lon: float) -> Dict[str, Any]:
+        k = _key(lat, lon)
+        now = time.time()
+        entry = self.cache.get(k)
+        if entry and now - entry["cached_at"] < self.cache_ttl:
+            return with_pressure_provenance(entry["data"])
+        if self.blocked(now) or now - self._failed_at.get(k, 0.0) < NEGATIVE_CACHE_S:
+            if entry:
+                return with_pressure_provenance(entry["data"])      # last valid value, with its own timestamp
+            raise UpstreamUnavailable(self.blocked_reason or "Open-Meteo recently failed for this location")
+        try:
+            raw = self._request([lat], [lon])
+        except UpstreamError as e:
+            self._failed_at[k] = now
+            if e.kind == "rate_limited" and e.scope in ("hour", "day"):
+                self.blocked_until = _quota_reset(e.scope, now)
+                self.blocked_reason = f"Open-Meteo {e.scope}ly quota exhausted"
+            elif e.kind == "rate_limited":
+                self.blocked_until = now + max(60.0, e.retry_after or 0.0)
+                self.blocked_reason = "Open-Meteo rate limit"
+            if entry:
+                return with_pressure_provenance(entry["data"])
+            raise
+        item = raw[0] if isinstance(raw, list) else raw
+        data = _format(item, lat, lon)
+        self.cache[k] = {"cached_at": now, "data": data}
+        self._save_disk_cache()
+        return data
+
+    # ── background bulk refresh (the poller) ────────────────────────────
     def get_batch_weather(
         self,
         coords: List[Any],
-        chunk_size: int = 50,
-        cache_only: bool = False
+        chunk_size: Optional[int] = None,
+        cache_only: bool = False,
     ) -> List[Optional[Dict[str, Any]]]:
-        """
-        Fetches current weather for a list of (lat, lon) coordinates in chunks of up to 50
-        using Open-Meteo multi-coordinate API. Returns list matching input order.
-        If cache_only is True, returns cached entries (fresh or stale) and never makes network calls.
-        """
-        ctx = self._ctx
-
+        """Returns the cached reference for every coordinate (in input order,
+        None where nothing was ever fetched), refreshing stale/missing
+        locations first unless cache_only. Never makes parallel requests."""
+        chunk_size = max(1, chunk_size or self.batch_size)
         now = time.time()
-        results: List[Optional[Dict[str, Any]]] = [None] * len(coords)
-        report = {"requested": len(coords), "to_fetch": 0, "fetched": 0, "errors": 0, "last_error": None, "at": now}
-        self.last_report = report
 
-        # Check cache first
-        indices_to_fetch = []
-        for idx, (lat, lon) in enumerate(coords):
-            cache_key = f"{round(lat, 3)}_{round(lon, 3)}"
-            if cache_key in self.cache:
-                results[idx] = with_pressure_provenance(self.cache[cache_key]["data"])
-                # Only re-fetch if older than TTL
-                if not cache_only and (now - self.cache[cache_key]["cached_at"] >= self.cache_ttl):
-                    indices_to_fetch.append(idx)
-            elif not cache_only:
-                indices_to_fetch.append(idx)
+        def from_cache() -> List[Optional[Dict[str, Any]]]:
+            out = []
+            for lat, lon in coords:
+                e = self.cache.get(_key(lat, lon))
+                out.append(with_pressure_provenance(e["data"]) if e else None)
+            return out
 
-        report["to_fetch"] = len(indices_to_fetch)
-        if cache_only or not indices_to_fetch:
-            return results
+        if cache_only:
+            return from_cache()
 
-        # Fetch in chunks with pacing
-        updated_any = False
-        for i in range(0, len(indices_to_fetch), chunk_size):
-            chunk_indices = indices_to_fetch[i : i + chunk_size]
-            chunk_coords = [coords[ci] for ci in chunk_indices]
+        unique: Dict[str, Tuple[float, float]] = {}
+        for lat, lon in coords:
+            unique.setdefault(_key(lat, lon), (lat, lon))
+        stale = [k for k in unique if k not in self.cache or now - self.cache[k]["cached_at"] >= self.cache_ttl]
+        report = {"requested": len(coords), "unique": len(unique), "to_fetch": len(stale), "fetched": 0,
+                  "errors": 0, "failed_locations": 0, "deferred_locations": 0, "batches": 0,
+                  "last_error": None, "at": now, "skipped": None}
 
-            lats = ",".join(str(round(c[0], 4)) for c in chunk_coords)
-            lons = ",".join(str(round(c[1], 4)) for c in chunk_coords)
-
-            url = (
-                f"https://api.open-meteo.com/v1/forecast?latitude={lats}&longitude={lons}&"
-                "current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
-            )
-
-            # Throttle between chunks to prevent 429
-            if i > 0:
-                time.sleep(0.4)
-
-            for attempt in range(2):
-                try:
-                    req = urllib.request.Request(
-                        url,
-                        headers={"User-Agent": "ATHER-Weather-Intelligence/1.0 (academic-monitoring)"}
-                    )
-                    with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
-                        if response.status == 200:
-                            raw = json.loads(response.read().decode("utf-8"))
-                            raw_list = [raw] if isinstance(raw, dict) else (raw if isinstance(raw, list) else [])
-
-                            for j, item in enumerate(raw_list):
-                                if j >= len(chunk_indices):
-                                    break
-                                target_idx = chunk_indices[j]
-                                orig_lat, orig_lon = coords[target_idx]
-                                current = item.get("current", {})
-                                weather_code = current.get("weather_code", 0)
-                                wind_deg = current.get("wind_direction_10m")
-
-                                pressure, pressure_convention = select_pressure(current)
-                                formatted_data = {
-                                    "latitude": orig_lat,
-                                    "longitude": orig_lon,
-                                    "temperature": current.get("temperature_2m"),
-                                    "apparentTemperature": current.get("apparent_temperature"),
-                                    "humidity": current.get("relative_humidity_2m"),
-                                    "pressure": pressure,
-                                    "pressureConvention": pressure_convention,
-                                    "surfacePressure": current.get("surface_pressure"),
-                                    "windSpeed": current.get("wind_speed_10m"),
-                                    "windGusts": current.get("wind_gusts_10m"),
-                                    "windDirectionDeg": wind_deg,
-                                    "windDirection": degrees_to_cardinal(wind_deg),
-                                    "precipitation": current.get("precipitation", 0.0),
-                                    "weatherCode": weather_code,
-                                    "condition": WMO_WEATHER_CODES.get(weather_code, "Fair"),
-                                    "timestamp": current.get("time"),
-                                    "source": "NWP_MODEL_REFERENCE"
-                                }
-
-                                cache_key = f"{round(orig_lat, 3)}_{round(orig_lon, 3)}"
-                                self.cache[cache_key] = {"cached_at": now, "data": formatted_data}
-                                results[target_idx] = formatted_data
-                                updated_any = True
-                                report["fetched"] += 1
-                            break
-                except Exception as e:
-                    if "429" in str(e) and attempt == 0:
-                        time.sleep(1.5)
-                        continue
-                    report["errors"] += 1
-                    report["last_error"] = f"{type(e).__name__}: {e}"[:200]
-                    print(f"Warning: Open-Meteo batch weather fetch error for chunk {i}: {e}")
+        if not stale:
+            self.last_report = report
+            log.info("[WEATHER] cache hit stations=%d (all fresh)", len(unique))
+            return from_cache()
+        if self.blocked(now):
+            report.update(skipped="cooldown", deferred_locations=len(stale), last_error=self.blocked_reason)
+            self.last_report = report
+            log.info("[WEATHER] poll skipped: %s (until %s); serving cache", self.blocked_reason,
+                     datetime.fromtimestamp(self.blocked_until, tz=timezone.utc).isoformat())
+            return from_cache()
+        if not self._refresh_lock.acquire(blocking=False):
+            report["skipped"] = "refresh_in_progress"
+            self.last_report = report
+            return from_cache()
+        try:
+            chunks = [stale[i:i + chunk_size] for i in range(0, len(stale), chunk_size)]
+            report["batches"] = len(chunks)
+            log.info("[WEATHER] poll started stations=%d unique_coordinates=%d stale=%d batches=%d",
+                     len(coords), len(unique), len(stale), len(chunks))
+            updated = False
+            for n, keys in enumerate(chunks, start=1):
+                if self.blocked():
+                    report["deferred_locations"] += sum(len(c) for c in chunks[n - 1:])
                     break
+                pts = [unique[k] for k in keys]
+                try:
+                    raw = self._request_with_retry([p[0] for p in pts], [p[1] for p in pts], f"batch={n}/{len(chunks)}")
+                except UpstreamError as e:
+                    report["errors"] += 1
+                    report["failed_locations"] += len(keys)
+                    report["last_error"] = str(e)[:200]
+                    continue            # previous values stay in the cache; other batches continue
+                items = raw if isinstance(raw, list) else [raw]
+                if len(items) != len(keys):
+                    report["errors"] += 1
+                    report["failed_locations"] += len(keys)
+                    report["last_error"] = f"batch={n}: {len(items)} results for {len(keys)} locations"
+                    continue
+                t = time.time()
+                for k, (lat, lon), item in zip(keys, pts, items):
+                    self.cache[k] = {"cached_at": t, "data": _format(item, lat, lon)}
+                report["fetched"] += len(keys)
+                updated = True
+                log.info("[WEATHER] batch=%d/%d status=200 locations=%d", n, len(chunks), len(keys))
+            if updated:
+                self._save_disk_cache()
+        finally:
+            self._refresh_lock.release()
+        stale_left = sum(1 for k in unique if k not in self.cache or time.time() - self.cache[k]["cached_at"] >= self.cache_ttl)
+        report["stale_after"] = stale_left
+        self.last_report = report
+        log.info("[WEATHER] poll completed success=%d failed=%d deferred=%d stale_stations=%d",
+                 report["fetched"], report["failed_locations"], report["deferred_locations"], stale_left)
+        return from_cache()
 
-        if updated_any:
-            self._save_disk_cache()
-
-        return results
 
 open_meteo_service = OpenMeteoService()

@@ -90,6 +90,10 @@ class SourceAdapter:
     def stop(self) -> None:
         self._stopping = True
 
+    def success_delay(self) -> float:
+        """Delay before the next poll after a successful one."""
+        return self.cadence_s
+
     def backoff_delay(self) -> float:
         n = self.status.consecutive_failures
         base = min(self.max_backoff_s, max(5.0, self.cadence_s / 4.0) * (2 ** (n - 1)))
@@ -113,7 +117,7 @@ class SourceAdapter:
                 self._set_state(ACTIVE)
                 if items and self.kind == OBSERVATION:
                     await emit(items)
-                delay = self.cadence_s
+                delay = self.success_delay()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
